@@ -59,6 +59,11 @@ export class AuthService {
     return '/admin/dashboard';
   });
 
+  // ✅ Constructor — restaura sesión al recargar la página
+  constructor() {
+    this.restoreSession();
+  }
+
   // Public methods that return computed signals
   isAuthenticated() {
     return this._isAuthenticated();
@@ -84,42 +89,57 @@ export class AuthService {
     return this._getDefaultRoute();
   }
 
+  // ✅ Login conectado al backend real
   async login(credentials: { email: string; password?: string }): Promise<void> {
     this.isLoading.set(true);
     this.error.set(null);
 
     try {
-      const users = await firstValueFrom(
-        this.api.get<User[]>('users', { email: credentials.email }),
+      const response = await firstValueFrom(
+        this.api.post<{ user: any; token: string }>('auth/login', {
+          email: credentials.email,
+          password: credentials.password,
+        })
       );
 
-      if (users.length === 0) {
-        throw new Error('Credenciales inválidas');
-      }
+      // Mapear nombre del back ("John Doe") a firstName/lastName del front
+      const backUser = response.user;
+      console.log('👤 backUser completo:', backUser);
+      console.log('🎭 role recibido:', backUser.role, typeof backUser.role);
+      const [firstName, ...rest] = (backUser.name as string).split(' ');
+      const lastName = rest.join(' ');
 
-      const user = users[0];
-      
-      //? Ensure dates are properly parsed
-      if (typeof user.createdAt === 'string') {
-        user.createdAt = new Date(user.createdAt);
-      }
-      if (user.lastLoginAt && typeof user.lastLoginAt === 'string') {
-        user.lastLoginAt = new Date(user.lastLoginAt);
-      } 
+      const user: User = {
+        ...backUser,
+        firstName,
+        lastName,
+        role: this.mapRole(backUser.role),
+        createdAt: new Date(backUser.createdAt ?? Date.now()),
+        lastLoginAt: backUser.lastLoginAt
+          ? new Date(backUser.lastLoginAt)
+          : undefined,
+      };
 
-      //? Generate a mock token (in real app, this comes from backend)
-      const mockToken = `mock-token-${user.id}-${Date.now()}`;
-      this._token.set(mockToken);
+      console.log('✅ role mapeado:', user.role); // 👈 agrega esto
+
+      // Persistir sesión en localStorage
+      localStorage.setItem('token', response.token);
+      localStorage.setItem('user', JSON.stringify(user));
+
+      this._token.set(response.token);
       this._currentUser.set(user);
 
-      //? Redirect based on role
+      // Redirigir según rol
       if (user.role === 'super_admin') {
         this.router.navigate(['/super-admin']);
       } else {
         this.router.navigate(['/admin/dashboard']);
       }
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Error al iniciar sesión';
+
+
+    } catch (err: any) {
+      const errorMessage =
+        err?.error?.message ?? err?.message ?? 'Error al iniciar sesión';
       this.error.set(errorMessage);
       throw err;
     } finally {
@@ -127,7 +147,10 @@ export class AuthService {
     }
   }
 
+  // ✅ Logout limpia localStorage también
   logout() {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
     this._currentUser.set(null);
     this._token.set(null);
     this.router.navigate(['/auth/login']);
@@ -135,5 +158,30 @@ export class AuthService {
 
   clearError() {
     this.error.set(null);
+  }
+
+  // ✅ Restaurar sesión desde localStorage al recargar
+  private restoreSession(): void {
+    const token = localStorage.getItem('token');
+    const raw = localStorage.getItem('user');
+    if (token && raw) {
+      try {
+        this._token.set(token);
+        this._currentUser.set(JSON.parse(raw));
+      } catch {
+        // Si el JSON está corrupto, limpiar
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+      }
+    }
+  }
+
+  // ✅ Mapear roles numéricos del back a strings del front
+  // El back guarda: 1 = admin, 2 = super_admin (ajusta si es diferente)
+  private mapRole(roles: number): User['role'] {
+    //if (!Array.isArray(roles)) return 'admin';
+    if (roles === 1) return 'super_admin';
+    if (roles === 2) return 'admin';
+    return 'admin';
   }
 }
