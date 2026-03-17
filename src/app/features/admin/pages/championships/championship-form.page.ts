@@ -425,10 +425,11 @@ export default class ChampionshipFormPage implements OnInit {
       this.championshipService
         .createChampionship({
           name: createDto.name,
+          slug: this.generateSlug(createDto.name),
           sport: createDto.sport,
           format: createDto.format,
           season: createDto.season,
-          startDate: createDto.startDate,
+          startDate: formValue.startDate,
           description: createDto.description,
           settings: settings, // Pass complete settings
           organizationId: user.organizationId,

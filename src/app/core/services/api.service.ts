@@ -23,6 +23,7 @@ export class ApiService {
   }
 
   post<T>(path: string, body: any): Observable<T> {
+    console.log('POST request to:', `${this.baseUrl}/${path}`, 'with body:', body);
     return this.http.post<T>(`${this.baseUrl}/${path}`, body);
   }
 
