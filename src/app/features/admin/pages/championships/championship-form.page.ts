@@ -1,466 +1,604 @@
+// ─────────────────────────────────────────────────────────────
+// championship-form.page.ts  —  Angular 20 · Standalone · OnPush
+// ─────────────────────────────────────────────────────────────
+
 import {
-  ChangeDetectionStrategy,
-  Component,
-  inject,
-  signal,
-  OnInit,
-  computed,
+  ChangeDetectionStrategy, ChangeDetectorRef, Component, DestroyRef,
+  OnInit, computed, effect, inject, signal,
 } from '@angular/core';
-import { Router, RouterLink, ActivatedRoute } from '@angular/router';
-import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { RouterLink } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
+import { Observable, forkJoin, of, map } from 'rxjs';
 import { MatIconModule } from '@angular/material/icon';
-import { MatButtonModule } from '@angular/material/button';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatInputModule } from '@angular/material/input';
-import { MatSelectModule } from '@angular/material/select';
-import { MatDatepickerModule } from '@angular/material/datepicker';
-import { MatNativeDateModule } from '@angular/material/core';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { getAvailableSports } from '../../../../core/models';
-import { ChampionshipService } from '../../../../core/services/championship.service';
-import { AuthService } from '../../../../core/services/auth.service';
-import {
-  CreateChampionshipDto,
-  UpdateChampionshipDto,
-  getDefaultChampionshipSettings,
-  ChampionshipFormat,
-  ChampionshipSettings,
-  Championship,
-} from '../../../../core/models/championship.model';
-import { Sport } from '../../../../core/models/sport-config.model';
-import { filter, switchMap } from 'rxjs';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+
+import { ChampionshipService } from '../../../../core/services/championship.service';
+import { AuthService }         from '../../../../core/services/auth.service';
+import { SportService }        from '../../../../core/services/sport.service';
+import {
+  Championship, CreateChampionshipDto, UpdateChampionshipDto,
+} from '../../../../core/models/championship.model';
+
+import {
+  ChampionshipHeaderComponent,
+  ChampionshipHeaderData,
+  SportOption,
+} from './championship-components/championship-header.component';
+
+import {
+  ChampionshipPhasesComponent,
+  ChampionshipFormat,
+} from './championship-components/championship-phases.component';
+import { PhaseType } from './championship-components/phase-card.component';
+
+import { PhaseCardData } from './championship-components/phase-card.component';
+
+import {
+  ChampionshipRulesComponent,
+  ChampionshipRuleItem,
+  RulePatchDto,
+  MOCK_RULES_FOOTBALL,
+} from './championship-components/championship-rules.component';
+
+import {
+  ChampionshipTeamsComponent,
+  TeamItem,
+} from './championship-components/championship-teams.component';
+
+// ─────────────────────────────────────────────────────────────
+// TYPES
+// ─────────────────────────────────────────────────────────────
+
+type PageMode = 'create' | 'edit' | 'view';
+
+interface NavTab { id: string; label: string; icon: string; count: number | null; }
+
+
+// ─────────────────────────────────────────────────────────────
+// COMPONENT
+// ─────────────────────────────────────────────────────────────
 
 @Component({
   selector: 'app-championship-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  standalone: true,
   imports: [
     RouterLink,
-    ReactiveFormsModule,
     MatIconModule,
-    MatButtonModule,
-    MatFormFieldModule,
-    MatInputModule,
-    MatSelectModule,
-    MatDatepickerModule,
-    MatNativeDateModule,
     MatProgressSpinnerModule,
+    ChampionshipHeaderComponent,
+    ChampionshipPhasesComponent,
+    ChampionshipRulesComponent,
+    ChampionshipTeamsComponent,
   ],
   template: `
-    <div class="page-container">
-      <header class="page-header">
-        <div class="flex items-center gap-3">
-          <a matIconButton routerLink="/admin/championships">
-            <mat-icon>arrow_back</mat-icon>
-          </a>
-          <div>
-            <h1 class="page-title">
-              {{ isEditMode() ? 'Editar Campeonato' : 'Nuevo Campeonato' }}
-            </h1>
-            <p class="page-subtitle">
-              {{
-                isEditMode()
-                  ? 'Modifica los detalles del campeonato'
-                  : 'Configura los detalles del campeonato'
-              }}
-            </p>
-          </div>
-        </div>
-      </header>
+<div class="min-h-screen flex flex-col bg-[#f0f2f5]">
 
-      @if (isLoading()) {
-        <div class="form-card flex items-center justify-center py-8">
-          <mat-spinner [diameter]="40"></mat-spinner>
-        </div>
+  <!-- ══ TOPBAR ══════════════════════════════════════════════ -->
+  <nav class="sticky top-0 z-50 flex items-center justify-between h-[52px] px-7
+              bg-[#080f1c] border-b border-white/[0.06]">
+
+    <a class="inline-flex items-center gap-1.5 text-[13px] font-medium text-white/50
+              no-underline transition-colors hover:text-white/90"
+       routerLink="/admin/championships">
+      <mat-icon class="!size-[18px] !text-[18px]">arrow_back</mat-icon>
+      Campeonatos
+    </a>
+
+    <button
+      class="inline-flex items-center gap-1.5 h-[34px] px-[18px] rounded-lg
+             text-[13px] font-semibold cursor-pointer border-none transition-colors"
+      [style.background]="isEditable() ? '#3b82f6' : 'rgba(255,255,255,0.07)'"
+      [style.color]="isEditable() ? '#fff' : 'rgba(255,255,255,0.8)'"
+      [style.border]="isEditable() ? 'none' : '1px solid rgba(255,255,255,0.15)'"
+      [style.opacity]="isSaving() ? '0.5' : '1'"
+      [style.cursor]="isSaving() ? 'not-allowed' : 'pointer'"
+      [disabled]="isSaving()"
+      (click)="onActionClick()"
+    >
+      @if (isSaving()) {
+        <mat-spinner [diameter]="16" />
       } @else {
-        <form [formGroup]="form" (ngSubmit)="onSubmit()" class="form-card">
-          <div class="form-section">
-            <h2 class="section-title">Información General</h2>
-
-            <div class="form-grid">
-              <mat-form-field appearance="outline" class="full-width">
-                <mat-label>Nombre del Campeonato</mat-label>
-                <input matInput formControlName="name" placeholder="Ej: Liga Premier 2024" />
-                @if (form.controls.name.hasError('required')) {
-                  <mat-error>El nombre es requerido</mat-error>
-                }
-              </mat-form-field>
-
-              <mat-form-field appearance="outline">
-                <mat-label>Deporte</mat-label>
-                <mat-select formControlName="sport" [disabled]="isEditMode()">
-                  @for (sport of availableSports; track sport.sport) {
-                    <mat-option [value]="sport.sport">
-                      <div class="flex items-center gap-2">
-                        <mat-icon>{{ sport.icon }}</mat-icon>
-                        {{ sport.label }}
-                      </div>
-                    </mat-option>
-                  }
-                </mat-select>
-                @if (form.controls.sport.hasError('required')) {
-                  <mat-error>Selecciona un deporte</mat-error>
-                }
-                @if (isEditMode()) {
-                  <mat-hint>El deporte no se puede cambiar después de crear el campeonato</mat-hint>
-                }
-              </mat-form-field>
-
-              <mat-form-field appearance="outline">
-                <mat-label>Temporada</mat-label>
-                <input matInput formControlName="season" placeholder="Ej: 2024-2025" />
-              </mat-form-field>
-
-              <mat-form-field appearance="outline">
-                <mat-label>Formato</mat-label>
-                <mat-select formControlName="format" [disabled]="isEditMode()">
-                  <mat-option value="league">Liga (Todos contra todos)</mat-option>
-                  <mat-option value="knockout">Eliminación directa</mat-option>
-                  <mat-option value="group_stage">Fase de grupos + Eliminación</mat-option>
-                </mat-select>
-                @if (isEditMode()) {
-                  <mat-hint>El formato no se puede cambiar después de crear el campeonato</mat-hint>
-                }
-              </mat-form-field>
-
-              <mat-form-field appearance="outline">
-                <mat-label>Fecha de Inicio</mat-label>
-                <input matInput [matDatepicker]="startPicker" formControlName="startDate" />
-                <mat-datepicker-toggle matSuffix [for]="startPicker" />
-                <mat-datepicker #startPicker />
-              </mat-form-field>
-
-              <mat-form-field appearance="outline" class="full-width">
-                <mat-label>Descripción (opcional)</mat-label>
-                <textarea matInput formControlName="description" rows="3"></textarea>
-              </mat-form-field>
-            </div>
-          </div>
-
-          <div class="form-section">
-            <h2 class="section-title">Configuración de Puntos</h2>
-
-            <div class="form-grid">
-              <mat-form-field appearance="outline">
-                <mat-label>Puntos por Victoria</mat-label>
-                <input matInput type="number" formControlName="pointsForWin" />
-              </mat-form-field>
-
-              <mat-form-field appearance="outline">
-                <mat-label>Puntos por Empate</mat-label>
-                <input matInput type="number" formControlName="pointsForDraw" />
-              </mat-form-field>
-
-              <mat-form-field appearance="outline">
-                <mat-label>Puntos por Derrota</mat-label>
-                <input matInput type="number" formControlName="pointsForLoss" />
-              </mat-form-field>
-            </div>
-          </div>
-
-          <div class="form-actions">
-            <button
-              matButton="outlined"
-              type="button"
-              routerLink="/admin/championships"
-              [disabled]="isSaving()"
-            >
-              Cancelar
-            </button>
-            <button matButton="filled" type="submit" [disabled]="form.invalid || isSaving()">
-              @if (isSaving()) {
-                <mat-spinner [diameter]="20" class="mr-2"></mat-spinner>
-              } @else {
-                <mat-icon>save</mat-icon>
-              }
-              {{
-                isSaving()
-                  ? isEditMode()
-                    ? 'Guardando...'
-                    : 'Creando...'
-                  : isEditMode()
-                    ? 'Guardar Cambios'
-                    : 'Crear Campeonato'
-              }}
-            </button>
-          </div>
-        </form>
+        <mat-icon class="!size-4 !text-[16px]">{{ actionIcon() }}</mat-icon>
       }
-    </div>
-  `,
-  styles: `
-    .page-container {
-      padding: 1.5rem;
-      max-width: 800px;
-      margin: 0 auto;
+      {{ actionLabel() }}
+    </button>
+  </nav>
+
+  <!-- ══ HEADER ══════════════════════════════════════════════ -->
+  <app-championship-header
+    [data]="headerData()"
+    [sports]="sports()"
+    [editable]="isEditable()"
+    (dataChange)="onHeaderChange($event)"
+    (logoSelected)="onLogoFile($event)"
+  />
+
+  <div class="h-px bg-white/[0.08]"></div>
+
+  <!-- ══ NAV TABS ════════════════════════════════════════════ -->
+  <div class="flex px-7 bg-white border-b border-gray-200">
+    @for (tab of navTabs(); track tab.id) {
+      <button
+        class="relative bottom-[-1px] inline-flex items-center gap-1.5 h-[46px] px-[18px]
+               text-[12px] font-bold tracking-[.06em] uppercase bg-transparent
+               border-none border-b-2 cursor-pointer transition-colors"
+        [style.color]="activeNavTab() === tab.id ? '#3b82f6' : '#9ca3af'"
+        [style.border-bottom-color]="activeNavTab() === tab.id ? '#3b82f6' : 'transparent'"
+        (click)="activeNavTab.set(tab.id)"
+      >
+        <mat-icon class="!size-[15px] !text-[15px]">{{ tab.icon }}</mat-icon>
+        {{ tab.label }}
+        @if (tab.count !== null) {
+          <span
+            class="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5
+                   rounded-full text-[10px] font-bold"
+            [class.bg-gray-200]="activeNavTab() !== tab.id"
+            [class.text-gray-500]="activeNavTab() !== tab.id"
+            [class.bg-blue-100]="activeNavTab() === tab.id"
+            [class.text-blue-700]="activeNavTab() === tab.id"
+          >{{ tab.count }}</span>
+        }
+      </button>
+    }
+  </div>
+
+  <!-- ══ TAB CONTENT ═════════════════════════════════════════ -->
+  <div class="flex-1">
+
+    @if (activeNavTab() === 'fases') {
+      <app-championship-phases
+        [initialPhases]="phases()"
+        [initialFormat]="activeFormat()"
+        (phasesChange)="onPhasesChange($event)"
+        (save)="onPhasesSave($event)"
+        (cancel)="onPhasesCancel()"
+      />
     }
 
-    .page-header {
-      margin-bottom: 1.5rem;
+    @if (activeNavTab() === 'reglas') {
+      <app-championship-rules
+        [initialRules]="championshipRules()"
+        (save)="onRulesSave($event)"
+        (cancel)="activeNavTab.set('fases')"
+      />
     }
 
-    .page-title {
-      font-size: 1.5rem;
-      font-weight: 700;
-      margin: 0;
+    @if (activeNavTab() === 'equipos') {
+      <app-championship-teams
+        [maxTeams]="headerData().maxTeams"
+        [maxPlayersPerTeam]="headerData().maxPlayersPerTeam"
+        [initialTeams]="teamsData()"
+        (save)="onTeamsSave($event)"
+        (dirty)="isDirty.set(true)"
+      />
     }
 
-    .page-subtitle {
-      color: var(--mat-sys-on-surface-variant);
-      margin: 0.25rem 0 0;
-    }
-
-    .form-card {
-      background: var(--mat-sys-surface-container);
-      border-radius: 12px;
-      padding: 1.5rem;
-    }
-
-    .form-section {
-      margin-bottom: 2rem;
-
-      &:last-of-type {
-        margin-bottom: 0;
-      }
-    }
-
-    .section-title {
-      font-size: 1rem;
-      font-weight: 600;
-      margin: 0 0 1rem;
-      color: var(--mat-sys-primary);
-    }
-
-    .form-grid {
-      display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 1rem;
-
-      @media (max-width: 600px) {
-        grid-template-columns: 1fr;
-      }
-    }
-
-    .full-width {
-      grid-column: 1 / -1;
-    }
-
-    .form-actions {
-      display: flex;
-      justify-content: flex-end;
-      gap: 1rem;
-      padding-top: 1.5rem;
-      border-top: 1px solid var(--mat-sys-outline-variant);
-      margin-top: 1.5rem;
-    }
+  </div>
+</div>
   `,
 })
 export default class ChampionshipFormPage implements OnInit {
-  private fb = inject(FormBuilder);
-  private router = inject(Router);
-  private route = inject(ActivatedRoute);
-  private championshipService = inject(ChampionshipService);
-  private authService = inject(AuthService);
-  private snackBar = inject(MatSnackBar);
 
-  availableSports = getAvailableSports();
-  isSaving = signal(false);
-  isLoading = signal(false);
+  // ── Services ──────────────────────────────────────────────────
+  private router          = inject(Router);
+  private route           = inject(ActivatedRoute);
+  private championshipSvc = inject(ChampionshipService);
+  private sportSvc        = inject(SportService);
+  private authService     = inject(AuthService);
+  private snackBar        = inject(MatSnackBar);
+  private cdr             = inject(ChangeDetectorRef);
+  private destroyRef      = inject(DestroyRef);
+
+  // ── Page state ─────────────────────────────────────────────────
+  pageMode       = signal<PageMode>('create');
+  isSaving       = signal(false);
+  isDirty        = signal(false);
+  activeNavTab   = signal('fases');
   championshipId = signal<string | null>(null);
-  championship = signal<Championship | null>(null);
+  logoFile: File | null = null;
 
-  isEditMode = computed(() => !!this.championshipId());
+  // ── Sports (cargados del servicio) ─────────────────────────────
+  sports = signal<SportOption[]>([]);
 
-  form = this.fb.nonNullable.group({
-    name: ['', Validators.required],
-    sport: ['football' as Sport, Validators.required],
-    season: ['2024-2025'],
-    format: ['league' as ChampionshipFormat],
-    startDate: [new Date(), Validators.required],
-    description: [''],
-    pointsForWin: [3],
-    pointsForDraw: [1],
-    pointsForLoss: [0],
+  // ── Header data ────────────────────────────────────────────────
+  headerData = signal<ChampionshipHeaderData>({
+    name: '', description: '', sportId: 1, season: '2024-2025',
+    location: '', startDate: '', endDate: '',
+    registrationStartDate: '', registrationEndDate: '',
+    maxTeams: 16, currentTeams: 0, maxPlayersPerTeam: 20, phaseCount: 0,
+    status: 'draft', logoUrl: null,
   });
 
-  ngOnInit(): void {
-    this.route.paramMap.pipe(takeUntilDestroyed()).subscribe((params) => {
-      const id = params.get('id');
-      if (id) {
-        this.championshipId.set(id);
-        this.loadChampionship(id);
-      }
+  // ── Phase state ─────────────────────────────────────────────────
+  phases       = signal<PhaseCardData[]>([]);
+  activeFormat = signal<ChampionshipFormat | null>(null);
+
+  // ── Rules state ─────────────────────────────────────────────────
+  championshipRules = signal<ChampionshipRuleItem[]>([]);
+
+  // ── Teams state ──────────────────────────────────────────────────
+  teamsData = signal<TeamItem[]>([]);
+
+  // ── Nav tabs (computed — count reacciona a cambios) ─────────────
+  navTabs = computed<NavTab[]>(() => [
+    { id: 'fases',   label: 'Fases',   icon: 'layers', count: this.phases().length || null },
+    { id: 'reglas',  label: 'Reglas',  icon: 'gavel',  count: null },
+    { id: 'equipos', label: 'Equipos', icon: 'group',  count: this.headerData().currentTeams || null },
+  ]);
+
+  // ── Computed ───────────────────────────────────────────────────
+  isEditable = computed(() => this.pageMode() !== 'view');
+
+  actionLabel = computed(() => {
+    if (this.isSaving()) return this.pageMode() === 'create' ? 'Creando...' : 'Guardando...';
+    if (this.pageMode() === 'create') return 'Crear Campeonato';
+    if (this.pageMode() === 'edit')   return 'Guardar Cambios';
+    return 'Editar';
+  });
+
+  actionIcon = computed(() =>
+    this.pageMode() === 'view' ? 'edit' : this.pageMode() === 'create' ? 'add_circle' : 'save'
+  );
+
+  // ── Constructor — persist active tab in sessionStorage ─────────
+  constructor() {
+    effect(() => {
+      const id  = this.championshipId() ?? 'new';
+      sessionStorage.setItem(`championship_tab_${id}`, this.activeNavTab());
     });
   }
 
-  private loadChampionship(id: string): void {
-    this.isLoading.set(true);
-    this.championshipService.getChampionshipById(id).subscribe({
-      next: (championship) => {
-        this.championship.set(championship);
-        // Parse date strings to Date objects
-        const startDate =
-          championship.startDate instanceof Date
-            ? championship.startDate
-            : new Date(championship.startDate);
+  // ── Lifecycle ──────────────────────────────────────────────────
+  ngOnInit(): void {
+    // Cargar deportes del servicio (mapeados al formato del header)
+    this.sportSvc.getAll().pipe(takeUntilDestroyed(this.destroyRef)).subscribe(list => {
+      this.sports.set(list.map(s => ({ id: s.id, label: s.name, icon: s.icon })));
+      this.cdr.markForCheck();
+    });
 
-        this.form.patchValue({
-          name: championship.name,
-          sport: championship.sport,
-          season: championship.season,
-          format: championship.format,
-          startDate: startDate,
-          description: championship.description || '',
-          pointsForWin: championship.settings?.pointsForWin ?? 3,
-          pointsForDraw: championship.settings?.pointsForDraw ?? 1,
-          pointsForLoss: championship.settings?.pointsForLoss ?? 0,
-        });
-        this.isLoading.set(false);
+    this.route.paramMap
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(params => {
+        const id = params.get('id');
+        if (id) {
+          this.championshipId.set(id);
+          this.pageMode.set('view');
+          this.loadChampionship(id);
+        } else {
+          this.pageMode.set('create');
+          // Cargar reglas por defecto del deporte seleccionado
+          this.loadDefaultRules(this.headerData().sportId);
+        }
+        // Restaurar el tab activo desde sessionStorage (sobrevive a cualquier re-init)
+        const savedTab = sessionStorage.getItem(`championship_tab_${id ?? 'new'}`);
+        if (savedTab) this.activeNavTab.set(savedTab);
+      });
+  }
+
+  // ── Header ─────────────────────────────────────────────────────
+  onHeaderChange(patch: Partial<ChampionshipHeaderData>): void {
+    this.headerData.update(d => ({ ...d, ...patch }));
+    this.isDirty.set(true);
+  }
+
+  onLogoFile(file: File): void {
+    this.logoFile = file;
+    this.isDirty.set(true);
+  }
+
+  // ── Phases ─────────────────────────────────────────────────────
+  onPhasesChange(phases: PhaseCardData[]): void {
+    this.phases.set(phases);
+    this.headerData.update(d => ({ ...d, phaseCount: phases.length }));
+    this.isDirty.set(true);
+  }
+
+  onPhasesSave(phases: PhaseCardData[]): void {
+    this.onPhasesChange(phases);
+    const id = this.championshipId();
+    if (!id) { this.snackBar.open('Fases guardadas', 'Cerrar', { duration: 2000 }); return; }
+    const dtos = phases.map(p => ({
+      name:      p.name,
+      phaseType: p.phaseType,
+      phaseOrder: p.phaseOrder,
+    }));
+    this.championshipSvc.savePhases(id, dtos).subscribe({
+      next: () => this.snackBar.open('Fases guardadas', 'Cerrar', { duration: 2000 }),
+      error: () => this.snackBar.open('Error al guardar fases', 'Cerrar', { duration: 3000 }),
+    });
+  }
+
+  onPhasesCancel(): void {
+    // No-op — ChampionshipPhasesComponent maneja su propio estado interno
+  }
+
+  // ── Rules ──────────────────────────────────────────────────────
+  onRulesSave(patches: RulePatchDto[]): void {
+    const id = this.championshipId();
+    if (!id) return;
+    const dtos = patches.map(p => ({ matchRuleId: p.matchRuleId, sportId: this.headerData().sportId, value: p.value }));
+    this.championshipSvc.updateRules(id, dtos).subscribe({
+      next: () => this.snackBar.open('Reglas guardadas', 'Cerrar', { duration: 2000 }),
+      error: () => this.snackBar.open('Error al guardar reglas', 'Cerrar', { duration: 3000 }),
+    });
+  }
+
+  // ── Teams ──────────────────────────────────────────────────────
+  onTeamsSave(teams: TeamItem[]): void {
+    const id = this.championshipId();
+    if (!id) {
+      this.teamsData.set(teams);
+      this.headerData.update(d => ({ ...d, currentTeams: teams.filter(t => t.isActive).length }));
+      return;
+    }
+    const dtos = teams.map(t => ({
+      name:           t.name,
+      shortname:      t.shortname,
+      slug:           t.slug,
+      logoUrl:        t.logoUrl        ?? undefined,
+      primaryColor:   t.primaryColor   ?? undefined,
+      secondaryColor: t.secondaryColor ?? undefined,
+      location:       t.location       ?? undefined,
+      foundedYear:    t.foundedYear    ?? undefined,
+      homeVenue:      t.homeVenue      || undefined,
+      coachName:      t.coachName      ?? undefined,
+      coachPhone:     t.coachPhone     ?? undefined,
+      players:        t.players,
+    }));
+    this.championshipSvc.saveTeams(id, dtos).subscribe({
+      next: (saved) => {
+        this.isDirty.set(false);
+        this.headerData.update(d => ({ ...d, currentTeams: saved.filter(t => t.isActive).length }));
+        this.snackBar.open('Equipos guardados', 'Cerrar', { duration: 2000 });
       },
-      error: (error) => {
-        console.error('Error loading championship', error);
+      error: () => this.snackBar.open('Error al guardar equipos', 'Cerrar', { duration: 3000 }),
+    });
+  }
+
+  // ── Action button ──────────────────────────────────────────────
+  onActionClick(): void {
+    if (this.pageMode() === 'view') { this.pageMode.set('edit'); return; }
+    this.save();
+  }
+
+  private save(): void {
+    const hd = this.headerData();
+    if (!hd.name.trim()) {
+      this.snackBar.open('El nombre del campeonato es requerido', 'Cerrar', { duration: 3000 });
+      return;
+    }
+    const user = this.authService.currentUser();
+    if (!user?.organizationId) {
+      this.snackBar.open('Organización no disponible', 'Cerrar', { duration: 3000 });
+      return;
+    }
+
+    this.isSaving.set(true);
+
+    if (this.pageMode() === 'edit' && this.championshipId()) {
+      const dto: UpdateChampionshipDto = {
+        name:             hd.name,
+        slug:             this.toSlug(hd.name),
+        description:      hd.description || undefined,
+        season:           hd.season,
+        startDate:            hd.startDate ? new Date(hd.startDate) : undefined,
+        endDate:              hd.endDate   ? new Date(hd.endDate)   : undefined,
+        registrationStartDate: hd.registrationStartDate ? new Date(hd.registrationStartDate) : null,
+        registrationEndDate:   hd.registrationEndDate   ? new Date(hd.registrationEndDate)   : null,
+        maxTeams:              hd.maxTeams,
+        maxPlayersPerTeam:     hd.maxPlayersPerTeam,
+      };
+      this.championshipSvc.update(this.championshipId()!, dto).subscribe({
+        next: () => {
+          this.isDirty.set(false);
+          this.snackBar.open('Campeonato actualizado', 'Cerrar', { duration: 3000 });
+          this.pageMode.set('view');
+          this.isSaving.set(false);
+        },
+        error: () => {
+          this.snackBar.open('Error al actualizar', 'Cerrar', { duration: 3000 });
+          this.isSaving.set(false);
+        },
+      });
+    } else {
+      const dto: CreateChampionshipDto = {
+        organizationId:   +user.organizationId,
+        sportId:          hd.sportId,
+        name:             hd.name,
+        slug:             this.toSlug(hd.name),
+        season:           hd.season || String(new Date().getFullYear()),
+        description:      hd.description || undefined,
+        startDate:            hd.startDate ? new Date(hd.startDate) : undefined,
+        endDate:              hd.endDate   ? new Date(hd.endDate)   : undefined,
+        registrationStartDate: hd.registrationStartDate ? new Date(hd.registrationStartDate) : undefined,
+        registrationEndDate:   hd.registrationEndDate   ? new Date(hd.registrationEndDate)   : undefined,
+        maxTeams:              hd.maxTeams,
+        maxPlayersPerTeam:     hd.maxPlayersPerTeam,
+      };
+      this.championshipSvc.create(dto).subscribe({
+        next: (c: any) => {
+          const newId = String(c.id);
+          // Auto-guardar fases y equipos que el admin haya configurado antes de crear
+          this.saveAllSections(newId).subscribe({
+            next: () => {
+              this.isDirty.set(false);
+              this.snackBar.open('Campeonato creado', 'Cerrar', { duration: 3000 });
+              this.router.navigate(['/admin/championships', newId]);
+            },
+            error: () => {
+              // El campeonato se creó; las secciones fallaron parcialmente
+              this.isDirty.set(false);
+              this.snackBar.open(
+                'Campeonato creado. Algunas secciones no pudieron guardarse.',
+                'Cerrar', { duration: 4000 },
+              );
+              this.router.navigate(['/admin/championships', newId]);
+            },
+          });
+        },
+        error: () => {
+          this.snackBar.open('Error al crear', 'Cerrar', { duration: 3000 });
+          this.isSaving.set(false);
+        },
+      });
+    }
+  }
+
+  /** Guarda fases y equipos pendientes para un championship ya existente. */
+  private saveAllSections(id: string): Observable<void> {
+    const saves: Observable<unknown>[] = [];
+
+    if (this.phases().length > 0) {
+      const dtos = this.phases().map(p => ({
+        name: p.name, phaseType: p.phaseType, phaseOrder: p.phaseOrder,
+      }));
+      saves.push(this.championshipSvc.savePhases(id, dtos));
+    }
+
+    if (this.teamsData().length > 0) {
+      const dtos = this.teamsData().map(t => ({
+        name:           t.name,
+        shortname:      t.shortname,
+        slug:           t.slug,
+        logoUrl:        t.logoUrl        ?? undefined,
+        primaryColor:   t.primaryColor   ?? undefined,
+        secondaryColor: t.secondaryColor ?? undefined,
+        location:       t.location       ?? undefined,
+        foundedYear:    t.foundedYear    ?? undefined,
+        homeVenue:      t.homeVenue      || undefined,
+        coachName:      t.coachName      ?? undefined,
+        coachPhone:     t.coachPhone     ?? undefined,
+        players:        t.players,
+      }));
+      saves.push(this.championshipSvc.saveTeams(id, dtos));
+    }
+
+    return saves.length > 0
+      ? forkJoin(saves).pipe(map(() => void 0))
+      : of(void 0);
+  }
+
+  private loadDefaultRules(_sportId: number): void {
+    // Catálogo con valores reseteados a default (sin overrides)
+    const defaults = MOCK_RULES_FOOTBALL.map(r => ({
+      ...r, currentValue: r.defaultValue, isOverridden: false,
+    }));
+    this.championshipRules.set(defaults);
+    this.cdr.markForCheck();
+  }
+
+  private loadChampionship(id: string): void {
+    this.championshipSvc.getById(id).subscribe({
+      next: (c: Championship) => {
+        this.headerData.set({
+          name:         c.name,
+          description:  c.description ?? '',
+          sportId:      c.sportId,
+          season:       c.season,
+          location:     '',
+          startDate:    c.startDate ? this.toIsoDate(c.startDate) : '',
+          endDate:      c.endDate   ? this.toIsoDate(c.endDate)   : '',
+          registrationStartDate: c.registrationStartDate ? this.toIsoDate(c.registrationStartDate) : '',
+          registrationEndDate:   c.registrationEndDate   ? this.toIsoDate(c.registrationEndDate)   : '',
+          maxTeams:           c.maxTeams,
+          currentTeams:       0,
+          maxPlayersPerTeam:  c.maxPlayersPerTeam ?? 20,
+          phaseCount:         this.phases().length,
+          status:       (c.status as any) ?? 'active',
+          logoUrl:      c.logo ?? null,
+        });
+        // Cargar reglas guardadas y mezclar con metadatos del catálogo
+        this.championshipSvc.getRules(id).subscribe(rulesResp => {
+          const overrides = new Map(rulesResp.rules.map(r => [r.matchRuleId, r]));
+          const merged = MOCK_RULES_FOOTBALL.map(meta => {
+            const saved = overrides.get(meta.matchRuleId);
+            return saved
+              ? { ...meta, currentValue: saved.currentValue, isOverridden: saved.isOverridden }
+              : { ...meta, currentValue: meta.defaultValue, isOverridden: false };
+          });
+          this.championshipRules.set(merged);
+          this.cdr.markForCheck();
+        });
+        this.championshipSvc.getPhases(id).subscribe(phasesFromSvc => {
+          const mapped: PhaseCardData[] = phasesFromSvc.map(p => ({
+            id:         p.id,
+            name:       p.name,
+            phaseType:  p.phaseType,
+            phaseOrder: p.phaseOrder,
+            status:     p.status,
+            league:     p.leagueConfig   ? { winsPoints: 3, drawPoints: 1, lossPoints: 0, totalRounds: p.leagueConfig.advanceCount, legs: p.leagueConfig.legs, advanceCount: p.leagueConfig.advanceCount, tiebreakOrder: p.leagueConfig.tiebreakOrder } : undefined,
+            knockout:   p.knockoutConfig ? { legs: p.knockoutConfig.legs, bracketSize: 0, thirdPlaceMatch: p.knockoutConfig.thirdPlaceMatch, seeding: p.knockoutConfig.seeding, awayGoalsRule: p.knockoutConfig.awayGoalsRule, tieBreak: p.knockoutConfig.tieBreak } : undefined,
+            groups:     p.groupsConfig   ? { numGroups: p.groupsConfig.numGroups, teamsPerGroup: p.groupsConfig.teamsPerGroup, legs: p.groupsConfig.legs, advancePerGroup: p.groupsConfig.advancePerGroup, advanceBestThirds: p.groupsConfig.advanceBestThirds, tiebreakOrder: p.groupsConfig.tiebreakOrder } : undefined,
+            swiss:      p.swissConfig    ? { numRounds: p.swissConfig.numRounds, pairingSystem: p.swissConfig.pairingSystem, firstRound: p.swissConfig.firstRound, allowRematch: p.swissConfig.allowRematch, tiebreakOrder: p.swissConfig.tiebreakOrder, directAdvancedCount: p.swissConfig.directAdvancedCount, playoffCount: p.swissConfig.playoffCount } : undefined,
+          }));
+          this.phases.set(mapped);
+          this.activeFormat.set(this.inferFormat(mapped));
+          this.headerData.update(d => ({ ...d, phaseCount: mapped.length }));
+        });
+        // Cargar equipos del campeonato
+        this.championshipSvc.getTeams(id).subscribe(profiles => {
+          const mapped: TeamItem[] = profiles.map(p => ({
+            id:             p.id,
+            championshipId: p.championshipId,
+            name:           p.name,
+            shortname:      p.shortname,
+            slug:           p.slug,
+            logoUrl:        p.logoUrl,
+            documentUrl:    p.documentUrl    ?? null,
+            primaryColor:   p.primaryColor   ?? '#1a56db',
+            secondaryColor: p.secondaryColor ?? '#e5e7eb',
+            location:       p.location       ?? '',
+            foundedYear:    (p as any).foundedYear  ?? null,
+            homeVenue:      (p as any).homeVenue    ?? '',
+            coachName:      p.coachName      ?? '',
+            coachPhone:     p.coachPhone     ?? '',
+            isActive:       p.isActive,
+            players:        (p.players ?? []).map(pl => ({
+              id:         pl.id,
+              teamId:     pl.teamId,
+              positionId: pl.positionId,
+              firstName:  pl.firstName,
+              lastName:   pl.lastName,
+              nickName:   pl.nickName ?? null,
+              number:     pl.number,
+              birthDate:  pl.birthDate ? String(pl.birthDate) : null,
+              height:     pl.height    ?? null,
+              weight:     pl.weight    ?? null,
+              status:     (pl.status as TeamItem['players'][number]['status']) ?? 'active',
+              photoUrl:   (pl as any).photoUrl ?? null,
+            })),
+          }));
+          this.teamsData.set(mapped);
+          this.headerData.update(d => ({ ...d, currentTeams: mapped.filter(t => t.isActive).length }));
+        });
+        this.cdr.markForCheck();
+      },
+      error: () => {
         this.snackBar.open('Error al cargar el campeonato', 'Cerrar', { duration: 3000 });
-        this.isLoading.set(false);
         this.router.navigate(['/admin/championships']);
       },
     });
   }
 
-  onSubmit(): void {
-    if (this.form.invalid) {
-      this.form.markAllAsTouched();
-      return;
-    }
-
-    const user = this.authService.currentUser();
-    if (!user?.organizationId) {
-      this.snackBar.open('Error: No se pudo obtener la información de la organización', 'Cerrar', {
-        duration: 3000,
-      });
-      return;
-    }
-
-    this.isSaving.set(true);
-    const formValue = this.form.getRawValue();
-
-    if (this.isEditMode() && this.championshipId()) {
-      // Update existing championship
-      const championship = this.championship();
-      if (!championship) {
-        this.snackBar.open('Error: No se pudo cargar el campeonato', 'Cerrar', { duration: 3000 });
-        this.isSaving.set(false);
-        return;
-      }
-
-      // Get current settings or defaults
-      const currentSettings =
-        championship.settings || getDefaultChampionshipSettings(championship.sport);
-
-      // Merge settings with form values - ensure all required fields are present
-      const settings: ChampionshipSettings = {
-        ...currentSettings,
-        pointsForWin: formValue.pointsForWin ?? currentSettings.pointsForWin,
-        pointsForDraw: formValue.pointsForDraw ?? currentSettings.pointsForDraw,
-        pointsForLoss: formValue.pointsForLoss ?? currentSettings.pointsForLoss,
-        roundsCount: currentSettings.roundsCount,
-        tiebreakers: currentSettings.tiebreakers,
-        allowDraws: currentSettings.allowDraws,
-        extraTimeAllowed: currentSettings.extraTimeAllowed,
-        penaltyShootoutAllowed: currentSettings.penaltyShootoutAllowed,
-        teamsPerGroup: currentSettings.teamsPerGroup,
-        teamsAdvancePerGroup: currentSettings.teamsAdvancePerGroup,
-      };
-
-      const updateDto: UpdateChampionshipDto = {
-        name: formValue.name,
-        description: formValue.description || undefined,
-        startDate: formValue.startDate,
-        settings,
-      };
-
-      this.championshipService
-        .updateChampionship(this.championshipId()!, {
-          name: updateDto.name,
-          description: updateDto.description,
-          startDate: updateDto.startDate,
-          settings: settings, // Pass complete settings
-        } as Partial<Championship>)
-        .subscribe({
-          next: (updatedChampionship) => {
-            this.snackBar.open('Campeonato actualizado exitosamente', 'Cerrar', { duration: 3000 });
-            this.router.navigate(['/admin/championships', updatedChampionship.id]);
-          },
-          error: (error) => {
-            console.error('Error updating championship', error);
-            this.snackBar.open('Error al actualizar el campeonato', 'Cerrar', { duration: 3000 });
-            this.isSaving.set(false);
-          },
-        });
-    } else {
-      // Create new championship
-      // Get default settings for the sport
-      const defaultSettings = getDefaultChampionshipSettings(formValue.sport as Sport);
-
-      // Merge settings with form values
-      const settings: ChampionshipSettings = {
-        ...defaultSettings,
-        pointsForWin: formValue.pointsForWin ?? defaultSettings.pointsForWin,
-        pointsForDraw: formValue.pointsForDraw ?? defaultSettings.pointsForDraw,
-        pointsForLoss: formValue.pointsForLoss ?? defaultSettings.pointsForLoss,
-      };
-
-      // Create the championship DTO
-      const createDto: CreateChampionshipDto = {
-        name: formValue.name,
-        sport: formValue.sport as Sport,
-        format: formValue.format,
-        season: formValue.season || `${new Date().getFullYear()}-${new Date().getFullYear() + 1}`,
-        startDate: formValue.startDate,
-        description: formValue.description || undefined,
-        settings,
-      };
-
-      // Create championship with organizationId
-      this.championshipService
-        .createChampionship({
-          name: createDto.name,
-          slug: this.generateSlug(createDto.name),
-          sport: createDto.sport,
-          format: createDto.format,
-          season: createDto.season,
-          startDate: formValue.startDate,
-          description: createDto.description,
-          settings: settings, // Pass complete settings
-          organizationId: user.organizationId,
-          status: 'registration', // Start in registration mode
-          totalTeams: 0,
-          totalMatches: 0,
-          matchesPlayed: 0,
-        })
-        .subscribe({
-          next: (championship) => {
-            this.snackBar.open('Campeonato creado exitosamente', 'Cerrar', { duration: 3000 });
-            this.router.navigate(['/admin/championships']);
-          },
-          error: (error) => {
-            console.error('Error creating championship', error);
-            this.snackBar.open('Error al crear el campeonato', 'Cerrar', { duration: 3000 });
-            this.isSaving.set(false);
-          },
-        });
-    }
+  // ── Helpers ────────────────────────────────────────────────────
+  private inferFormat(phases: PhaseCardData[]): ChampionshipFormat | null {
+    const types = new Set(phases.map(p => p.phaseType));
+    if (types.has(PhaseType.Swiss))                                     return 'swiss_playoff';
+    if (types.has(PhaseType.Groups))                                    return 'groups_knockout';
+    if (types.has(PhaseType.Knockout) && !types.has(PhaseType.League)) return 'knockout';
+    if (types.has(PhaseType.League))                                    return 'league';
+    return null;
   }
 
-  /**
-   * Generate slug from name
-   */
-  private generateSlug(name: string): string {
-    return name
-      .toLowerCase()
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '') // Remove accents
-      .replace(/[^a-z0-9]+/g, '-') // Replace non-alphanumeric with hyphens
-      .replace(/^-+|-+$/g, ''); // Remove leading/trailing hyphens
-  }
+  private toSlug = (n: string) =>
+    n.toLowerCase().normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+
+  private toIsoDate = (d: Date | string) =>
+    (d instanceof Date ? d : new Date(d)).toISOString().split('T')[0];
 }

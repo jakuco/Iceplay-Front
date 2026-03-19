@@ -2,7 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { ApiService } from './api.service';
 import { Observable, forkJoin, of, from, throwError } from 'rxjs';
 import { map, switchMap, mergeMap, toArray, catchError, tap } from 'rxjs/operators';
-import { Team, CreateTeamDto, UpdateTeamDto, TeamWithPlayers } from '../models/team.model';
+import { Team, CreateTeamDto, UpdateTeamDto, TeamProfile } from '../models/team.model';
 import { Player, CreatePlayerDto } from '../models/player.model';
 
 export interface CsvImportResult {
@@ -52,7 +52,7 @@ export class TeamService {
   /**
    * Get team with players
    */
-  getTeamWithPlayers(id: string): Observable<TeamWithPlayers> {
+  getTeamWithPlayers(id: string): Observable<TeamProfile> {
     return forkJoin({
       team: this.getTeamById(id),
       players: this.getPlayers(id),
@@ -60,6 +60,18 @@ export class TeamService {
       map(({ team, players }) => ({
         ...team,
         players,
+        groups: team.groups ?? [],
+        stats: {
+          teamId: team.id,
+          played: 0,
+          won: 0,
+          drawn: 0,
+          lost: 0,
+          goalsFor: 0,
+          goalsAgainst: 0,
+          goalDifference: 0,
+          points: 0,
+        },
       })),
       catchError((error) => this.handleError('Error fetching team with players', error)),
     );
@@ -195,16 +207,18 @@ export class TeamService {
               teamObs = of(teams[0]);
             } else {
               // Create new team
+              const slug = teamName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
               const newTeam: CreateTeamDto & { championshipId: string; organizationId: string } = {
                 championshipId,
                 organizationId,
                 name: teamName,
-                shortName: cols[1]?.trim() || teamName.substring(0, 3).toUpperCase(),
+                slug,
+                shortname: cols[1]?.trim() || teamName.substring(0, 3).toUpperCase(),
                 primaryColor: '#1e40af',
                 secondaryColor: '#ffffff',
-                logo: 'https://via.placeholder.com/50',
-                managerName: cols[2]?.trim() || '',
-                city: cols[3]?.trim() || '',
+                logoUrl: 'https://via.placeholder.com/50',
+                coachName: cols[2]?.trim() || '',
+                location: cols[3]?.trim() || '',
               };
               teamObs = this.createTeam(newTeam).pipe(tap(() => result.teamsImported++));
             }
@@ -229,13 +243,14 @@ export class TeamService {
                       championshipId: string;
                       organizationId: string;
                     } = {
-                      teamId: team.id,
+                      teamId: String(team.id),
                       championshipId,
                       organizationId,
                       firstName: cols[5]?.trim() || '',
                       lastName: cols[6]?.trim() || '',
                       number: parseInt(cols[8]?.trim() || '0', 10),
-                      position: cols[9]?.trim() || 'Player',
+                      positionId: parseInt(cols[9]?.trim() || '1', 10),
+                      birthDate: new Date('2000-01-01'),
                     };
                     return this.createPlayer(newPlayer).pipe(tap(() => result.playersImported++));
                   }),

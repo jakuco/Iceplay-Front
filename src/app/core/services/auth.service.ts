@@ -168,12 +168,29 @@ export class AuthService {
       try {
         this._token.set(token);
         this._currentUser.set(JSON.parse(raw));
+        return;
       } catch {
         // Si el JSON está corrupto, limpiar
         localStorage.removeItem('token');
         localStorage.removeItem('user');
       }
     }
+
+    // 🔴 MOCK — usuario administrador por defecto (sin backend de auth)
+    const mockUser: User = {
+      id:             'mock-user-1',
+      email:          'admin@iceplay.dev',
+      firstName:      'Admin',
+      lastName:       'Mock',
+      role:           'admin',
+      organizationId: '1',
+      isActive:       true,
+      createdAt:      new Date(),
+    };
+    this._token.set('mock-token');
+    this._currentUser.set(mockUser);
+
+    // 🟢 BACKEND — eliminar el bloque MOCK de arriba cuando el login esté activo
   }
 
   // ✅ Mapear roles numéricos del back a strings del front

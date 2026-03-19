@@ -1,5 +1,8 @@
-import type { PlayerBasicInfo } from './player.model';
-import type { TeamBasicInfo } from './team.model';
+import type { Player } from './player.model';
+import type { Team } from './team.model';
+
+type PlayerBasicInfo = Pick<Player, 'id' | 'firstName' | 'lastName' | 'nickName' | 'number' | 'positionId'>;
+type TeamBasicInfo = Pick<Team, 'id' | 'name' | 'shortname' | 'logoUrl'>;
 
 /**
  * Match event entity

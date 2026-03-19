@@ -29,21 +29,21 @@ export const routes: Routes = [
     pathMatch: 'full',
     redirectTo: 'matches',
   },
-  {
-    path: 'match/:matchId',
-    loadComponent: () => import('./features/matches/pages/match-details/match-details'),
-    title: 'Match Details',
-  },
+  // {
+  //   path: 'match/:matchId',
+  //   loadComponent: () => import('./features/matches/pages/match-details/match-details'),
+  //   title: 'Match Details',
+  // },
   {
     path: 'live-match',
     loadComponent: () => import('./features/matches/pages/live-match-logger/live-match-logger'),
     title: 'Live Match Logger',
   },
-  {
-    path: 'matches',
-    loadComponent: () => import('./features/matches/pages/matches-list/matches-list'),
-    title: 'Matches',
-  },
+  // {
+  //   path: 'matches',
+  //   loadComponent: () => import('./features/matches/pages/matches-list/matches-list'),
+  //   title: 'Matches',
+  // },
   {
     path: 'ui-showcase',
     loadComponent: () =>

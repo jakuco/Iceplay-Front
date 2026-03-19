@@ -10,8 +10,20 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatDividerModule } from '@angular/material/divider';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { SPORT_CONFIGS, type Championship, type Sport } from '../../../../core/models';
+import { type Championship } from '../../../../core/models';
 import { ChampionshipStatus } from '../../../../core/models/championship.model';
+
+type SportKey = 'football' | 'basketball' | 'volleyball';
+const SPORT_ICON_MAP: Record<SportKey, string> = {
+  football: 'sports_soccer',
+  basketball: 'sports_basketball',
+  volleyball: 'sports_volleyball',
+};
+const SPORT_LABEL_MAP: Record<SportKey, string> = {
+  football: 'Fútbol',
+  basketball: 'Básquetbol',
+  volleyball: 'Voleibol',
+};
 import { ChampionshipService } from '../../../../core/services/championship.service';
 import { AuthService } from '../../../../core/services/auth.service';
 
@@ -51,8 +63,8 @@ import { AuthService } from '../../../../core/services/auth.service';
               <th mat-header-cell *matHeaderCellDef>Nombre</th>
               <td mat-cell *matCellDef="let item">
                 <div class="flex items-center gap-3">
-                  <div class="sport-icon" [style.background]="getSportColor(item.sport)">
-                    <mat-icon>{{ getSportIcon(item.sport) }}</mat-icon>
+                  <div class="sport-icon">
+                    <mat-icon>emoji_events</mat-icon>
                   </div>
                   <div>
                     <span class="font-medium">{{ item.name }}</span>
@@ -64,14 +76,14 @@ import { AuthService } from '../../../../core/services/auth.service';
 
             <!-- Sport Column -->
             <ng-container matColumnDef="sport">
-              <th mat-header-cell *matHeaderCellDef>Deporte</th>
-              <td mat-cell *matCellDef="let item">{{ getSportLabel(item.sport) }}</td>
+              <th mat-header-cell *matHeaderCellDef>Deporte (ID)</th>
+              <td mat-cell *matCellDef="let item">{{ item.sportId }}</td>
             </ng-container>
 
             <!-- Teams Column -->
             <ng-container matColumnDef="teams">
-              <th mat-header-cell *matHeaderCellDef>Equipos</th>
-              <td mat-cell *matCellDef="let item">{{ item.totalTeams || 0 }}</td>
+              <th mat-header-cell *matHeaderCellDef>Max. Equipos</th>
+              <td mat-cell *matCellDef="let item">{{ item.maxTeams || 0 }}</td>
             </ng-container>
 
             <!-- Status Column -->
@@ -269,11 +281,11 @@ export default class ChampionshipsListPage {
   championships = signal<Championship[]>([]);
 
   availableStatuses: { value: ChampionshipStatus; label: string }[] = [
-    { value: 'draft', label: 'Borrador' },
-    { value: 'registration', label: 'Inscripciones' },
-    { value: 'active', label: 'Activo' },
-    { value: 'finished', label: 'Finalizado' },
-    { value: 'cancelled', label: 'Cancelado' },
+    { value: ChampionshipStatus.Draft, label: 'Borrador' },
+    { value: ChampionshipStatus.Registration, label: 'Inscripciones' },
+    { value: ChampionshipStatus.Active, label: 'Activo' },
+    { value: ChampionshipStatus.Finished, label: 'Finalizado' },
+    { value: ChampionshipStatus.Cancelled, label: 'Cancelado' },
   ];
 
   constructor() {
@@ -281,30 +293,13 @@ export default class ChampionshipsListPage {
       const user = this.authService.currentUser();
       if (user && user.organizationId) {
         const sub = this.championshipService
-          .getChampionships(user.organizationId)
-          .subscribe((data) => {
-          this.championships.set(data);
+          .getAll({ organizationId: +user.organizationId })
+          .subscribe((result) => {
+          this.championships.set(result.data as unknown as Championship[]);
         });
         onCleanup(() => sub.unsubscribe());
       }
     });
-  }
-
-  getSportIcon(sport: Sport): string {
-    return SPORT_CONFIGS[sport]?.icon || 'sports_soccer';
-  }
-
-  getSportLabel(sport: Sport): string {
-    return SPORT_CONFIGS[sport]?.label || sport;
-  }
-
-  getSportColor(sport: Sport): string {
-    const colors: Record<string, string> = {
-      football: '#22c55e',
-      basketball: '#f59e0b',
-      volleyball: '#3b82f6',
-    };
-    return colors[sport] || '#6b7280';
   }
 
   getStatusLabel(status: string): string {
@@ -329,8 +324,8 @@ export default class ChampionshipsListPage {
     return icons[status] || 'help';
   }
 
-  updateChampionshipStatus(championshipId: string, newStatus: ChampionshipStatus): void {
-    this.championshipService.updateChampionship(championshipId, { status: newStatus }).subscribe({
+  updateChampionshipStatus(championshipId: number, newStatus: ChampionshipStatus): void {
+    this.championshipService.updateStatus(String(championshipId), { status: newStatus }).subscribe({
       next: (updatedChampionship) => {
         // Update the championship in the list
         this.championships.update((champs) =>
