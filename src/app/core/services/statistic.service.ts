@@ -23,6 +23,15 @@ export interface StatisticsTeamsHistory {
   history: string;
 }
 
+export interface StatisticsPlayer {
+  rank: number;
+  full_name: string;
+  team_name: string;
+  logo_url: string;
+  value: number;
+  ratio: number;
+}
+
 @Injectable({
   providedIn: 'root',
 })
@@ -41,32 +50,95 @@ export class StatisticService {
       offset: offset,
     };
 
-    return this.api.get<StatisticsTeamGeneral[]>('api/statistics/teams/general', params).pipe(
-      tap((data) => console.log('Received teams general statistics:', data)),
-      catchError((error) => this.handleError('Error fetching teams', error)),
-    );
+    return this.api
+      .get<StatisticsTeamGeneral[]>('api/statistics/teams/general', params)
+      .pipe(catchError((error) => this.handleError('Error fetching teams', error)));
   }
 
   /**
    * Get history statistics for specific teams
    */
   getTeamsHistoryStatistics(teamsIds: number[]): Observable<StatisticsTeamsHistory[]> {
-		const requests: Observable<StatisticsTeamsHistory>[] = teamsIds.map((id) => {
-			return this.api
-				.get<StatisticsTeamsHistory>(`api/statistics/teams/history/${id}`)
-				.pipe(
-					tap((data) => console.log(`Received history for team ${id}:`, data)),
-					catchError((error) => {
-						console.error('Error fetching team history', id, error);
-						return of(null as any); // evitamos romper forkJoin
-					})
-				);
-		});
+    const requests: Observable<StatisticsTeamsHistory>[] = teamsIds.map((id) => {
+      return this.api.get<StatisticsTeamsHistory>(`api/statistics/teams/history/${id}`).pipe(
+        catchError((error) => {
+          return of(null as any); // evitamos romper forkJoin
+        }),
+      );
+    });
 
-		return forkJoin(requests).pipe(
-			map((results) => results.filter(r => r !== null)) // limpiamos fallidos
-		);
-	}
+    return forkJoin(requests).pipe(
+      map((results) => results.filter((r) => r !== null)), // limpiamos fallidos
+    );
+  }
+
+  /**
+   * Get top players statistics for scorers
+   */
+  getPlayersScorersStatistics(
+    limit: number = 10,
+    offset: number = 0,
+  ): Observable<StatisticsPlayer[]> {
+    const params = {
+      limit: limit,
+      offset: offset,
+    };
+
+    return this.api
+      .get<StatisticsPlayer[]>('api/statistics/players/scorers', params)
+      .pipe(catchError((error) => this.handleError('Error fetching players scorers', error)));
+  }
+
+  /**
+   * Get top players statistics for goalkeepers
+   */
+  getPlayersGoalkeepersStatistics(
+    limit: number = 10,
+    offset: number = 0,
+  ): Observable<StatisticsPlayer[]> {
+    const params = {
+      limit: limit,
+      offset: offset,
+    };
+
+    return this.api
+      .get<StatisticsPlayer[]>('api/statistics/players/goalkeepers', params)
+      .pipe(catchError((error) => this.handleError('Error fetching players goalkeepers', error)));
+  }
+
+  /**
+   * Get top players statistics for yellow cards
+   */
+  getPlayersYellowCardsStatistics(
+    limit: number = 10,
+    offset: number = 0,
+  ): Observable<StatisticsPlayer[]> {
+    const params = {
+      limit: limit,
+      offset: offset,
+    };
+
+    return this.api
+      .get<StatisticsPlayer[]>('api/statistics/players/yellow-cards', params)
+      .pipe(catchError((error) => this.handleError('Error fetching players yellow cards', error)));
+  }
+
+  /**
+   * Get top players statistics for red cards
+   */
+  getPlayersRedCardsStatistics(
+    limit: number = 10,
+    offset: number = 0,
+  ): Observable<StatisticsPlayer[]> {
+    const params = {
+      limit: limit,
+      offset: offset,
+    };
+
+    return this.api
+      .get<StatisticsPlayer[]>('api/statistics/players/red-cards', params)
+      .pipe(catchError((error) => this.handleError('Error fetching players red cards', error)));
+  }
 
   /**
    * Handle errors

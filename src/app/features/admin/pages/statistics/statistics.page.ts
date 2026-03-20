@@ -1,8 +1,21 @@
-import { ChangeDetectionStrategy, Component, signal, inject, effect, OnInit, computed } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  signal,
+  inject,
+  effect,
+  OnInit,
+  computed,
+} from '@angular/core';
 import { MatIconModule } from '@angular/material/icon';
 import { forkJoin } from 'rxjs';
 import { switchMap, map, catchError } from 'rxjs/operators';
-import { StatisticService, StatisticsTeamGeneral, StatisticsTeamsHistory } from '../../../../core/services/statistic.service';
+import {
+  StatisticService,
+  StatisticsTeamGeneral,
+  StatisticsTeamsHistory,
+  StatisticsPlayer,
+} from '../../../../core/services/statistic.service';
 
 type FormResult = 'G' | 'E' | 'P';
 type StatisticsTab = 'equipos' | 'jugadores';
@@ -27,7 +40,7 @@ interface PlayerStatItem {
   playerName: string;
   teamName: string;
   value: number;
-  ratio?: string;
+  ratio: string;
 }
 
 interface PlayerStatCategory {
@@ -480,222 +493,109 @@ export default class AdminStatisticsPage implements OnInit {
   protected readonly activeTab = signal<StatisticsTab>('equipos');
   teamStandings = signal<TeamStanding[]>([]);
 
-  protected readonly playerCategories = computed<PlayerStatCategory[]>(() => [
+  playerCategories = signal<PlayerStatCategory[]>([
     {
       id: 'goals',
       title: 'Goleadores',
       icon: 'sports_soccer',
-      items: [
-        {
-          rank: 1,
-          playerName: 'E. Haaland',
-          teamName: 'Manchester City',
-          value: 22,
-          ratio: '0.76',
-        },
-        { rank: 2, playerName: 'Igor Thiago', teamName: 'Brentford', value: 18, ratio: '0.62' },
-        {
-          rank: 3,
-          playerName: 'A. Semenyo',
-          teamName: 'AFC Bournemouth',
-          value: 15,
-          ratio: '0.52',
-        },
-      ],
-    },
-    {
-      id: 'minutes-goal',
-      title: 'Minutos por gol',
-      icon: 'schedule',
-      items: [
-        { rank: 1, playerName: 'E. Haaland', teamName: 'Manchester City', value: 110, ratio: '22' },
-        { rank: 2, playerName: 'F. Chiesa', teamName: 'Liverpool', value: 131, ratio: '2' },
-        { rank: 3, playerName: 'Will Osula', teamName: 'Newcastle', value: 132, ratio: '2' },
-      ],
-    },
-    {
-      id: 'penalty-goals',
-      title: 'Goles de penalti',
-      icon: 'emoji_events',
-      items: [
-        { rank: 1, playerName: 'Igor Thiago', teamName: 'Brentford', value: 6, ratio: '86%' },
-        { rank: 2, playerName: 'Cole Palmer', teamName: 'Chelsea', value: 5, ratio: '100%' },
-        {
-          rank: 3,
-          playerName: 'Bruno Fernandes',
-          teamName: 'Manchester United',
-          value: 3,
-          ratio: '60%',
-        },
-      ],
-    },
-    {
-      id: 'penalty-missed',
-      title: 'Penaltis fallados',
-      icon: 'cancel',
-      items: [
-        {
-          rank: 1,
-          playerName: 'Danny Welbeck',
-          teamName: 'Brighton & Hove Albion',
-          value: 2,
-          ratio: '67%',
-        },
-        {
-          rank: 2,
-          playerName: 'Bruno Fernandes',
-          teamName: 'Manchester United',
-          value: 2,
-          ratio: '40%',
-        },
-        { rank: 3, playerName: 'T. Arokodare', teamName: 'Wolves', value: 1, ratio: '100%' },
-      ],
+      items: [],
     },
     {
       id: 'best-goalkeeper',
       title: 'Mejor portero',
       icon: 'pan_tool',
-      items: [
-        { rank: 1, playerName: 'David Raya', teamName: 'Arsenal', value: 22, ratio: '0.71' },
-        {
-          rank: 2,
-          playerName: 'G. Donnarumma',
-          teamName: 'Manchester City',
-          value: 24,
-          ratio: '0.89',
-        },
-        { rank: 3, playerName: 'Robert Sanchez', teamName: 'Chelsea', value: 31, ratio: '1.15' },
-      ],
-    },
-    {
-      id: 'saved-penalties',
-      title: 'Penaltis parados',
-      icon: 'shield',
-      items: [
-        { rank: 1, playerName: 'C. Kelleher', teamName: 'Brentford', value: 3, ratio: '0.11' },
-        { rank: 2, playerName: 'Jordan Pickford', teamName: 'Everton', value: 1, ratio: '0.03' },
-        {
-          rank: 3,
-          playerName: 'B. Verbruggen',
-          teamName: 'Brighton & Hove Albion',
-          value: 1,
-          ratio: '0.03',
-        },
-      ],
+      items: [],
     },
     {
       id: 'yellow-cards',
       title: 'Tarjetas amarillas',
       icon: 'crop_portrait',
-      items: [
-        {
-          rank: 1,
-          playerName: 'Bernardo Silva',
-          teamName: 'Manchester City',
-          value: 9,
-          ratio: '0.30',
-        },
-        { rank: 2, playerName: 'Joao Gomes', teamName: 'Wolves', value: 9, ratio: '0.32' },
-        {
-          rank: 3,
-          playerName: 'Lewis Dunk',
-          teamName: 'Brighton & Hove Albion',
-          value: 9,
-          ratio: '0.32',
-        },
-      ],
+      items: [],
     },
     {
       id: 'red-cards',
       title: 'Tarjetas rojas',
       icon: 'stop_square',
-      items: [
-        {
-          rank: 1,
-          playerName: 'Cristian Romero',
-          teamName: 'Tottenham Hotspur',
-          value: 2,
-          ratio: '0.10',
-        },
-        { rank: 2, playerName: 'L. Ugochukwu', teamName: 'Burnley', value: 1, ratio: '0.03' },
-        {
-          rank: 3,
-          playerName: 'G. Gudmundsson',
-          teamName: 'Leeds United',
-          value: 1,
-          ratio: '0.03',
-        },
-      ],
-    },
-    {
-      id: 'assists',
-      title: 'Asistencias',
-      icon: 'send',
-      items: [
-        {
-          rank: 1,
-          playerName: 'Bruno Fernandes',
-          teamName: 'Manchester United',
-          value: 16,
-          ratio: '0.59',
-        },
-        {
-          rank: 2,
-          playerName: 'Rayan Cherki',
-          teamName: 'Manchester City',
-          value: 8,
-          ratio: '0.32',
-        },
-        { rank: 3, playerName: 'E. Haaland', teamName: 'Manchester City', value: 7, ratio: '0.24' },
-      ],
-    },
-    {
-      id: 'games-played',
-      title: 'Partidos jugados',
-      icon: 'directions_run',
-      items: [
-        { rank: 1, playerName: 'David Raya', teamName: 'Arsenal', value: 31, ratio: '100%' },
-        { rank: 2, playerName: 'M. Zubimendi', teamName: 'Arsenal', value: 31, ratio: '97%' },
-        { rank: 3, playerName: 'V. Van Dijk', teamName: 'Liverpool', value: 30, ratio: '100%' },
-      ],
+      items: [],
     },
   ]);
-
 
   ngOnInit(): void {
     this.loadData();
   }
 
-
   private loadData(): void {
     // this.isLoading.set(true);
 
-    this.statisticService.getTeamsGeneralStatistics(10, 0).pipe(
-      switchMap((teamsGeneralStatistics) => {
-        this.allStatisticsTeamGeneral.set(teamsGeneralStatistics);
-        const teamIds = teamsGeneralStatistics.map(team => team.team_id);
+    this.statisticService
+      .getTeamsGeneralStatistics(10, 0)
+      .pipe(
+        switchMap((teamsGeneralStatistics) => {
+          this.allStatisticsTeamGeneral.set(teamsGeneralStatistics);
+          const teamIds = teamsGeneralStatistics.map((team) => team.team_id);
 
-        return this.statisticService.getTeamsHistoryStatistics(teamIds).pipe(
-          map((teamsHistoryStatistics) => {
-            // Convertimos a
-            const flatHistory = teamsHistoryStatistics.flat();
-            console.log("Voy a formatear", teamsGeneralStatistics, flatHistory);
-            return this.formatTeamsData(teamsGeneralStatistics, flatHistory);
-          })
-        );
-      })
-    ).subscribe({
-      next: (formattedTeams) => {
-        console.log('Team standings listos para UI:', formattedTeams);
-        this.teamStandings.set(formattedTeams);
-        console.log('Datos de equipos cargados con éxito', this.teamStandings);
-        // this.isLoading.set(false);
-      },
-      error: (error) => {
-        console.error('Error loading data', error);
-        // this.isLoading.set(false);
-      }
-    });
+          return this.statisticService.getTeamsHistoryStatistics(teamIds).pipe(
+            map((teamsHistoryStatistics) => {
+              // Convertimos a
+              const flatHistory = teamsHistoryStatistics.flat();
+              return this.formatTeamsData(teamsGeneralStatistics, flatHistory);
+            }),
+          );
+        }),
+      )
+      .subscribe({
+        next: (formattedTeams) => {
+          this.teamStandings.set(formattedTeams);
+          // this.isLoading.set(false);
+        },
+        error: (error) => {
+          console.error('Error loading data', error);
+          // this.isLoading.set(false);
+        },
+      });
+
+    const limit = 3;
+    const offset = 0;
+
+    forkJoin({
+      scorers: this.statisticService.getPlayersScorersStatistics(limit, offset),
+      goalkeepers: this.statisticService.getPlayersGoalkeepersStatistics(limit, offset),
+      yellowCards: this.statisticService.getPlayersYellowCardsStatistics(limit, offset),
+      redCards: this.statisticService.getPlayersRedCardsStatistics(limit, offset),
+    })
+      .pipe(
+        map(({ scorers, goalkeepers, yellowCards, redCards }) => {
+          return {
+            scorers: this.transformStats(scorers),
+            goalkeepers: this.transformStats(goalkeepers),
+            yellowCards: this.transformStats(yellowCards),
+            redCards: this.transformStats(redCards),
+          };
+        }),
+      )
+      .subscribe({
+        next: (result) => {
+          this.playerCategories.update((categories) =>
+            categories.map((cat) => {
+              switch (cat.id) {
+                case 'goals':
+                  return { ...cat, items: result.scorers };
+                case 'best-goalkeeper':
+                  return { ...cat, items: result.goalkeepers };
+                case 'yellow-cards':
+                  return { ...cat, items: result.yellowCards };
+                case 'red-cards':
+                  return { ...cat, items: result.redCards };
+                default:
+                  return cat;
+              }
+            }),
+          );
+        },
+        error: (err) => {
+          console.error('Error cargando estadísticas', err);
+        },
+      });
   }
 
   protected setTab(tab: StatisticsTab): void {
@@ -706,16 +606,14 @@ export default class AdminStatisticsPage implements OnInit {
     return goalDifference > 0 ? `+${goalDifference}` : `${goalDifference}`;
   }
 
-
   // Formatters
   private formatTeamsData(
-    generalStats: StatisticsTeamGeneral[], 
-    historyStats: StatisticsTeamsHistory[]
+    generalStats: StatisticsTeamGeneral[],
+    historyStats: StatisticsTeamsHistory[],
   ): TeamStanding[] {
     // Mapa rápido de historial por team_id
     const historyMap = new Map<number, string>();
-    historyStats.forEach(h => historyMap.set(h.team_id, h.history));
-    console.log('Mapeado historial de equipos:', historyMap);
+    historyStats.forEach((h) => historyMap.set(h.team_id, h.history));
     // Ordenamos por puntos descendente
     const sortedGeneral = [...generalStats].sort((a, b) => b.points - a.points);
 
@@ -725,7 +623,7 @@ export default class AdminStatisticsPage implements OnInit {
       const form: FormResult[] = historyString
         .trim()
         .split(' ')
-        .map(r => r as FormResult);
+        .map((r) => r as FormResult);
 
       return {
         position: index + 1,
@@ -739,9 +637,18 @@ export default class AdminStatisticsPage implements OnInit {
         goalsFor: team.goals_for,
         goalsAgainst: team.goals_against,
         goalDifference: team.goal_difference,
-        form
+        form,
       };
     });
   }
 
+  private transformStats(stats: StatisticsPlayer[]): PlayerStatItem[] {
+    return stats.map((player, index) => ({
+      rank: player.rank,
+      playerName: player.full_name,
+      teamName: player.team_name,
+      value: Number(player.value),
+      ratio: player.ratio.toString(),
+    }));
+  }
 }
