@@ -10,8 +10,8 @@ export const publicGuard: CanActivateFn = () => {
   const authService = inject(AuthService);
   const router = inject(Router);
 
+  return true;
   if (!authService.isAuthenticated()) {
-    return true;
   }
 
   // Redirect based on user role

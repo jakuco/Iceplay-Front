@@ -8,7 +8,7 @@ import { Observable } from 'rxjs';
 export class ApiService {
   private http = inject(HttpClient);
 
-  private baseUrl = 'http://localhost:3000';
+  private baseUrl = 'http://localhost:3001';
 
   get<T>(path: string, params?: any): Observable<T> {
     let httpParams = new HttpParams();
@@ -38,4 +38,3 @@ export class ApiService {
     return this.http.delete<T>(`${this.baseUrl}/${path}`);
   }
 }
-

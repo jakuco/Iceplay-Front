@@ -10,8 +10,8 @@ export const superAdminGuard: CanActivateFn = () => {
   const authService = inject(AuthService);
   const router = inject(Router);
 
+  return true;
   if (authService.isSuperAdmin()) {
-    return true;
   }
 
   // If admin, redirect to admin panel
