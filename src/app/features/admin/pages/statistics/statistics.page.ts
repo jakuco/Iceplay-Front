@@ -1,15 +1,16 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  ElementRef,
   signal,
   inject,
-  effect,
   OnInit,
   computed,
+  viewChild,
 } from '@angular/core';
 import { MatIconModule } from '@angular/material/icon';
 import { forkJoin } from 'rxjs';
-import { switchMap, map, catchError } from 'rxjs/operators';
+import { switchMap, map } from 'rxjs/operators';
 import {
   StatisticService,
   StatisticsTeamGeneral,
@@ -19,6 +20,7 @@ import {
 
 type FormResult = 'G' | 'E' | 'P';
 type StatisticsTab = 'equipos' | 'jugadores';
+type PlayerCategoryId = 'goals' | 'best-goalkeeper' | 'yellow-cards' | 'red-cards';
 
 interface TeamStanding {
   position: number;
@@ -44,7 +46,7 @@ interface PlayerStatItem {
 }
 
 interface PlayerStatCategory {
-  id: string;
+  id: PlayerCategoryId;
   title: string;
   icon: string;
   items: PlayerStatItem[];
@@ -144,7 +146,13 @@ interface PlayerStatCategory {
                   <mat-icon>{{ category.icon }}</mat-icon>
                   <h2>{{ category.title }}</h2>
                 </div>
-                <button type="button" class="stat-card__link">MÁS</button>
+                <button
+                  type="button"
+                  class="stat-card__link"
+                  (click)="openCategoryModal(category.id)"
+                >
+                  MÁS
+                </button>
               </header>
 
               <div class="stat-card__rows">
@@ -167,6 +175,69 @@ interface PlayerStatCategory {
             </article>
           }
         </section>
+      }
+
+      @if (isModalOpen()) {
+        <div class="modal-backdrop" (click)="closeCategoryModal()">
+          <section
+            class="category-modal"
+            role="dialog"
+            aria-modal="true"
+            [attr.aria-labelledby]="modalTitleId"
+            (click)="$event.stopPropagation()"
+          >
+            <header class="category-modal__header">
+              <div class="category-modal__title-wrap">
+                <h2 [id]="modalTitleId">Top 10+ {{ selectedCategoryTitle() }}</h2>
+                <p>Se cargan más resultados automáticamente al llegar al final.</p>
+              </div>
+              <button
+                type="button"
+                class="category-modal__close"
+                aria-label="Cerrar modal"
+                (click)="closeCategoryModal()"
+              >
+                <mat-icon>close</mat-icon>
+              </button>
+            </header>
+
+            <div #modalScrollContainer class="category-modal__content" (scroll)="onModalScroll($event)">
+              @for (item of modalItems(); track item.rank) {
+                <div class="player-row player-row--modal">
+                  <span class="player-rank">{{ item.rank }}</span>
+                  <div class="player-meta">
+                    <strong>{{ item.playerName }}</strong>
+                    <span>{{ item.teamName }}</span>
+                  </div>
+                  <p class="player-value">
+                    <span>{{ item.value }}</span>
+                    @if (item.ratio) {
+                      <small>({{ item.ratio }})</small>
+                    }
+                  </p>
+                </div>
+              }
+
+              @if (modalIsLoading()) {
+                <p class="category-modal__status">Cargando estadísticas...</p>
+              }
+
+              @if (modalErrorMessage()) {
+                <p class="category-modal__status category-modal__status--error">
+                  {{ modalErrorMessage() }}
+                </p>
+              }
+
+              @if (!modalHasMore() && modalItems().length > 0) {
+                <p class="category-modal__status">No hay más registros por mostrar.</p>
+              }
+
+              @if (!modalIsLoading() && modalItems().length === 0 && !modalErrorMessage()) {
+                <p class="category-modal__status">No se encontraron datos para esta categoría.</p>
+              }
+            </div>
+          </section>
+        </div>
       }
 
       <div class="backend-note">
@@ -401,6 +472,13 @@ interface PlayerStatCategory {
       cursor: pointer;
     }
 
+    .stat-card__link:focus-visible,
+    .category-modal__close:focus-visible {
+      outline: 2px solid color-mix(in srgb, var(--mat-sys-primary), white 18%);
+      outline-offset: 2px;
+      border-radius: 6px;
+    }
+
     .stat-card__rows {
       display: grid;
     }
@@ -467,6 +545,95 @@ interface PlayerStatCategory {
       color: var(--mat-sys-on-surface-variant);
     }
 
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 80;
+      display: grid;
+      place-items: center;
+      background: color-mix(in srgb, #000, transparent 40%);
+      padding: 1rem;
+    }
+
+    .category-modal {
+      width: min(100%, 700px);
+      height: min(86vh, 760px);
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      border-radius: 12px;
+      border: 1px solid color-mix(in srgb, var(--mat-sys-outline), transparent 45%);
+      background: var(--mat-sys-surface-container-lowest);
+      overflow: hidden;
+      box-shadow: 0 12px 30px color-mix(in srgb, #000, transparent 72%);
+    }
+
+    .category-modal__header {
+      display: flex;
+      justify-content: space-between;
+      gap: 0.8rem;
+      align-items: flex-start;
+      padding: 0.85rem 1rem;
+      border-bottom: 1px solid color-mix(in srgb, var(--mat-sys-outline), transparent 72%);
+      background: color-mix(in srgb, var(--mat-sys-surface), #000 2%);
+    }
+
+    .category-modal__title-wrap h2 {
+      margin: 0;
+      font-size: 1rem;
+      font-weight: 800;
+    }
+
+    .category-modal__title-wrap p {
+      margin: 0.2rem 0 0;
+      font-size: 0.8rem;
+      color: var(--mat-sys-on-surface-variant);
+    }
+
+    .category-modal__close {
+      border: 0;
+      background: transparent;
+      color: var(--mat-sys-on-surface);
+      cursor: pointer;
+      width: 2rem;
+      height: 2rem;
+      display: grid;
+      place-items: center;
+      border-radius: 999px;
+      flex: none;
+    }
+
+    .category-modal__close mat-icon {
+      font-size: 1.15rem;
+      width: 1.15rem;
+      height: 1.15rem;
+    }
+
+    .category-modal__content {
+      min-height: 0;
+      overflow-y: auto;
+      overflow-x: hidden;
+      overscroll-behavior: contain;
+      display: grid;
+      align-content: start;
+    }
+
+    .player-row--modal {
+      padding-inline: 1rem;
+    }
+
+    .category-modal__status {
+      margin: 0;
+      padding: 0.85rem 1rem 1rem;
+      font-size: 0.84rem;
+      color: var(--mat-sys-on-surface-variant);
+      text-align: center;
+    }
+
+    .category-modal__status--error {
+      color: #be2b2b;
+      font-weight: 600;
+    }
+
     @media (max-width: 1180px) {
       .players-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -481,17 +648,52 @@ interface PlayerStatCategory {
       .players-grid {
         grid-template-columns: 1fr;
       }
+
+      .modal-backdrop {
+        padding: 0.65rem;
+      }
+
+      .category-modal {
+        height: 90vh;
+      }
+
+      .category-modal__header {
+        padding: 0.75rem;
+      }
+
+      .player-row--modal {
+        padding-inline: 0.75rem;
+      }
     }
   `,
 })
 export default class AdminStatisticsPage implements OnInit {
   private statisticService = inject(StatisticService);
+  private readonly pageSize = 10;
+  private readonly modalScrollContainer = viewChild<ElementRef<HTMLElement>>('modalScrollContainer');
+  protected readonly modalTitleId = 'statistics-category-modal-title';
 
   allStatisticsTeamGeneral = signal<StatisticsTeamGeneral[]>([]);
   allStatisticsTeamsHistory = signal<StatisticsTeamsHistory[]>([]);
 
   protected readonly activeTab = signal<StatisticsTab>('equipos');
   teamStandings = signal<TeamStanding[]>([]);
+  protected readonly selectedCategoryId = signal<PlayerCategoryId | null>(null);
+  protected readonly isModalOpen = signal(false);
+  protected readonly modalItems = signal<PlayerStatItem[]>([]);
+  protected readonly modalOffset = signal(0);
+  protected readonly modalHasMore = signal(true);
+  protected readonly modalIsLoading = signal(false);
+  protected readonly modalErrorMessage = signal<string | null>(null);
+  protected readonly selectedCategoryTitle = computed(() => {
+    const categoryId = this.selectedCategoryId();
+    if (!categoryId) {
+      return '';
+    }
+
+    const category = this.playerCategories().find((item) => item.id === categoryId);
+    return category?.title ?? '';
+  });
 
   playerCategories = signal<PlayerStatCategory[]>([
     {
@@ -602,6 +804,41 @@ export default class AdminStatisticsPage implements OnInit {
     this.activeTab.set(tab);
   }
 
+  protected openCategoryModal(categoryId: PlayerCategoryId): void {
+    this.selectedCategoryId.set(categoryId);
+    this.isModalOpen.set(true);
+    this.modalItems.set([]);
+    this.modalOffset.set(0);
+    this.modalHasMore.set(true);
+    this.modalErrorMessage.set(null);
+    this.loadMoreCategoryStats();
+  }
+
+  protected closeCategoryModal(): void {
+    this.isModalOpen.set(false);
+    this.selectedCategoryId.set(null);
+    this.modalItems.set([]);
+    this.modalOffset.set(0);
+    this.modalHasMore.set(true);
+    this.modalErrorMessage.set(null);
+    this.modalIsLoading.set(false);
+  }
+
+  protected onModalScroll(event: Event): void {
+    if (this.modalIsLoading() || !this.modalHasMore()) {
+      return;
+    }
+
+    const target = event.target as HTMLElement;
+    const thresholdPx = 100;
+    const isNearBottom =
+      target.scrollTop + target.clientHeight >= target.scrollHeight - thresholdPx;
+
+    if (isNearBottom) {
+      this.loadMoreCategoryStats();
+    }
+  }
+
   protected goalDifferenceLabel(goalDifference: number): string {
     return goalDifference > 0 ? `+${goalDifference}` : `${goalDifference}`;
   }
@@ -643,12 +880,68 @@ export default class AdminStatisticsPage implements OnInit {
   }
 
   private transformStats(stats: StatisticsPlayer[]): PlayerStatItem[] {
-    return stats.map((player, index) => ({
+    return stats.map((player) => ({
       rank: player.rank,
       playerName: player.full_name,
       teamName: player.team_name,
       value: Number(player.value),
       ratio: player.ratio.toString(),
     }));
+  }
+
+  private loadMoreCategoryStats(): void {
+    const categoryId = this.selectedCategoryId();
+    if (!categoryId || this.modalIsLoading() || !this.modalHasMore()) {
+      return;
+    }
+
+    this.modalIsLoading.set(true);
+    this.modalErrorMessage.set(null);
+
+    this.getCategoryStatsRequest(categoryId, this.pageSize, this.modalOffset()).subscribe({
+      next: (players) => {
+        const nextBatch = this.transformStats(players);
+        this.modalItems.update((items) => [...items, ...nextBatch]);
+        this.modalOffset.update((offset) => offset + nextBatch.length);
+        this.modalHasMore.set(nextBatch.length === this.pageSize);
+        this.modalIsLoading.set(false);
+        this.loadMoreIfContainerHasNoScroll();
+      },
+      error: () => {
+        this.modalErrorMessage.set('No se pudieron cargar más estadísticas. Intenta nuevamente.');
+        this.modalIsLoading.set(false);
+      },
+    });
+  }
+
+  private loadMoreIfContainerHasNoScroll(): void {
+    if (!this.isModalOpen() || this.modalIsLoading() || !this.modalHasMore()) {
+      return;
+    }
+
+    setTimeout(() => {
+      const container = this.modalScrollContainer()?.nativeElement;
+      if (!container || !this.modalHasMore() || this.modalIsLoading()) {
+        return;
+      }
+
+      const canScroll = container.scrollHeight > container.clientHeight + 1;
+      if (!canScroll) {
+        this.loadMoreCategoryStats();
+      }
+    });
+  }
+
+  private getCategoryStatsRequest(categoryId: PlayerCategoryId, limit: number, offset: number) {
+    switch (categoryId) {
+      case 'goals':
+        return this.statisticService.getPlayersScorersStatistics(limit, offset);
+      case 'best-goalkeeper':
+        return this.statisticService.getPlayersGoalkeepersStatistics(limit, offset);
+      case 'yellow-cards':
+        return this.statisticService.getPlayersYellowCardsStatistics(limit, offset);
+      case 'red-cards':
+        return this.statisticService.getPlayersRedCardsStatistics(limit, offset);
+    }
   }
 }
