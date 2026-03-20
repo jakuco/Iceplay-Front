@@ -8,7 +8,7 @@ import { Observable } from 'rxjs';
 export class ApiService {
   private http = inject(HttpClient);
 
-  private baseUrl = 'http://localhost:3001/api';
+  private baseUrl = 'http://192.168.1.13:3001/api';
 
   get<T>(path: string, params?: any): Observable<T> {
     let httpParams = new HttpParams();

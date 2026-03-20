@@ -1,8 +1,9 @@
-import { ChangeDetectionStrategy, Component, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnInit, inject, input, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
 import { MatTabsModule } from '@angular/material/tabs';
+import { ChampionshipService } from '../../../../core/services/championship.service';
 
 @Component({
   selector: 'app-championship-detail',
@@ -16,7 +17,7 @@ import { MatTabsModule } from '@angular/material/tabs';
             <mat-icon>arrow_back</mat-icon>
           </a>
           <div>
-            <h1 class="page-title">Liga Premier 2024</h1>
+            <h1 class="page-title">{{ championshipName() }}</h1>
             <p class="page-subtitle">Campeonato ID: {{ id() }}</p>
           </div>
         </div>
@@ -88,6 +89,16 @@ import { MatTabsModule } from '@angular/material/tabs';
     }
   `,
 })
-export default class ChampionshipDetailPage {
+export default class ChampionshipDetailPage implements OnInit {
+  private championshipSvc = inject(ChampionshipService);
+
   id = input.required<string>();
+  championshipName = signal('Campeonato');
+
+  ngOnInit(): void {
+    this.championshipSvc.getById(this.id()).subscribe({
+      next: c => this.championshipName.set(c.name),
+      error: () => {},
+    });
+  }
 }

@@ -73,36 +73,7 @@ export class PlayerService {
    * Update a player
    */
   updatePlayer(id: string, player: UpdatePlayerDto): Observable<Player> {
-    // Calculate fullName if firstName or lastName are being updated
-    const updateData: any = { ...player };
-    if (player.firstName || player.lastName) {
-      // Get current player to merge names if only one is being updated
-      return this.getPlayerById(id).pipe(
-        switchMap((currentPlayer) => {
-          const firstName = player.firstName || currentPlayer.firstName;
-          const lastName = player.lastName || currentPlayer.lastName;
-          updateData.fullName = `${firstName} ${lastName}`.trim();
-          return this.api.patch<Player>(`players/${id}`, updateData).pipe(
-            map((p) => this.parsePlayerDates(p)),
-            catchError((error) => this.handleError('Error updating player', error)),
-          );
-        }),
-        catchError((error) => {
-          // If getPlayerById fails, still try to update with calculated fullName
-          const firstName = player.firstName || '';
-          const lastName = player.lastName || '';
-          if (firstName || lastName) {
-            updateData.fullName = `${firstName} ${lastName}`.trim();
-          }
-          return this.api.patch<Player>(`players/${id}`, updateData).pipe(
-            map((p) => this.parsePlayerDates(p)),
-            catchError((err) => this.handleError('Error updating player', err)),
-          );
-        }),
-      );
-    }
-    
-    return this.api.patch<Player>(`players/${id}`, updateData).pipe(
+    return this.api.patch<Player>(`players/${id}`, player).pipe(
       map((p) => this.parsePlayerDates(p)),
       catchError((error) => this.handleError('Error updating player', error)),
     );
@@ -170,44 +141,33 @@ export class PlayerService {
       mergeMap((line, index) => {
         const cols = line.split(',').map((col) => col.trim());
 
-        // Expected format: documento,nombre,apellido,numero,posicion,fecha_nacimiento,nacionalidad,altura,peso
-        if (cols.length < 5) {
+        // Expected format: nombre,apellido,numero,posicionId,fecha_nacimiento,altura,peso
+        if (cols.length < 4) {
           result.errors.push(
             `Línea ${index + 2}: Formato inválido. Se requieren al menos 5 columnas`,
           );
           return of(null);
         }
 
-        const document = cols[0];
-        const firstName = cols[1];
-        const lastName = cols[2];
-        const number = parseInt(cols[3] || '0', 10);
-        const position = cols[4] || 'Player';
+        const firstName = cols[0];
+        const lastName = cols[1];
+        const number = parseInt(cols[2] || '0', 10);
+        const positionId = parseInt(cols[3] || '1', 10);
 
-        if (!document || !firstName || !lastName || !number || number < 1 || number > 99) {
+        if (!firstName || !lastName || !number || number < 1 || number > 99) {
           result.errors.push(
             `Línea ${index + 2}: Datos inválidos (documento, nombre, apellido o número)`,
           );
           return of(null);
         }
 
-        // Check if player with same document already exists
-        return this.api.get<Player[]>('players', { document, organizationId }).pipe(
-          switchMap((existingPlayers) => {
-            if (existingPlayers.length > 0) {
-              result.warnings.push(
-                `Documento ${document} ya existe. Saltando jugador ${firstName} ${lastName}`,
-              );
-              result.playersSkipped.push(document);
-              return of(null);
-            }
+        // Parse optional fields
+        const birthDate = cols[4] ? this.parseDate(cols[4]) : new Date('2000-01-01');
+        const height = cols[5] ? parseInt(cols[5], 10) : undefined;
+        const weight = cols[6] ? parseFloat(cols[6]) : undefined;
 
-            // Parse optional fields
-            const birthDate = cols[5] ? this.parseDate(cols[5]) : undefined;
-            const nationality = cols[6] || undefined;
-            const height = cols[7] ? parseInt(cols[7], 10) : undefined;
-            const weight = cols[8] ? parseFloat(cols[8]) : undefined;
-
+        return of(null).pipe(
+          switchMap(() => {
             const newPlayer: CreatePlayerDto & {
               teamId: string;
               championshipId: string;
@@ -219,10 +179,8 @@ export class PlayerService {
               firstName,
               lastName,
               number,
-              position,
-              document,
-              birthDate,
-              nationality,
+              positionId,
+              birthDate: birthDate ?? new Date('2000-01-01'),
               height,
               weight,
             };

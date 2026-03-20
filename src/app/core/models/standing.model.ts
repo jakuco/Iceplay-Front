@@ -1,4 +1,6 @@
-import type { TeamBasicInfo } from './team.model';
+import type { Team } from './team.model';
+
+type TeamBasicInfo = Pick<Team, 'id' | 'name' | 'shortname' | 'logoUrl'>;
 
 /**
  * Standing/League table entry

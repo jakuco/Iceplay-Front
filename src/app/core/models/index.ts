@@ -4,8 +4,8 @@ export * from './user.model';
 // Organization
 export * from './organization.model';
 
-// Sport Configuration
-export * from './sport-config.model';
+// // Sport Configuration
+// export * from './sport-config.model';
 
 // Championship
 export * from './championship.model';
