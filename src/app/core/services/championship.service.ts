@@ -19,6 +19,20 @@ export class ChampionshipService {
     );
   }
 
+  getAllChampionships(): Observable<Championship[]> {
+    return this.api.get<Championship[]>('api/championships/all').pipe(
+      map((championships) => championships.map((c) => this.parseChampionshipDates(c))),
+      catchError((error) => this.handleError('Error fetching championships', error)),
+    );
+  }
+
+  getChampionshipDetail(id: number): Observable<Championship> {
+    return this.api.get<Championship>(`api/championships/${id}/detail`).pipe(
+      map((championship) => this.parseChampionshipDates(championship)),
+      catchError((error) => this.handleError('Error fetching championship details', error)),
+    );
+  }
+
   /**
    * Get all active championships (for public view)
    */
