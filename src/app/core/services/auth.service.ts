@@ -88,6 +88,8 @@ export class AuthService {
     this.isLoading.set(true);
     this.error.set(null);
 
+    //TODO: Implement login and remove mock
+
     try {
       const users = await firstValueFrom(
         this.api.get<User[]>('users', { email: credentials.email }),
@@ -98,14 +100,14 @@ export class AuthService {
       }
 
       const user = users[0];
-      
+
       //? Ensure dates are properly parsed
       if (typeof user.createdAt === 'string') {
         user.createdAt = new Date(user.createdAt);
       }
       if (user.lastLoginAt && typeof user.lastLoginAt === 'string') {
         user.lastLoginAt = new Date(user.lastLoginAt);
-      } 
+      }
 
       //? Generate a mock token (in real app, this comes from backend)
       const mockToken = `mock-token-${user.id}-${Date.now()}`;

@@ -25,9 +25,9 @@ export const routes: Routes = [
 
   // Public routes (existing)
   {
-    path: '',
+    path: 'team/:teamId',
     pathMatch: 'full',
-    redirectTo: 'matches',
+    loadComponent: () => import("./features/team/pages/details/team-details.page")
   },
   {
     path: 'match/:matchId',
