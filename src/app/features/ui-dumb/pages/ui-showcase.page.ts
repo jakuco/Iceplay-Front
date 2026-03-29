@@ -6,6 +6,8 @@ import {
   BadgeComponent,
   SpinnerComponent,
   SkeletonComponent,
+  SearchAutocompleteComponent,
+  UiSearchAutocompleteItem,
 } from '../../../shared/ui';
 
 @Component({
@@ -18,6 +20,7 @@ import {
     BadgeComponent,
     SpinnerComponent,
     SkeletonComponent,
+    SearchAutocompleteComponent,
   ],
   template: `
     <div class="showcase">
@@ -57,6 +60,34 @@ import {
             <ui-button [loading]="isLoading()" (clicked)="simulateLoading()"> Click me </ui-button>
           </div>
         </div>
+      </section>
+
+      <!-- REUSABLE: SEARCH AUTocomplete -->
+      <section class="section">
+        <h2>Búsqueda con sugerencias (<code>ui-search-autocomplete</code>)</h2>
+        <p class="section-intro">
+          Autocomplete con debounce, panel solo tras escribir, y lista mock. Reutilizable con
+          <code>[items]</code> y <code>(selected)</code>.
+        </p>
+
+        <ui-search-autocomplete
+          [items]="fruitItems"
+          label="Buscar frutas"
+          placeholder="Escribe para filtrar…"
+          [debounceMs]="300"
+          (selected)="onFruitSelected($event)"
+        />
+
+        @if (lastFruitSelection(); as pick) {
+          <p class="search-meta text-secondary" role="status">
+            Seleccionado: <strong>{{ pick.label }}</strong>
+            @if (pick.subtitle) {
+              <span> — {{ pick.subtitle }}</span>
+            }
+          </p>
+        } @else {
+          <p class="search-meta text-secondary">Escribe y pausa para ver sugerencias; elige una opción.</p>
+        }
       </section>
 
       <!-- CARDS SECTION -->
@@ -342,6 +373,29 @@ import {
       }
     }
 
+    .section-intro {
+      margin: -0.5rem 0 1.25rem 0;
+      font-size: 0.9375rem;
+      color: var(--ui-color-text-secondary, #6b7280);
+      line-height: 1.5;
+
+      code {
+        font-size: 0.8125rem;
+        padding: 0.1rem 0.35rem;
+        border-radius: 0.25rem;
+        background: var(--ui-color-surface-variant, #f3f4f6);
+      }
+    }
+
+    .search-meta {
+      margin: 0.5rem 0 0 0;
+      font-size: 0.875rem;
+    }
+
+    .text-secondary {
+      color: var(--ui-color-text-secondary, #6b7280);
+    }
+
     .subsection {
       margin-top: 1.5rem;
       padding-top: 1.5rem;
@@ -497,6 +551,21 @@ import {
   `,
 })
 export class UiShowcasePage {
+  protected readonly fruitItems: UiSearchAutocompleteItem[] = [
+    { id: '1', label: 'Inter', subtitle: 'Equipo de fútbol' },
+    { id: '2', label: 'Barca', subtitle: 'Equipo de fútbol' },
+    { id: '3', label: 'Madrid', subtitle: 'Equipo de fútbol' },
+    { id: '4', label: 'Atlético de Madrid', subtitle: 'Equipo de fútbol' },
+    { id: '5', label: 'Valencia', subtitle: 'Equipo de fútbol' },
+    { id: '6', label: 'Sevilla', subtitle: 'Equipo de fútbol' },
+  ];
+
+  protected lastFruitSelection = signal<UiSearchAutocompleteItem | null>(null);
+
+  protected onFruitSelected(item: UiSearchAutocompleteItem): void {
+    this.lastFruitSelection.set(item);
+  }
+
   protected isLoading = signal(false);
 
   protected simulateLoading(): void {
