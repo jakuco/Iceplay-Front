@@ -12,21 +12,31 @@ export class ChampionshipService {
   private api = inject(ApiService);
 
   getChampionships(organizationId?: string): Observable<Championship[]> {
-    const params = organizationId ? { organizationId } : {};
-    return this.api.get<Championship[]>('championships', params).pipe(
-      map((championships) => championships.map((c) => this.parseChampionshipDates(c))),
-      catchError((error) => this.handleError('Error fetching championships', error)),
-    );
+    // const params = organizationId ? { organizationId } : {};
+    // return this.api.get<Championship[]>('championships', params).pipe(
+    //   map((championships) => championships.map((c) => this.parseChampionshipDates(c))),
+    //   catchError((error) => this.handleError('Error fetching championships', error)),
+    // );
+    //TODO: Implement this
+    return new Observable<Championship[]>((observer) => {
+      observer.next([]);
+      observer.complete();
+    });
   }
 
   /**
    * Get all active championships (for public view)
    */
   getActiveChampionships(): Observable<Championship[]> {
-    return this.api.get<Championship[]>('championships', { status: 'active' }).pipe(
-      map((championships) => championships.map((c) => this.parseChampionshipDates(c))),
-      catchError((error) => this.handleError('Error fetching active championships', error)),
-    );
+    // return this.api.get<Championship[]>('championships', { status: 'active' }).pipe(
+    //   map((championships) => championships.map((c) => this.parseChampionshipDates(c))),
+    //   catchError((error) => this.handleError('Error fetching active championships', error)),
+    // );
+    //TODO: Implement this
+    return new Observable<Championship[]>((observer) => {
+      observer.next([]);
+      observer.complete();
+    });
   }
 
   getChampionshipById(id: string): Observable<Championship> {

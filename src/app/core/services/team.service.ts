@@ -33,10 +33,15 @@ export class TeamService {
    * Get teams by organization
    */
   getTeamsByOrganization(organizationId: string): Observable<Team[]> {
-    return this.api.get<Team[]>('teams', { organizationId }).pipe(
-      map((teams) => teams.map((t) => this.parseTeamDates(t))),
-      catchError((error) => this.handleError('Error fetching organization teams', error)),
-    );
+    // return this.api.get<Team[]>('teams', { organizationId }).pipe(
+    //   map((teams) => teams.map((t) => this.parseTeamDates(t))),
+    //   catchError((error) => this.handleError('Error fetching organization teams', error)),
+    // );
+    //TODO: Implement this
+    return new Observable<Team[]>((observer) => {
+      observer.next([]);
+      observer.complete();
+    });
   }
 
   /**
