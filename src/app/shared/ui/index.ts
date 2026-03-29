@@ -4,3 +4,7 @@ export { AvatarComponent } from './avatar/avatar.component';
 export { BadgeComponent } from './badge/badge.component';
 export { SpinnerComponent } from './spinner/spinner.component';
 export { SkeletonComponent } from './skeleton/skeleton.component';
+export {
+  SearchAutocompleteComponent,
+  type UiSearchAutocompleteItem,
+} from './search-autocomplete/search-autocomplete.component';
