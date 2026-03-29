@@ -347,9 +347,9 @@ export default class MatchesList {
 
   constructor() {
     // Load initial data
-    effect(() => {
-      this.loadMatches();
-    });
+    // effect(() => {
+    //   this.loadMatches();
+    // });
   }
 
   // Filter leagues and matches by selected date
