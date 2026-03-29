@@ -683,7 +683,6 @@ export default class TeamDetailPage {
     //     this.isLoading.set(false);
     //   },
     // });
-    this.isLoading.set(false);
   }
 
   getStatusLabel(status: string): string {
