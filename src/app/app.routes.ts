@@ -50,6 +50,11 @@ export const routes: Routes = [
     title: 'Team Detail',
   },
   {
+    path: 'player/:id',
+    loadComponent	: () => import('./features/user/page/player-detail.page'),
+    title: 'Player Detail',
+  },
+  {
     path: 'championship/:id',
     loadComponent: () => import('./features/user/page/championship-detail.page'),
     title: 'Championship Detail',
