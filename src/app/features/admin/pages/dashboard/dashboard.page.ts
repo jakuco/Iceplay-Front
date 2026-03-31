@@ -17,11 +17,10 @@ import { ChampionshipService } from '../../../../core/services/championship.serv
 import { TeamService } from '../../../../core/services/team.service';
 import { MatchService } from '../../../../core/services/match.service';
 import { PlayerService } from '../../../../core/services/player.service';
-import { SPORT_CONFIGS, type Sport } from '../../../../core/models';
 import { forkJoin, map, Subscription } from 'rxjs';
-import { Match } from '../../../../core/models/match.model';
-import { Team } from '../../../../core/models/team.model';
-import { Championship } from '../../../../core/models/championship.model';
+import type { Match } from '../../../../core/models/match.model';
+import type { Team } from '../../../../core/models/team.model';
+import type { ChampionshipListItem } from '../../../../core/models/championship.model';
 
 interface StatCard {
   icon: string;
@@ -38,7 +37,6 @@ interface UpcomingMatch {
   date: string;
   time: string;
   venue: string;
-  sport: Sport;
   status?: string;
 }
 
@@ -136,7 +134,7 @@ interface UpcomingMatch {
             @for (match of upcomingMatches(); track match.id) {
               <div class="match-card">
                 <div class="match-sport">
-                  <mat-icon>{{ getSportIcon(match.sport) }}</mat-icon>
+                  <mat-icon>sports_soccer</mat-icon>
                 </div>
                 <div class="match-teams">
                   <span class="team-name">{{ match.homeTeam }}</span>
@@ -566,13 +564,14 @@ export default class DashboardPage {
     Array<{ id: string; icon: string; text: string; time: string; color: string }>
   >([]);
   allTeams = signal<Team[]>([]);
-  allChampionships = signal<Championship[]>([]);
+  allChampionships = signal<ChampionshipListItem[]>([]);
+  allMatches = signal<Match[]>([]);
   private reloadSub?: Subscription;
 
   constructor() {
     effect((onCleanup) => {
       const user = this.authService.currentUser();
-      if (user && user.organizationId) {
+      if (user?.organizationId) {
         const sub = this.loadDashboardData(user.organizationId);
         onCleanup(() => {
           sub.unsubscribe();
@@ -585,14 +584,16 @@ export default class DashboardPage {
 
   loadDashboardData(organizationId: string): Subscription {
     const composite = new Subscription();
-    // Load all data in parallel
+    const orgId = Number(organizationId);
+
+    // Load championships, teams, and players in parallel
     const outerSub = forkJoin({
-      championships: this.championshipService.getChampionships(organizationId),
+      championships: this.championshipService.getAll({ organizationId: orgId }),
       teams: this.teamService.getTeamsByOrganization(organizationId),
       players: this.playerService.getPlayersByOrganization(organizationId),
     }).subscribe({
       next: ({ championships, teams, players }) => {
-        this.allChampionships.set(championships);
+        this.allChampionships.set(championships.data);
         this.allTeams.set(teams);
 
         // Update stats
@@ -600,7 +601,7 @@ export default class DashboardPage {
           {
             icon: 'emoji_events',
             label: 'Campeonatos',
-            value: championships.length,
+            value: championships.total,
             route: '/admin/championships',
           },
           { icon: 'groups', label: 'Equipos', value: teams.length, route: '/admin/teams' },
@@ -609,13 +610,16 @@ export default class DashboardPage {
         ]);
 
         // Load matches for all championships
-        if (championships.length > 0) {
-          const matchObservables = championships.map((champ) =>
-            this.matchService.getMatches(champ.id),
+        if (championships.data.length > 0) {
+          const matchObservables = championships.data.map((champ) =>
+            this.matchService.getMatches(champ.id.toString()),
           );
           const innerSub = forkJoin(matchObservables).subscribe({
             next: (matchResults) => {
               const allMatches = matchResults.flat();
+              this.allMatches.set(allMatches);
+
+              // Update match count
               this.stats.update((stats) => {
                 const newStats = [...stats];
                 newStats[3].value = allMatches.length;
@@ -627,9 +631,8 @@ export default class DashboardPage {
                 .filter((m) => m.status === 'scheduled')
                 .slice(0, 5)
                 .map((m) => {
-                  const homeTeam = teams.find((t) => t.id === m.homeTeamId);
-                  const awayTeam = teams.find((t) => t.id === m.awayTeamId);
-                  const championship = championships.find((c) => c.id === m.championshipId);
+                  const homeTeam = teams.find((t) => t.id.toString() === m.homeTeamId);
+                  const awayTeam = teams.find((t) => t.id.toString() === m.awayTeamId);
                   return {
                     id: m.id,
                     homeTeam: homeTeam?.name || 'Equipo Desconocido',
@@ -637,7 +640,6 @@ export default class DashboardPage {
                     date: this.formatDate(m.scheduledDate),
                     time: m.scheduledTime || '00:00',
                     venue: m.venue || '',
-                    sport: championship?.sport || 'football',
                     status: m.status,
                   };
                 });
@@ -648,8 +650,8 @@ export default class DashboardPage {
                 .filter((m) => m.status === 'finished')
                 .slice(0, 5)
                 .map((m, index) => {
-                  const homeTeam = teams.find((t) => t.id === m.homeTeamId);
-                  const awayTeam = teams.find((t) => t.id === m.awayTeamId);
+                  const homeTeam = teams.find((t) => t.id.toString() === m.homeTeamId);
+                  const awayTeam = teams.find((t) => t.id.toString() === m.awayTeamId);
                   return {
                     id: m.id,
                     icon: 'sports_soccer',
@@ -686,7 +688,6 @@ export default class DashboardPage {
         next: () => {
           const user = this.authService.currentUser();
           if (user?.organizationId) {
-            // Cancel any in-flight reload and start a new one, then allow effect cleanup to dispose it
             this.reloadSub?.unsubscribe();
             this.reloadSub = this.loadDashboardData(user.organizationId);
           }
@@ -699,7 +700,7 @@ export default class DashboardPage {
     }
   }
 
-  private formatDate(date: Date): string {
+  private formatDate(date: Date | string): string {
     if (!date) return '';
     const d = typeof date === 'string' ? new Date(date) : date;
     return d.toLocaleDateString('es-EC', { day: 'numeric', month: 'short' });
@@ -715,7 +716,4 @@ export default class DashboardPage {
     return colors[icon] || '#6b7280';
   }
 
-  getSportIcon(sport: Sport): string {
-    return SPORT_CONFIGS[sport]?.icon || 'sports_soccer';
-  }
 }

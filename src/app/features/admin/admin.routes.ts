@@ -1,4 +1,5 @@
 import type { Routes } from '@angular/router';
+import { canDeactivateChampionshipForm } from './pages/championships/championship-deactivate.guard';
 
 const routes: Routes = [
   {
@@ -23,11 +24,13 @@ const routes: Routes = [
       {
         path: 'championships/new',
         loadComponent: () => import('./pages/championships/championship-form.page'),
+        canDeactivate: [canDeactivateChampionshipForm],
         title: 'Nuevo Campeonato - Admin',
       },
       {
         path: 'championships/:id/edit',
         loadComponent: () => import('./pages/championships/championship-form.page'),
+        canDeactivate: [canDeactivateChampionshipForm],
         title: 'Editar Campeonato - Admin',
       },
       {
@@ -35,66 +38,66 @@ const routes: Routes = [
         loadComponent: () => import('./pages/championships/championship-detail.page'),
         title: 'Detalle Campeonato - Admin',
       },
-      {
-        path: 'teams',
-        loadComponent: () => import('./pages/teams/teams-list.page'),
-        title: 'Equipos - Admin',
-      },
-      {
-        path: 'teams/new',
-        loadComponent: () => import('./pages/teams/team-form.page'),
-        title: 'Nuevo Equipo - Admin',
-      },
+      // {
+      //   path: 'teams',
+      //   loadComponent: () => import('./pages/teams/teams-list.page'),
+      //   title: 'Equipos - Admin',
+      // },
+      // {
+      //   path: 'teams/new',
+      //   loadComponent: () => import('./pages/teams/team-form.page'),
+      //   title: 'Nuevo Equipo - Admin',
+      // },
       {
         path: 'teams/:id',
         loadComponent: () => import('./pages/teams/team-detail.page'),
         title: 'Detalle Equipo - Admin',
       },
-      {
-        path: 'teams/:id/edit',
-        loadComponent: () => import('./pages/teams/team-form.page'),
-        title: 'Editar Equipo - Admin',
-      },
-      {
-        path: 'players',
-        loadComponent: () => import('./pages/players/players-list.page'),
-        title: 'Jugadores - Admin',
-      },
-      {
-        path: 'players/new',
-        loadComponent: () => import('./pages/players/player-form.page'),
-        title: 'Nuevo Jugador - Admin',
-      },
-      {
-        path: 'players/:id/edit',
-        loadComponent: () => import('./pages/players/player-form.page'),
-        title: 'Editar Jugador - Admin',
-      },
-      {
-        path: 'fixtures',
-        loadComponent: () => import('./pages/fixtures/fixtures-list.page'),
-        title: 'Fixture - Admin',
-      },
-      {
-        path: 'fixtures/generate',
-        loadComponent: () => import('./pages/fixtures/fixture-generator.page'),
-        title: 'Generar Fixture - Admin',
-      },
-      {
-        path: 'matches',
-        loadComponent: () => import('./pages/matches/matches-list.page'),
-        title: 'Partidos - Admin',
-      },
-      {
-        path: 'match/:matchId/control',
-        loadComponent: () => import('./pages/match-control/match-control.page'),
-        title: 'Control de Partido - Admin',
-      },
-      {
-        path: 'standings',
-        loadComponent: () => import('./pages/standings/standings.page'),
-        title: 'Tabla de Posiciones - Admin',
-      },
+      // {
+      //   path: 'teams/:id/edit',
+      //   loadComponent: () => import('./pages/teams/team-form.page'),
+      //   title: 'Editar Equipo - Admin',
+      // },
+      // {
+      //   path: 'players',
+      //   loadComponent: () => import('./pages/players/players-list.page'),
+      //   title: 'Jugadores - Admin',
+      // },
+      // {
+      //   path: 'players/new',
+      //   loadComponent: () => import('./pages/players/player-form.page'),
+      //   title: 'Nuevo Jugador - Admin',
+      // },
+      // {
+      //   path: 'players/:id/edit',
+      //   loadComponent: () => import('./pages/players/player-form.page'),
+      //   title: 'Editar Jugador - Admin',
+      // },
+      // {
+      //   path: 'fixtures',
+      //   loadComponent: () => import('./pages/fixtures/fixtures-list.page'),
+      //   title: 'Fixture - Admin',
+      // },
+      // {
+      //   path: 'fixtures/generate',
+      //   loadComponent: () => import('./pages/fixtures/fixture-generator.page'),
+      //   title: 'Generar Fixture - Admin',
+      // },
+      // {
+      //   path: 'matches',
+      //   loadComponent: () => import('./pages/matches/matches-list.page'),
+      //   title: 'Partidos - Admin',
+      // },
+      // {
+      //   path: 'match/:matchId/control',
+      //   loadComponent: () => import('./pages/match-control/match-control.page'),
+      //   title: 'Control de Partido - Admin',
+      // },
+      // {
+      //   path: 'standings',
+      //   loadComponent: () => import('./pages/standings/standings.page'),
+      //   title: 'Tabla de Posiciones - Admin',
+      // },
       {
         path: 'statistics',
         loadComponent: () => import('./pages/statistics/statistics.page'),

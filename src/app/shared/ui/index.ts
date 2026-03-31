@@ -4,3 +4,5 @@ export { AvatarComponent } from './avatar/avatar.component';
 export { BadgeComponent } from './badge/badge.component';
 export { SpinnerComponent } from './spinner/spinner.component';
 export { SkeletonComponent } from './skeleton/skeleton.component';
+export { FileUploadComponent } from './file-upload/file-upload.component';
+export { PdfViewerComponent } from './pdf-viewer/pdf-viewer.component';

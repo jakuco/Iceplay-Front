@@ -8,7 +8,7 @@ import { MatMenuModule } from '@angular/material/menu';
 import { MatTabsModule } from '@angular/material/tabs';
 import { TeamService } from '../../../../core/services/team.service';
 import { PlayerService } from '../../../../core/services/player.service';
-import { Team, TeamWithPlayers } from '../../../../core/models/team.model';
+import { Team, TeamProfile } from '../../../../core/models/team.model';
 import { Player } from '../../../../core/models/player.model';
 
 @Component({
@@ -43,22 +43,22 @@ import { Player } from '../../../../core/models/player.model';
           <p class="text-secondary py-8 text-center">Cargando...</p>
         </div>
       } @else if (team(); as t) {
-        <div class="team-header-card" [style.background]="t.primaryColor">
+        <div class="team-header-card" [style.background]="t.primaryColor ?? '#1e40af'">
           <div class="team-header-content">
             <div class="team-logo">
-              @if (t.logo) {
-                <img [src]="t.logo" [alt]="t.name + ' Logo'" />
+              @if (t.logoUrl) {
+                <img [src]="t.logoUrl" [alt]="t.name + ' Logo'" />
               } @else {
-                <div class="team-avatar">{{ t.shortName }}</div>
+                <div class="team-avatar">{{ t.shortname }}</div>
               }
             </div>
             <div class="team-info">
               <h2 class="team-name">{{ t.name }}</h2>
-              <p class="team-short-name">{{ t.shortName }}</p>
-              @if (t.city) {
+              <p class="team-short-name">{{ t.shortname }}</p>
+              @if (t.location) {
                 <p class="team-city">
                   <mat-icon>location_on</mat-icon>
-                  {{ t.city }}
+                  {{ t.location }}
                 </p>
               }
             </div>
@@ -78,12 +78,12 @@ import { Player } from '../../../../core/models/player.model';
                     </div>
                     <div class="info-item">
                       <span class="info-label">Nombre Corto:</span>
-                      <span class="info-value">{{ t.shortName }}</span>
+                      <span class="info-value">{{ t.shortname }}</span>
                     </div>
-                    @if (t.city) {
+                    @if (t.location) {
                       <div class="info-item">
-                        <span class="info-label">Ciudad:</span>
-                        <span class="info-value">{{ t.city }}</span>
+                        <span class="info-label">Ubicación:</span>
+                        <span class="info-value">{{ t.location }}</span>
                       </div>
                     }
                     @if (t.homeVenue) {
@@ -101,26 +101,20 @@ import { Player } from '../../../../core/models/player.model';
                   </div>
                 </div>
 
-                @if (t.managerName || t.managerPhone || t.managerEmail) {
+                @if (t.coachName || t.coachPhone) {
                   <div class="info-card">
                     <h3 class="info-title">Entrenador</h3>
                     <div class="info-list">
-                      @if (t.managerName) {
+                      @if (t.coachName) {
                         <div class="info-item">
                           <span class="info-label">Nombre:</span>
-                          <span class="info-value">{{ t.managerName }}</span>
+                          <span class="info-value">{{ t.coachName }}</span>
                         </div>
                       }
-                      @if (t.managerPhone) {
+                      @if (t.coachPhone) {
                         <div class="info-item">
                           <span class="info-label">Teléfono:</span>
-                          <span class="info-value">{{ t.managerPhone }}</span>
-                        </div>
-                      }
-                      @if (t.managerEmail) {
-                        <div class="info-item">
-                          <span class="info-label">Email:</span>
-                          <span class="info-value">{{ t.managerEmail }}</span>
+                          <span class="info-value">{{ t.coachPhone }}</span>
                         </div>
                       }
                     </div>
@@ -141,12 +135,12 @@ import { Player } from '../../../../core/models/player.model';
 
                   <ng-container matColumnDef="name">
                     <th mat-header-cell *matHeaderCellDef>Nombre</th>
-                    <td mat-cell *matCellDef="let player">{{ player.fullName }}</td>
+                    <td mat-cell *matCellDef="let player">{{ player.firstName }} {{ player.lastName }}</td>
                   </ng-container>
 
                   <ng-container matColumnDef="position">
-                    <th mat-header-cell *matHeaderCellDef>Posición</th>
-                    <td mat-cell *matCellDef="let player">{{ player.position }}</td>
+                    <th mat-header-cell *matHeaderCellDef>Posición (ID)</th>
+                    <td mat-cell *matCellDef="let player">{{ player.positionId }}</td>
                   </ng-container>
 
                   <ng-container matColumnDef="status">
@@ -359,9 +353,9 @@ export default class TeamDetailPage {
   private loadTeam(id: string): void {
     this.isLoading.set(true);
     this.teamService.getTeamWithPlayers(id).subscribe({
-      next: (teamWithPlayers) => {
-        this.team.set(teamWithPlayers);
-        this.players.set(teamWithPlayers.players);
+      next: (teamProfile) => {
+        this.team.set(teamProfile);
+        this.players.set(teamProfile.players);
         this.isLoading.set(false);
       },
       error: (error) => {
