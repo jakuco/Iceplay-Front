@@ -18,12 +18,17 @@ import { ChampionshipService } from '../../../../core/services/championship.serv
 import { AuthService }         from '../../../../core/services/auth.service';
 import { SportService }        from '../../../../core/services/sport.service';
 import {
-  Championship, CreateChampionshipDto, UpdateChampionshipDto,
+  Championship,
+  ChampionshipDetail,
+  CreateChampionshipDto,
+  CreateSocialLinkDto,
+  UpdateChampionshipDto,
 } from '../../../../core/models/championship.model';
 
 import {
   ChampionshipHeaderComponent,
   ChampionshipHeaderData,
+  ChampionshipHeaderSocialLink,
   SportOption,
 } from './championship-components/championship-header.component';
 
@@ -209,7 +214,7 @@ export default class ChampionshipFormPage implements OnInit {
     location: '', startDate: '', endDate: '',
     registrationStartDate: '', registrationEndDate: '',
     maxTeams: 16, currentTeams: 0, maxPlayersPerTeam: 20, phaseCount: 0,
-    status: 'draft', logoUrl: null,
+    status: 'draft', logoUrl: null, socialLinks: [],
   });
 
   // ── Phase state ─────────────────────────────────────────────────
@@ -339,6 +344,7 @@ export default class ChampionshipFormPage implements OnInit {
       shortname:      t.shortname,
       slug:           t.slug,
       logoUrl:        t.logoUrl        ?? undefined,
+      documentUrl:    t.documentUrl    ?? undefined,
       primaryColor:   t.primaryColor   ?? undefined,
       secondaryColor: t.secondaryColor ?? undefined,
       location:       t.location       ?? undefined,
@@ -364,6 +370,24 @@ export default class ChampionshipFormPage implements OnInit {
     this.save();
   }
 
+  private buildChampionshipLogoFormData(): FormData {
+    const fd = new FormData();
+    if (this.logoFile) {
+      fd.append('logo', this.logoFile, this.logoFile.name);
+    }
+    return fd;
+  }
+
+  private logChampionshipLogoFormData(fd: FormData): void {
+    const fields: Array<{ key: string; name: string; type: string; size: number }> = [];
+    fd.forEach((value, key) => {
+      if (value instanceof File) {
+        fields.push({ key, name: value.name, type: value.type, size: value.size });
+      }
+    });
+    console.log('Championship logo FormData (mock):', fields);
+  }
+
   private save(): void {
     const hd = this.headerData();
     if (!hd.name.trim()) {
@@ -376,9 +400,13 @@ export default class ChampionshipFormPage implements OnInit {
       return;
     }
 
+    const logoFormData = this.buildChampionshipLogoFormData();
+    this.logChampionshipLogoFormData(logoFormData);
+
     this.isSaving.set(true);
 
     if (this.pageMode() === 'edit' && this.championshipId()) {
+      const socialDtos = this.toSocialLinkDtos(hd.socialLinks);
       const dto: UpdateChampionshipDto = {
         name:             hd.name,
         slug:             this.toSlug(hd.name),
@@ -391,7 +419,10 @@ export default class ChampionshipFormPage implements OnInit {
         maxTeams:              hd.maxTeams,
         maxPlayersPerTeam:     hd.maxPlayersPerTeam,
       };
-      this.championshipSvc.update(this.championshipId()!, dto).subscribe({
+      forkJoin([
+        this.championshipSvc.update(this.championshipId()!, dto),
+        this.championshipSvc.saveSocialLinks(this.championshipId()!, socialDtos),
+      ]).subscribe({
         next: () => {
           this.isDirty.set(false);
           this.snackBar.open('Campeonato actualizado', 'Cerrar', { duration: 3000 });
@@ -464,6 +495,7 @@ export default class ChampionshipFormPage implements OnInit {
         shortname:      t.shortname,
         slug:           t.slug,
         logoUrl:        t.logoUrl        ?? undefined,
+        documentUrl:    t.documentUrl    ?? undefined,
         primaryColor:   t.primaryColor   ?? undefined,
         secondaryColor: t.secondaryColor ?? undefined,
         location:       t.location       ?? undefined,
@@ -475,6 +507,9 @@ export default class ChampionshipFormPage implements OnInit {
       }));
       saves.push(this.championshipSvc.saveTeams(id, dtos));
     }
+
+    const socialDtos = this.toSocialLinkDtos(this.headerData().socialLinks);
+    saves.push(this.championshipSvc.saveSocialLinks(id, socialDtos));
 
     return saves.length > 0
       ? forkJoin(saves).pipe(map(() => void 0))
@@ -492,7 +527,7 @@ export default class ChampionshipFormPage implements OnInit {
 
   private loadChampionship(id: string): void {
     this.championshipSvc.getById(id).subscribe({
-      next: (c: Championship) => {
+      next: (c: ChampionshipDetail) => {
         this.headerData.set({
           name:         c.name,
           description:  c.description ?? '',
@@ -509,6 +544,13 @@ export default class ChampionshipFormPage implements OnInit {
           phaseCount:         this.phases().length,
           status:       (c.status as any) ?? 'active',
           logoUrl:      c.logo ?? null,
+          socialLinks:  (c.socialLinks ?? []).map(link => ({
+            id: link.id,
+            socialNetworkId: link.socialNetworkId,
+            link: link.link,
+            name: link.socialNetwork?.name,
+            icon: link.socialNetwork?.icon,
+          })),
         });
         // Cargar reglas guardadas y mezclar con metadatos del catálogo
         this.championshipSvc.getRules(id).subscribe(rulesResp => {
@@ -601,4 +643,25 @@ export default class ChampionshipFormPage implements OnInit {
 
   private toIsoDate = (d: Date | string) =>
     (d instanceof Date ? d : new Date(d)).toISOString().split('T')[0];
+
+  private toSocialLinkDtos(links: ChampionshipHeaderSocialLink[]): CreateSocialLinkDto[] {
+    const mapByNetwork = new Map<number, CreateSocialLinkDto>();
+    for (const item of links) {
+      const url = item.link.trim();
+      if (!this.isHttpsUrl(url)) continue;
+      if (!mapByNetwork.has(item.socialNetworkId)) {
+        mapByNetwork.set(item.socialNetworkId, { socialNetworkId: item.socialNetworkId, link: url });
+      }
+    }
+    return Array.from(mapByNetwork.values());
+  }
+
+  private isHttpsUrl(value: string): boolean {
+    try {
+      const url = new URL(value);
+      return url.protocol === 'https:';
+    } catch {
+      return false;
+    }
+  }
 }

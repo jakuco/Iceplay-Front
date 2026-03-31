@@ -72,7 +72,6 @@ export interface TeamItem {
   slug:            string;
   logoUrl:         string | null;
   documentUrl:     string | null;
-  documentFile?:   File;           // transient – not sent to API
   primaryColor:    string;
   secondaryColor:  string;
   location:        string;
@@ -582,7 +581,7 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
               {{ team.isActive ? 'Activo' : 'Inactivo' }}
             </span>
 
-            @if (team.documentUrl || team.documentFile) {
+            @if (team.documentUrl) {
               <button
                 class="size-8 flex items-center justify-center rounded-lg border border-blue-100
                        bg-blue-50 text-blue-400 cursor-pointer hover:bg-blue-100 hover:text-blue-600
@@ -1182,37 +1181,71 @@ export class ChampionshipTeamsComponent {
       secondaryColor: team.secondaryColor,
       logoUrl:        team.logoUrl,
       documentUrl:    team.documentUrl,
-      documentFile:   team.documentFile,
     });
     this.teamModalError.set('');
   }
 
   closeTeamModal(): void { this.teamModal.set(null); }
 
+  private buildUploadFormData(form: TeamFormData): FormData {
+    const fd = new FormData();
+    if (form.logoFile) {
+      fd.append('logoUrl', form.logoFile, form.logoFile.name);
+    }
+    if (form.documentFile) {
+      fd.append('documentUrl', form.documentFile, form.documentFile.name);
+    }
+    return fd;
+  }
+
+  private logUploadFormData(fd: FormData): void {
+    const fields: Array<{ key: string; name: string; type: string; size: number }> = [];
+    fd.forEach((value, key) => {
+      if (value instanceof File) {
+        fields.push({ key, name: value.name, type: value.type, size: value.size });
+      }
+    });
+    console.log('Team upload FormData (mock):', fields);
+  }
+
   submitTeamModal(): void {
     const f = this.teamModal();
     if (!f) return;
     if (!f.name.trim()) { this.teamModalError.set('El nombre del equipo es requerido.'); return; }
 
+    const uploadFormData = this.buildUploadFormData(f);
+    this.logUploadFormData(uploadFormData);
+
+    const filePayload = {
+      teamName: f.name,
+      logoFile: f.logoFile
+        ? { name: f.logoFile.name, type: f.logoFile.type, size: f.logoFile.size }
+        : null,
+      documentFile: f.documentFile
+        ? { name: f.documentFile.name, type: f.documentFile.type, size: f.documentFile.size }
+        : null,
+    };
+    console.log('Team files payload (mock upload):', filePayload);
+
     if (f.id) {
       // Edit
-      // TODO-UPLOAD: upload f.documentFile here before updating if present.
+      if (f.logoUrl?.startsWith('blob:')) this.blobUrls.push(f.logoUrl);
+      if (f.documentUrl?.startsWith('blob:')) this.blobUrls.push(f.documentUrl);
       this.teams.update(list => list.map(t => t.id !== f.id ? t : {
         ...t, name: f.name, shortname: f.shortname, coachName: f.coachName,
         coachPhone: f.coachPhone, location: f.location,
         foundedYear: f.foundedYear, homeVenue: f.homeVenue,
         primaryColor: f.primaryColor, secondaryColor: f.secondaryColor,
-        logoUrl: f.logoUrl, documentUrl: f.documentUrl, documentFile: f.documentFile,
+        logoUrl: f.logoUrl, documentUrl: f.documentUrl,
       }));
       this.snackBar.open('Equipo actualizado', 'Cerrar', { duration: 2000 });
     } else {
       // Create
-      // TODO-UPLOAD: upload f.documentFile here before creating if present.
       const slug = f.name.toLowerCase().normalize('NFD')
         .replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
       const newTeam: TeamItem = {
         id: _nextTeamId++, championshipId: 1, name: f.name, shortname: f.shortname,
-        slug, logoUrl: f.logoUrl, documentUrl: f.documentUrl, documentFile: f.documentFile,
+        slug, logoUrl: f.logoUrl, documentUrl: f.documentUrl,
         primaryColor: f.primaryColor, secondaryColor: f.secondaryColor, location: f.location,
         foundedYear: f.foundedYear, homeVenue: f.homeVenue,
         coachName: f.coachName, coachPhone: f.coachPhone, isActive: true, players: [],
@@ -1227,28 +1260,26 @@ export class ChampionshipTeamsComponent {
   onDocumentFileChanged(file: File | null): void {
     const m = this.teamModal();
     if (!m) return;
-    this.teamModal.set({ ...m, documentFile: file ?? undefined, documentUrl: null });
+    let documentUrl: string | null = null;
+    if (file) {
+      documentUrl = URL.createObjectURL(file);
+    }
+    this.teamModal.set({ ...m, documentUrl, documentFile: file ?? undefined });
   }
 
   viewDocument(team: TeamItem, event: Event): void {
     event.stopPropagation();
-    let url = team.documentUrl ?? null;
-    if (!url && team.documentFile) {
-      url = URL.createObjectURL(team.documentFile);
-      this.blobUrls.push(url);
-    }
+    const url = team.documentUrl ?? null;
     if (url) this.pdfViewerData.set({ url, title: team.name });
   }
 
   onTeamLogoSelected(event: Event): void {
     const file = (event.target as HTMLInputElement).files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = e => {
-      const m = this.teamModal();
-      if (m) this.teamModal.set({ ...m, logoUrl: e.target?.result as string, logoFile: file });
-    };
-    reader.readAsDataURL(file);
+    const logoUrl = URL.createObjectURL(file);
+    const m = this.teamModal();
+    if (!m) return;
+    this.teamModal.set({ ...m, logoUrl, logoFile: file });
   }
 
   removeTeam(id: number, event: Event): void {
@@ -1546,14 +1577,8 @@ export class ChampionshipTeamsComponent {
         photoFile: p.photoFile || undefined,
       }));
 
-      // Crear URLs blob para logo si existe
-      if (payload.logoFile) {
-        const logoUrl = URL.createObjectURL(payload.logoFile);
-        this.blobUrls.push(logoUrl);
-        for (const player of teamPlayers) {
-          player.photoUrl = player.photoFile ? URL.createObjectURL(player.photoFile) : player.photoUrl;
-        }
-      }
+      const logoUrl = payload.logoFile ? URL.createObjectURL(payload.logoFile) : null;
+      const documentUrl = payload.documentFile ? URL.createObjectURL(payload.documentFile) : null;
 
       // Crear TeamItem
       const newTeam: TeamItem = {
@@ -1562,8 +1587,8 @@ export class ChampionshipTeamsComponent {
         name: payload.name,
         shortname: payload.shortname,
         slug,
-        logoUrl: payload.logoFile ? URL.createObjectURL(payload.logoFile) : null,
-        documentUrl: payload.documentFile ? URL.createObjectURL(payload.documentFile) : null,
+        logoUrl,
+        documentUrl,
         primaryColor: payload.primaryColor,
         secondaryColor: payload.secondaryColor,
         location: payload.location || '',
@@ -1581,8 +1606,8 @@ export class ChampionshipTeamsComponent {
       }
 
       // Registrar blob URLs para limpieza posterior
-      if (newTeam.logoUrl) this.blobUrls.push(newTeam.logoUrl);
-      if (newTeam.documentUrl) this.blobUrls.push(newTeam.documentUrl);
+      if (logoUrl) this.blobUrls.push(logoUrl);
+      if (documentUrl) this.blobUrls.push(documentUrl);
       for (const player of newTeam.players) {
         if (player.photoUrl) this.blobUrls.push(player.photoUrl);
       }

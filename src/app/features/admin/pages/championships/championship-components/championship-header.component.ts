@@ -46,6 +46,15 @@ export interface ChampionshipHeaderData {
   phaseCount:           number;
   status:               ChampionshipHeaderStatus;
   logoUrl:              string | null;
+  socialLinks:          ChampionshipHeaderSocialLink[];
+}
+
+export interface ChampionshipHeaderSocialLink {
+  id?:             number;
+  socialNetworkId: number;
+  link:            string;
+  name?:           string;
+  icon?:           string;
 }
 
 // ─── Constants ───────────────────────────────────────────────
@@ -57,6 +66,56 @@ const STATUS_META: Record<ChampionshipHeaderStatus, { label: string; dot: string
   finished:     { label: 'Finalizado',     dot: 'bg-slate-500',  pill: 'bg-slate-500/20  text-slate-400   ring-slate-500/30'  },
   cancelled:    { label: 'Cancelado',      dot: 'bg-red-400',    pill: 'bg-red-500/20    text-red-300     ring-red-500/30'    },
 };
+
+const SOCIAL_NETWORK_OPTIONS: Array<{
+  id: number;
+  name: string;
+  icon: string;
+  placeholder: string;
+  brandBg: string;
+  brandBorder: string;
+}> = [
+  {
+    id: 1,
+    name: 'Facebook',
+    icon: 'thumb_up',
+    placeholder: 'https://facebook.com/tu-pagina',
+    brandBg: '#1877F2',
+    brandBorder: '#3B82F6',
+  },
+  {
+    id: 2,
+    name: 'Instagram',
+    icon: 'photo_camera',
+    placeholder: 'https://instagram.com/tu-cuenta',
+    brandBg: 'linear-gradient(135deg, #F58529, #DD2A7B 45%, #8134AF 75%, #515BD4)',
+    brandBorder: '#DD2A7B',
+  },
+  {
+    id: 3,
+    name: 'X',
+    icon: 'close',
+    placeholder: 'https://x.com/tu-cuenta',
+    brandBg: '#111827',
+    brandBorder: '#374151',
+  },
+  {
+    id: 4,
+    name: 'TikTok',
+    icon: 'music_note',
+    placeholder: 'https://tiktok.com/@tu-cuenta',
+    brandBg: '#111827',
+    brandBorder: '#14B8A6',
+  },
+  {
+    id: 5,
+    name: 'YouTube',
+    icon: 'smart_display',
+    placeholder: 'https://youtube.com/@tu-canal',
+    brandBg: '#FF0000',
+    brandBorder: '#EF4444',
+  },
+];
 
 // ─────────────────────────────────────────────────────────────
 // Component
@@ -190,6 +249,116 @@ const STATUS_META: Record<ChampionshipHeaderStatus, { label: string; dot: string
         </div>
       }
     </div>
+
+    <!-- Row 1.5 — Social links compactos (debajo del titulo) -->
+    <div class="flex flex-wrap items-center gap-1.5">
+      @for (link of socialLinksView(); track link.socialNetworkId) {
+        <div class="relative">
+          <a
+            [href]="link.link"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="inline-flex size-8 items-center justify-center rounded-lg border text-white no-underline
+                   transition-transform duration-150 hover:scale-[1.03]"
+            [style.background]="link.brandBg"
+            [style.border-color]="link.brandBorder"
+            [matTooltip]="link.name"
+            [attr.aria-label]="'Abrir ' + link.name"
+          >
+            <mat-icon class="!size-[16px] !text-[16px]">{{ link.icon }}</mat-icon>
+          </a>
+
+          @if (editable()) {
+            <button
+              type="button"
+              class="absolute -top-1 -right-1 inline-flex size-3.5 items-center justify-center
+                     rounded-full border border-white/30 bg-[#0f1d35] text-white/80 hover:text-white"
+              (click)="startEditSocialLink(link)"
+              aria-label="Editar red social"
+            >
+              <mat-icon class="!size-[9px] !text-[9px]">edit</mat-icon>
+            </button>
+            <button
+              type="button"
+              class="absolute -bottom-1 -right-1 inline-flex size-3.5 items-center justify-center
+                     rounded-full border border-red-300/45 bg-[#2b1520] text-red-200 hover:bg-red-500/20"
+              (click)="removeSocialLink(link.socialNetworkId)"
+              aria-label="Eliminar red social"
+            >
+              <mat-icon class="!size-[9px] !text-[9px]">close</mat-icon>
+            </button>
+          }
+        </div>
+      }
+
+      @if (editable()) {
+        <button
+          type="button"
+          class="inline-flex size-8 items-center justify-center rounded-lg border border-dashed border-white/40
+                 bg-transparent text-white/75 transition-colors hover:bg-white/8 hover:text-white
+                 disabled:opacity-35 disabled:cursor-not-allowed"
+          [disabled]="availableNetworkOptions().length === 0"
+          (click)="startAddSocialLink()"
+          matTooltip="Agregar red social"
+          aria-label="Agregar red social"
+        >
+          <mat-icon class="!size-[16px] !text-[16px]">add</mat-icon>
+        </button>
+      }
+    </div>
+
+    @if (editable() && socialEditorOpen()) {
+      <div class="rounded-lg border border-blue-400/25 bg-blue-500/10 p-2">
+        <div class="flex flex-wrap items-center gap-1.5">
+          @for (opt of editorNetworkOptions(); track opt.id) {
+            <button
+              type="button"
+              class="inline-flex size-8 items-center justify-center rounded-lg border text-white transition-colors"
+              [style.background]="opt.id === socialNetworkDraft ? opt.brandBg : '#0f1d35'"
+              [style.border-color]="opt.id === socialNetworkDraft ? opt.brandBorder : 'rgba(255,255,255,0.2)'"
+              [style.opacity]="opt.id === socialNetworkDraft ? '1' : '0.75'"
+              (click)="socialNetworkDraft = opt.id"
+              [matTooltip]="opt.name"
+              [attr.aria-label]="'Seleccionar ' + opt.name"
+            >
+              <mat-icon class="!size-[16px] !text-[16px]">{{ opt.icon }}</mat-icon>
+            </button>
+          }
+        </div>
+
+        <label class="mt-2 flex flex-col gap-1">
+          <span class="text-[11px] font-semibold uppercase tracking-[.05em] text-blue-200/85">URL</span>
+          <input
+            class="rounded-md border border-white/20 bg-[#0f1d35] px-2 py-1.5 text-[12.5px] text-white
+                   outline-none placeholder:text-white/30 focus:border-blue-300"
+            [(ngModel)]="socialUrlDraft"
+            [placeholder]="socialUrlPlaceholder()"
+            inputmode="url"
+            autocomplete="off"
+          />
+        </label>
+
+        @if (socialEditorError()) {
+          <p class="m-0 mt-1 text-[11.5px] text-red-200">{{ socialEditorError() }}</p>
+        }
+
+        <div class="mt-2 flex items-center justify-end gap-1.5">
+          <button
+            type="button"
+            class="rounded-md border border-white/16 bg-white/7 px-2.5 py-1.5 text-[12px] text-white/75
+                   transition-colors hover:bg-white/12"
+            (click)="cancelSocialEditor()"
+          >Cancelar</button>
+          <button
+            type="button"
+            class="rounded-md bg-blue-500 px-2.5 py-1.5 text-[12px] font-semibold text-white
+                   transition-colors hover:bg-blue-600 disabled:opacity-40 disabled:cursor-not-allowed"
+            [disabled]="!canSaveSocialDraft()"
+            (click)="saveSocialDraft()"
+          >Guardar</button>
+        </div>
+      </div>
+    }
 
     <!-- Row 2 — Sport · Season -->
     <div class="flex items-center gap-2 text-[14px] text-white/55">
@@ -438,6 +607,11 @@ export class ChampionshipHeaderComponent {
   editingPlayers  = signal(false);
   editingLocation = signal(false);
   logoPreview     = signal<string | null>(null);
+  socialEditorOpen = signal(false);
+  socialEditorError = signal('');
+  socialEditingNetworkId = signal<number | null>(null);
+  socialNetworkDraft = 1;
+  socialUrlDraft = '';
 
   // ── Editable field mirrors (ngModel) ──────────────────────────
   // Initialized from data() on first render; changes emitted via dataChange output
@@ -496,6 +670,33 @@ export class ChampionshipHeaderComponent {
   currentSportIcon = computed(() =>
     this.sports().find(s => s.id === this.data().sportId)?.icon ?? 'sports'
   );
+  socialLinksView = computed(() => {
+    return this.data().socialLinks.map(link => {
+      const meta = SOCIAL_NETWORK_OPTIONS.find(opt => opt.id === link.socialNetworkId);
+      return {
+        ...link,
+        name: link.name ?? meta?.name ?? `Red ${link.socialNetworkId}`,
+        icon: link.icon ?? meta?.icon ?? 'link',
+        brandBg: meta?.brandBg ?? '#0f1d35',
+        brandBorder: meta?.brandBorder ?? 'rgba(255,255,255,0.25)',
+      };
+    });
+  });
+  availableNetworkOptions = computed(() => {
+    const used = new Set(this.data().socialLinks.map(link => link.socialNetworkId));
+    return SOCIAL_NETWORK_OPTIONS.filter(opt => !used.has(opt.id));
+  });
+  editorNetworkOptions = computed(() => {
+    const editing = this.socialEditingNetworkId();
+    const used = new Set(this.data().socialLinks
+      .filter(link => link.socialNetworkId !== editing)
+      .map(link => link.socialNetworkId));
+    return SOCIAL_NETWORK_OPTIONS.filter(opt => !used.has(opt.id));
+  });
+  socialUrlPlaceholder = computed(() => {
+    const meta = SOCIAL_NETWORK_OPTIONS.find(opt => opt.id === this.socialNetworkDraft);
+    return meta?.placeholder ?? 'https://...';
+  });
   statusLabel()     { return STATUS_META[this.data().status].label; }
   statusDotClass()  { return STATUS_META[this.data().status].dot;   }
   statusPillClass() { return STATUS_META[this.data().status].pill;  }
@@ -566,6 +767,96 @@ export class ChampionshipHeaderComponent {
   startEditLocation(): void {
     this.editingLocation.set(true);
     setTimeout(() => this.locationInputRef()?.nativeElement.focus());
+  }
+
+  // ── Social links ───────────────────────────────────────────────
+  startAddSocialLink(): void {
+    const options = this.availableNetworkOptions();
+    if (options.length === 0) {
+      this.socialEditorError.set('Ya agregaste todas las redes disponibles.');
+      return;
+    }
+    this.socialEditingNetworkId.set(null);
+    this.socialNetworkDraft = options[0].id;
+    this.socialUrlDraft = '';
+    this.socialEditorError.set('');
+    this.socialEditorOpen.set(true);
+  }
+
+  startEditSocialLink(link: ChampionshipHeaderSocialLink): void {
+    this.socialEditingNetworkId.set(link.socialNetworkId);
+    this.socialNetworkDraft = link.socialNetworkId;
+    this.socialUrlDraft = link.link;
+    this.socialEditorError.set('');
+    this.socialEditorOpen.set(true);
+  }
+
+  cancelSocialEditor(): void {
+    this.socialEditorOpen.set(false);
+    this.socialEditorError.set('');
+    this.socialEditingNetworkId.set(null);
+    this.socialUrlDraft = '';
+  }
+
+  removeSocialLink(socialNetworkId: number): void {
+    const next = this.data().socialLinks.filter(link => link.socialNetworkId !== socialNetworkId);
+    this.dataChange.emit({ socialLinks: next });
+  }
+
+  canSaveSocialDraft(): boolean {
+    const url = this.socialUrlDraft.trim();
+    if (!this.isValidHttpsUrl(url)) return false;
+    const exists = this.data().socialLinks.some(link =>
+      link.socialNetworkId === this.socialNetworkDraft &&
+      link.socialNetworkId !== this.socialEditingNetworkId()
+    );
+    return !exists;
+  }
+
+  saveSocialDraft(): void {
+    const url = this.socialUrlDraft.trim();
+    if (!this.isValidHttpsUrl(url)) {
+      this.socialEditorError.set('La URL debe ser valida y comenzar con https://');
+      return;
+    }
+
+    const duplicated = this.data().socialLinks.some(link =>
+      link.socialNetworkId === this.socialNetworkDraft &&
+      link.socialNetworkId !== this.socialEditingNetworkId()
+    );
+    if (duplicated) {
+      this.socialEditorError.set('Solo se permite una red por tipo.');
+      return;
+    }
+
+    const meta = SOCIAL_NETWORK_OPTIONS.find(opt => opt.id === this.socialNetworkDraft);
+    const next = [...this.data().socialLinks];
+    const idx = next.findIndex(link => link.socialNetworkId === this.socialEditingNetworkId());
+    const payload: ChampionshipHeaderSocialLink = {
+      socialNetworkId: this.socialNetworkDraft,
+      link: url,
+      name: meta?.name,
+      icon: meta?.icon,
+    };
+
+    if (idx >= 0) {
+      const existing = next[idx];
+      next[idx] = { ...existing, ...payload };
+    } else {
+      next.push({ ...payload, id: Date.now() });
+    }
+
+    this.dataChange.emit({ socialLinks: next });
+    this.cancelSocialEditor();
+  }
+
+  private isValidHttpsUrl(value: string): boolean {
+    try {
+      const parsed = new URL(value);
+      return parsed.protocol === 'https:';
+    } catch {
+      return false;
+    }
   }
 
   // ── Date range label ───────────────────────────────────────────

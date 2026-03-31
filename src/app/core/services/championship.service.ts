@@ -11,11 +11,14 @@ import {
   ChampionshipStatus,
   CreateChampionshipDto,
   CreateChampionshipMatchRuleDto,
+  CreateSocialLinkDto,
   CreatePhaseDto,
   ChampionshipFiltersDto,
   PaginatedChampionships,
   Phase,
   PhaseStatus,
+  SocialLink,
+  SocialNetwork,
   UpdateChampionshipDto,
   UpdateChampionshipStatusDto,
 } from '../models/championship.model';
@@ -29,6 +32,7 @@ const LS_CHAMPIONSHIPS = 'iceplay_championships';
 const LS_PHASES        = 'iceplay_phases';
 const LS_RULES         = 'iceplay_rules';
 const LS_TEAMS         = 'iceplay_teams';
+const LS_SOCIAL_LINKS  = 'iceplay_social_links';
 
 // ─────────────────────────────────────────────────────────────
 // Reglas por defecto por deporte (seed cuando no hay backend)
@@ -55,6 +59,14 @@ const DEFAULT_RULES_BY_SPORT: Record<number, DefaultRule[]> = {
   4: FOOTBALL_RULES,   // Hockey
   5: FOOTBALL_RULES,   // Béisbol
 };
+
+const SOCIAL_NETWORKS: SocialNetwork[] = [
+  { id: 1, name: 'Facebook',  icon: 'thumb_up' },
+  { id: 2, name: 'Instagram', icon: 'photo_camera' },
+  { id: 3, name: 'X',         icon: 'close' },
+  { id: 4, name: 'TikTok',    icon: 'music_note' },
+  { id: 5, name: 'YouTube',   icon: 'smart_display' },
+];
 
 @Injectable({ providedIn: 'root' })
 export class ChampionshipService {
@@ -96,7 +108,7 @@ export class ChampionshipService {
       ...champ,
       organization:     { id: champ.organizationId, name: 'Organización', logo: null },
       sport:            { id: champ.sportId,         name: 'Deporte',      icon: 'sports' },
-      socialLinks:      [],
+      socialLinks:      this.getStoredSocialLinks(id),
       phases:           this.readRecord<Phase[]>(LS_PHASES)[id] ?? [],
       matchRules:       [],
       teamCount:        teamsStored.length,
@@ -307,6 +319,48 @@ export class ChampionshipService {
     // );
   }
 
+  getSocialLinks(championshipId: string): Observable<SocialLink[]> {
+    // 🔴 MOCK — localStorage
+    return of(this.getStoredSocialLinks(championshipId));
+
+    // 🟢 BACKEND — descomentar cuando el endpoint exista
+    // return this.api.get<SocialLink[]>(`championships/${championshipId}/social-links`).pipe(
+    //   catchError(e => this.handleError('Error fetching social links', e)),
+    // );
+  }
+
+  saveSocialLinks(championshipId: string, links: CreateSocialLinkDto[]): Observable<SocialLink[]> {
+    // 🔴 MOCK — localStorage
+    const uniqueByNetwork = new Map<number, CreateSocialLinkDto>();
+    for (const link of links) {
+      if (!link.link?.trim()) continue;
+      if (!uniqueByNetwork.has(link.socialNetworkId)) {
+        uniqueByNetwork.set(link.socialNetworkId, {
+          socialNetworkId: link.socialNetworkId,
+          link: link.link.trim(),
+        });
+      }
+    }
+
+    const saved: SocialLink[] = Array.from(uniqueByNetwork.values()).map((dto, index) => ({
+      id: index + 1,
+      championshipId: +championshipId,
+      socialNetworkId: dto.socialNetworkId,
+      link: dto.link,
+      socialNetwork: SOCIAL_NETWORKS.find(n => n.id === dto.socialNetworkId),
+    }));
+
+    const record = this.readRecord<SocialLink[]>(LS_SOCIAL_LINKS);
+    record[championshipId] = saved;
+    this.writeRecord(LS_SOCIAL_LINKS, record);
+    return of(saved);
+
+    // 🟢 BACKEND — descomentar cuando el endpoint exista
+    // return this.api.put<SocialLink[]>(`championships/${championshipId}/social-links`, links).pipe(
+    //   catchError(e => this.handleError('Error saving social links', e)),
+    // );
+  }
+
   saveTeams(championshipId: string, teams: (CreateTeamDto & { players?: any[] })[]): Observable<TeamProfile[]> {
     // 🔴 MOCK — localStorage
     const now   = new Date();
@@ -374,6 +428,15 @@ export class ChampionshipService {
 
   private writeRecord(key: string, data: Record<string, unknown>): void {
     localStorage.setItem(key, JSON.stringify(data));
+  }
+
+  private getStoredSocialLinks(championshipId: string): SocialLink[] {
+    const stored = this.readRecord<SocialLink[]>(LS_SOCIAL_LINKS)[championshipId] ?? [];
+    return stored.map(link => ({
+      ...link,
+      championshipId: +championshipId,
+      socialNetwork: SOCIAL_NETWORKS.find(n => n.id === link.socialNetworkId),
+    }));
   }
 
   private parseChampionshipDates(c: Championship): Championship {
