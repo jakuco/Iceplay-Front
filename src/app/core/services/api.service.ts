@@ -38,5 +38,10 @@ export class ApiService {
   delete<T>(path: string): Observable<T> {
     return this.http.delete<T>(`${this.baseUrl}/${path}`);
   }
+
+  subscribe(path: string): EventSource {
+    const source = new EventSource(`${this.baseUrl}/${path}`);
+    return source;
+  }
 }
 

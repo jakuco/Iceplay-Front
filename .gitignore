@@ -45,3 +45,5 @@ Thumbs.db
 .agents
 skills-lock.json
 .github
+
+bun.lock
