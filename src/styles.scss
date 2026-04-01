@@ -1,5 +1,12 @@
 @use '@angular/material' as mat;
 
+// Logotipo "ICEPLAY" — Bai Jamjuree itálica, peso 800 (Bai en Google Fonts llega hasta 700 itálica; el navegador puede sintetizar el 800)
+:root {
+  --iceplay-wordmark-font-family: 'Bai Jamjuree', 'Montserrat', sans-serif;
+  --iceplay-wordmark-font-weight: 900;
+  --iceplay-wordmark-font-style: italic;
+}
+
 // ===========================================
 // ANGULAR MATERIAL BASE THEME
 // ===========================================

@@ -199,8 +199,9 @@ import { AuthService } from '../../../../core/services/auth.service';
     }
 
     .logo {
-      font-family: 'Russo One', sans-serif;
-      font-weight: 400;
+      font-family: var(--iceplay-wordmark-font-family);
+      font-style: var(--iceplay-wordmark-font-style);
+      font-weight: var(--iceplay-wordmark-font-weight);
       font-size: 2.5rem;
       letter-spacing: 0.09em;
       margin: 0;

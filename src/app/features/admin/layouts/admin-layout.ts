@@ -181,7 +181,9 @@ interface NavItem {
     }
 
     .logo {
-      font-family: 'Russo One', sans-serif;
+      font-family: var(--iceplay-wordmark-font-family);
+      font-style: var(--iceplay-wordmark-font-style);
+      font-weight: var(--iceplay-wordmark-font-weight);
       font-size: 1.25rem;
       letter-spacing: 0.09em;
       text-decoration: none;

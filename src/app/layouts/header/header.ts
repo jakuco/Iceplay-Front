@@ -54,8 +54,9 @@ import { TranslatePipe } from '../../core/pipes/translate.pipe';
     }
 
     .logo {
-      font-family: 'Russo One', sans-serif;
-      font-weight: 400;
+      font-family: var(--iceplay-wordmark-font-family);
+      font-style: var(--iceplay-wordmark-font-style);
+      font-weight: var(--iceplay-wordmark-font-weight);
       font-size: 1.25rem;
       letter-spacing: 0.09em;
       color: inherit;
