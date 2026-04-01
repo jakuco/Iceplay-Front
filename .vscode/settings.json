@@ -48,6 +48,6 @@
     ["class\\s*=\\s*[\"'`]([^\"'`]*)[\"'`]", 1],
     ["\\[class\\]\\s*=\\s*[\"'`]([^\"'`]*)[\"'`]", 1]
   ],
-  "files.autoSave": "afterDelay",
-  "files.autoSaveDelay": 500
+  // "files.autoSave": "afterDelay",
+  // "files.autoSaveDelay": 500
 }

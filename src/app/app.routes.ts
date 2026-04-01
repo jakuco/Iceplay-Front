@@ -65,6 +65,11 @@ export const routes: Routes = [
       import('./features/ui-dumb/pages/ui-showcase.page').then((m) => m.UiShowcasePage),
     title: 'UI Showcase - IcePlay',
   },
+  {
+    path: 'cup/:cupName',
+    loadComponent: () => import('./features/cup/cup.page'),
+    title: 'Cup Overview - IcePlay',
+  },
 
   //* Catch-all redirect
   {
