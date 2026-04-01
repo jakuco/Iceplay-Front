@@ -1,123 +1,82 @@
-import { Injectable, inject } from '@angular/core';
+import { Injectable, inject, NgZone } from '@angular/core';
 import { ApiService } from './api.service';
-import { Observable, interval, switchMap, startWith, catchError, throwError, map } from 'rxjs';
-import { MatchEvent, CreateEventDto, UpdateEventDto } from '../models/event.model';
+import { Observable, catchError, throwError, map } from 'rxjs';
+import {
+  MatchEvent,
+  MatchEventViewModel,
+  CreateMatchEventDto,
+  mapEventToViewModel,
+  mapEventsToViewModels,
+} from '../models/event.model';
 
-@Injectable({
-    providedIn: 'root',
-})
+export interface SSEEventAdd    { type: 'add';    event: MatchEventViewModel; }
+export interface SSEEventRemove { type: 'remove'; eventId: string; }
+export type SSEMatchEvent = SSEEventAdd | SSEEventRemove;
+
+@Injectable({ providedIn: 'root' })
 export class MatchEventService {
-    private api = inject(ApiService);
-    private readonly POLLING_INTERVAL = 3000; // 3 seconds
+  private api    = inject(ApiService);
+  private ngZone = inject(NgZone);
 
-    /**
-     * Get all events for a match
-     */
-    getMatchEvents(matchId: string): Observable<MatchEvent[]> {
-        return this.api.get<MatchEvent[]>('events', { matchId }).pipe(
-            map((events) => events.map((e) => this.parseEventDates(e))),
-            catchError((error) => this.handleError('Error fetching match events', error))
-        );
-    }
+  getMatchEvents(
+    matchId: string,
+    homeTeamId: string,
+    periodDuration: number
+  ): Observable<MatchEventViewModel[]> {
+    return this.api
+      .get<MatchEvent[]>(`matches/${matchId}/events`)
+      .pipe(
+        map((events) => mapEventsToViewModels(events, homeTeamId, periodDuration)),
+        catchError((err) => this.handleError('Error fetching events', err))
+      );
+  }
 
-    /**
-     * Get events with polling for live matches
-     * Polls every 3 seconds when match is live
-     */
-    getMatchEventsWithPolling(matchId: string, isLive: boolean): Observable<MatchEvent[]> {
-        if (!isLive) {
-            // Return single fetch if not live
-            return this.getMatchEvents(matchId);
-        }
+  connectToMatchStream(
+    matchId: string,
+    homeTeamId: string,
+    periodDuration: number
+  ): Observable<SSEMatchEvent> {
+    return new Observable<SSEMatchEvent>((observer) => {
+      const source = this.api.subscribe(`matches/${matchId}/events/stream`);
 
-        // Poll every 3 seconds when live
-        return interval(this.POLLING_INTERVAL).pipe(
-            startWith(0), // Start immediately
-            switchMap(() => this.getMatchEvents(matchId)),
-            catchError((error) => {
-                console.error('Error polling match events', error);
-                return throwError(() => error);
-            })
-        );
-    }
-
-    /**
-     * Create a new match event
-     */
-    createEvent(event: CreateEventDto & { matchId: string; championshipId: string }): Observable<MatchEvent> {
-        return this.api.post<MatchEvent>('events', event).pipe(
-            map((e) => this.parseEventDates(e)),
-            catchError((error) => this.handleError('Error creating event', error))
-        );
-    }
-
-    /**
-     * Update an event
-     */
-    updateEvent(id: string, event: UpdateEventDto): Observable<MatchEvent> {
-        return this.api.patch<MatchEvent>(`events/${id}`, event).pipe(
-            map((e) => this.parseEventDates(e)),
-            catchError((error) => this.handleError('Error updating event', error))
-        );
-    }
-
-    /**
-     * Delete an event
-     */
-    deleteEvent(id: string): Observable<void> {
-        return this.api.delete<void>(`events/${id}`).pipe(
-            catchError((error) => this.handleError('Error deleting event', error))
-        );
-    }
-
-    /**
-     * Get event by ID
-     */
-    getEventById(id: string): Observable<MatchEvent> {
-        return this.api.get<MatchEvent>(`events/${id}`).pipe(
-            map((e) => this.parseEventDates(e)),
-            catchError((error) => this.handleError('Error fetching event', error))
-        );
-    }
-
-    subscribeToEvents(
-        matchId: string,
-        onAdd: (event: MatchEvent) => void,
-        onDelete: (eventId: string) => void
-    ): () => void {
-        const source = this.api.subscribe(`/${matchId}/events/stream`);
-
-        source.addEventListener('add', (e) => {
-            const event = JSON.parse(e.data) as MatchEvent;
-            onAdd(event);
+      source.addEventListener('add', (e: MessageEvent) => {
+        this.ngZone.run(() => {
+          try {
+            const raw: MatchEvent = JSON.parse(e.data);
+            const vm = mapEventToViewModel(raw, homeTeamId, periodDuration);
+            observer.next({ type: 'add', event: vm });
+          } catch (err) {
+            console.error('SSE parse error (add):', err);
+          }
         });
+      });
 
-        source.addEventListener('remove', (e) => {
-            onDelete(e.lastEventId);
+      source.addEventListener('remove', (e: MessageEvent) => {
+        this.ngZone.run(() => {
+          observer.next({ type: 'remove', eventId: e.data });
         });
+      });
 
-        return source.close;
-    }
+      source.onerror = (err) => console.error('SSE error:', err);
 
-    /**
-     * Parse date strings to Date objects
-     */
-    private parseEventDates(event: MatchEvent): MatchEvent {
-        // if (event.createdAt && typeof event.createdAt === 'string') {
-        //   event.createdAt = new Date(event.createdAt);
-        // }
-        // if (event.updatedAt && typeof event.updatedAt === 'string') {
-        //   event.updatedAt = new Date(event.updatedAt);
-        // }
-        return event;
-    }
+      return () => source.close();
+    });
+  }
 
-    /**
-     * Handle errors
-     */
-    private handleError(message: string, error: any): Observable<never> {
-        console.error(message, error);
-        return throwError(() => new Error(`${message}: ${error.message || error}`));
-    }
+  createEvent(matchId: string, dto: CreateMatchEventDto): Observable<void> {
+    return this.api
+      .post<void>(`matches/${matchId}/events`, dto)
+      .pipe(catchError((err) => this.handleError('Error creating event', err)));
+  }
+
+  deleteEvent(matchId: string, eventId: string): Observable<void> {
+    return this.api
+      .delete<void>(`matches/${matchId}/events/${eventId}`)
+      .pipe(catchError((err) => this.handleError('Error deleting event', err)));
+  }
+
+  private handleError(message: string, error: any): Observable<never> {
+    console.error(message, error);
+    return throwError(() => new Error(`${message}: ${error.message || error}`));
+  }
 }
-
