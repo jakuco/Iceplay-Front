@@ -1,35 +1,17 @@
-import { HttpInterceptorFn, HttpErrorResponse } from '@angular/common/http';
+import { HttpInterceptorFn } from '@angular/common/http';
 import { inject } from '@angular/core';
-import { catchError, throwError } from 'rxjs';
+
 import { AuthService } from '../services/auth.service';
 
-/**
- * HTTP Interceptor that adds authorization token to requests
- * and handles authentication errors
- */
 export const authInterceptor: HttpInterceptorFn = (req, next) => {
-  const authService = inject(AuthService);
-  const token = authService.token();
+  const auth = inject(AuthService);
+  const token = auth.getAccessToken()();
 
-  // Clone request and add token if available
-  let authReq = req;
   if (token) {
-    authReq = req.clone({
-      setHeaders: {
-        Authorization: `Bearer ${token}`,
-      },
+    req = req.clone({
+      setHeaders: { Authorization: `Bearer ${token}` },
     });
   }
 
-  return next(authReq).pipe(
-    catchError((error: HttpErrorResponse) => {
-      // Handle 401 Unauthorized - logout user
-      if (error.status === 401) {
-        authService.logout();
-      }
-
-      return throwError(() => error);
-    }),
-  );
+  return next(req);
 };
-

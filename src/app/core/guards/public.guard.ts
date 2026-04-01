@@ -1,5 +1,6 @@
 import { inject } from '@angular/core';
 import { Router, type CanActivateFn } from '@angular/router';
+
 import { AuthService } from '../services/auth.service';
 
 /**
@@ -14,8 +15,6 @@ export const publicGuard: CanActivateFn = () => {
     return true;
   }
 
-  // Redirect based on user role
   const defaultRoute = authService.getDefaultRoute();
   return router.createUrlTree([defaultRoute]);
 };
-

@@ -1,6 +1,6 @@
 import { Injectable, signal, inject, computed } from '@angular/core';
 import { ApiService } from './api.service';
-import { firstValueFrom } from 'rxjs';
+import { firstValueFrom, tap } from 'rxjs';
 import { Router } from '@angular/router';
 import { User } from '../models/user.model';
 
@@ -12,25 +12,32 @@ export class AuthService {
   private router = inject(Router);
 
   private _currentUser = signal<User | null>(null);
-  private _token = signal<string | null>(null);
   isLoading = signal(false);
   error = signal<string | null>(null);
 
-  // Public signals
+
+  //* Access token signal
+  private _accessToken = signal<string | null>(null);
+
+  //* Set access token
+  setAccessToken(token: string | null) {
+    this._accessToken.set(token);
+  }
+
+  //* Get access token (readonly signal)
+  getAccessToken() {
+    return this._accessToken.asReadonly();
+  }
+
+  //* Public signals
   user = this._currentUser.asReadonly();
-  private _tokenSignal = this._token.asReadonly();
+  // private _tokenSignal = this._token.asReadonly();
 
   // Alias for backward compatibility
   get currentUser() {
     return this.user;
   }
 
-  // Public methods
-  token() {
-    return this._tokenSignal();
-  }
-
-  // Computed signals
   private _isAuthenticated = computed(() => this._currentUser() !== null);
   private _isAdmin = computed(() => {
     const user = this._currentUser();
@@ -59,10 +66,11 @@ export class AuthService {
     return '/admin/dashboard';
   });
 
-  // ✅ Constructor — restaura sesión al recargar la página
-  constructor() {
-    this.restoreSession();
-  }
+  // Public methods that return computed signals
+  //* Constructor - restore session on page reload
+  // constructor() {
+  //   this.restoreSession();
+  // }
 
   // Public methods that return computed signals
   isAuthenticated() {
@@ -85,29 +93,31 @@ export class AuthService {
     return this._userInitials();
   }
 
-  getDefaultRoute() {
-    return this._getDefaultRoute();
-  }
-
-  // ✅ Login conectado al backend real
+  //* Login
   async login(credentials: { email: string; password?: string }): Promise<void> {
     this.isLoading.set(true);
     this.error.set(null);
 
-    //TODO: Implement login and remove mock
-
     try {
       const response = await firstValueFrom(
-        this.api.post<{ user: any; token: string }>('auth/login', {
-          email: credentials.email,
-          password: credentials.password,
-        })
+        this.api.post<{ user: any; accessToken?: string; token?: string }>(
+          'auth/login',
+          { email: credentials.email, password: credentials.password },
+          { withCredentials: true },
+        ).pipe(
+          tap((res) => {
+            const t = res.accessToken ?? res.token;
+            if (t) this.setAccessToken(t);
+          }),
+        ),
       );
 
-      // Mapear nombre del back ("John Doe") a firstName/lastName del front
+      const accessToken = response.accessToken ?? response.token;
+      if (!accessToken) {
+        throw new Error('El servidor no devolvió token de acceso');
+      }
+
       const backUser = response.user;
-      console.log('👤 backUser completo:', backUser);
-      console.log('🎭 role recibido:', backUser.role, typeof backUser.role);
       const [firstName, ...rest] = (backUser.name as string).split(' ');
       const lastName = rest.join(' ');
 
@@ -122,26 +132,15 @@ export class AuthService {
           : undefined,
       };
 
-      console.log('✅ role mapeado:', user.role); // 👈 agrega esto
-
-      // Persistir sesión en localStorage
-      localStorage.setItem('token', response.token);
-      localStorage.setItem('user', JSON.stringify(user));
-
-      this._token.set(response.token);
+      this._accessToken.set(accessToken);
       this._currentUser.set(user);
-
-      // Redirigir según rol
-      if (user.role === 'super_admin') {
-        this.router.navigate(['/super-admin']);
-      } else {
-        this.router.navigate(['/admin/dashboard']);
-      }
-
-
-    } catch (err: any) {
+      this.router.navigate([this.getDefaultRoute()]);
+    } catch (err: unknown) {
       const errorMessage =
-        err?.error?.message ?? err?.message ?? 'Error al iniciar sesión';
+        (err as { error?: { message?: string }; message?: string })?.error
+          ?.message ??
+        (err as { message?: string })?.message ??
+        'Error al iniciar sesión';
       this.error.set(errorMessage);
       throw err;
     } finally {
@@ -149,12 +148,36 @@ export class AuthService {
     }
   }
 
-  // ✅ Logout limpia localStorage también
-  logout() {
+  //* Map role
+  //? The back saves: 1 = admin, 2 = super_admin (adjust if different)
+  private mapRole(roles: number): User['role'] {
+    if (roles === 1) return 'super_admin';
+    if (roles === 2) return 'admin';
+    return 'admin';
+  }
+
+  //* Get default route
+  getDefaultRoute() {
+    const user = this._currentUser();
+    if (!user) return '/auth/login';
+    if (user.role === 'super_admin') return '/super-admin';
+    return '/admin/dashboard';
+  }
+
+  //* Logout 
+  async logout() {
+    await firstValueFrom(
+      this.api.post('auth/logout', {}, { withCredentials: true }).pipe(
+        tap(() => {
+          this.setAccessToken(null);
+        }),
+      ),
+    );
+
+    this._currentUser.set(null);
+    this._accessToken.set(null);
     localStorage.removeItem('token');
     localStorage.removeItem('user');
-    this._currentUser.set(null);
-    this._token.set(null);
     this.router.navigate(['/auth/login']);
   }
 
@@ -162,45 +185,12 @@ export class AuthService {
     this.error.set(null);
   }
 
-  // ✅ Restaurar sesión desde localStorage al recargar
-  private restoreSession(): void {
-    const token = localStorage.getItem('token');
-    const raw = localStorage.getItem('user');
-    if (token && raw) {
-      try {
-        this._token.set(token);
-        this._currentUser.set(JSON.parse(raw));
-        return;
-      } catch {
-        // Si el JSON está corrupto, limpiar
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-      }
-    }
-
-    // 🔴 MOCK — usuario administrador por defecto (sin backend de auth)
-    const mockUser: User = {
-      id: 'mock-user-1',
-      email: 'admin@iceplay.dev',
-      firstName: 'Admin',
-      lastName: 'Mock',
-      role: 'admin',
-      organizationId: '1',
-      isActive: true,
-      createdAt: new Date(),
-    };
-    this._token.set('mock-token');
-    this._currentUser.set(mockUser);
-
-    // 🟢 BACKEND — eliminar el bloque MOCK de arriba cuando el login esté activo
-  }
-
-  // ✅ Mapear roles numéricos del back a strings del front
-  // El back guarda: 1 = admin, 2 = super_admin (ajusta si es diferente)
-  private mapRole(roles: number): User['role'] {
-    //if (!Array.isArray(roles)) return 'admin';
-    if (roles === 1) return 'super_admin';
-    if (roles === 2) return 'admin';
-    return 'admin';
+  //* Restore session from localStorage on page reload
+  async restoreSession(): Promise<void> {
+    const response = await firstValueFrom(this.api.post<{ user: any; accessToken: string }>('auth/refresh', {}, { withCredentials: true }));
+    // const token = localStorage.getItem('token');//! ESTO NO SE DEBE HACER, SE DEBE SOLO GUARDAR EN MEMORIA (RAM) 
+    // const raw = localStorage.getItem('user');
+    this.setAccessToken(response.accessToken);
+    this._currentUser.set(response.user);
   }
 }

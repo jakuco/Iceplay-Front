@@ -5,7 +5,7 @@ export const routes: Routes = [
   //* Auth routes (login) - only for non-authenticated users
   {
     path: 'auth',
-    canActivate: [publicGuard],
+    // canActivate: [publicGuard],
     loadChildren: () => import('./features/auth/auth.routes'),
   },
 
