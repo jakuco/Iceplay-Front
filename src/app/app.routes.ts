@@ -24,11 +24,11 @@ export const routes: Routes = [
   },
 
   //* Public routes (existing)
-  {
-    path: 'team/:teamId',
-    pathMatch: 'full',
-    loadComponent: () => import("./features/team/pages/details/team-details.page")
-  },
+  // {
+  //   path: 'team/:teamId',
+  //   pathMatch: 'full',
+  //   loadComponent: () => import("./features/team/pages/details/team-details.page")
+  // },
   // {
   //   path: 'match/:matchId',
   //   loadComponent: () => import('./features/matches/pages/match-details/match-details'),
@@ -39,11 +39,11 @@ export const routes: Routes = [
     loadComponent: () => import('./features/matches/pages/live-match-logger/live-match-logger'),
     title: 'Live Match Logger',
   },
-  // {
-  //   path: 'matches',
-  //   loadComponent: () => import('./features/matches/pages/matches-list/matches-list'),
-  //   title: 'Matches',
-  // },
+  {
+    path: 'matches',
+    loadComponent: () => import('./features/matches/pages/matches-list/matches-list'),
+    title: 'Matches',
+  },
   {
     path: 'team/:id',
     loadComponent: () => import('./features/user/page/team-detail.page'),
@@ -51,7 +51,7 @@ export const routes: Routes = [
   },
   {
     path: 'player/:id',
-    loadComponent	: () => import('./features/user/page/player-detail.page'),
+    loadComponent: () => import('./features/user/page/player-detail.page'),
     title: 'Player Detail',
   },
   {

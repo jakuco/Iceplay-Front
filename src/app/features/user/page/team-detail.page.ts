@@ -55,7 +55,7 @@ interface UserMatchTableRow {
         </div>
       } @else if (team(); as t) {
         <!-- Team Header Card -->
-        <div class="team-header-card" [style.background]="teamHeaderBackground(t)">
+        <div class="team-header-card" [style.background]="'var(--mat-sys-surface-container)'">
           <div class="team-header-content">
             <div class="team-logo">
               @if (t.logoUrl) {
@@ -453,10 +453,6 @@ export default class TeamDetailPage {
         this.loadMatches(teamId);
       }
     });
-  }
-
-  teamHeaderBackground(t: Team): string {
-    return t.primaryColor ?? 'var(--mat-sys-surface-container)';
   }
 
   private loadTeam(id: string): void {
