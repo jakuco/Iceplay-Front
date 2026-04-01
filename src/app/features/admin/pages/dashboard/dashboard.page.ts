@@ -637,8 +637,8 @@ export default class DashboardPage {
                     id: m.id,
                     homeTeam: homeTeam?.name || 'Equipo Desconocido',
                     awayTeam: awayTeam?.name || 'Equipo Desconocido',
-                    date: this.formatDate(m.scheduledDate),
-                    time: m.scheduledTime || '00:00',
+                    date: this.formatDate(m.scheduledStart!),
+                    time: m.scheduledStart?.toLocaleTimeString("es-EC") || '00:00',
                     venue: m.venue || '',
                     status: m.status,
                   };

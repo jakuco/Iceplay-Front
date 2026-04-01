@@ -20,60 +20,24 @@ export type MatchStatus =
  */
 export interface Match {
   id: string;
-  championshipId: string;
-  organizationId: string; // Denormalized
-
-  // Teams
+  groupTeamId: number;
   homeTeamId: string;
   awayTeamId: string;
-  homeTeam?: TeamBasicInfo; // Populated
-  awayTeam?: TeamBasicInfo; // Populated
-
-  // Main score
   homeScore: number;
   awayScore: number;
-
-  // Status
-  status: MatchStatus;
-
-  // Scheduling
-  round: number; // Matchday/Round
-  matchday: number; // Order within round
-  group?: string; // For group stage: "A", "B", etc.
-  stage?: string; // "group_stage", "quarterfinals", etc.
-
-  // Dates and venue
-  scheduledDate: Date;
-  scheduledTime: string; // "15:00"
+  status: string;
+  round: number;
+  matchDay?: number;
+  scheduledStart?: Date;
   actualStartTime?: Date;
   actualEndTime?: Date;
   venue?: string;
   city?: string;
-
-  // Referees
-  referee?: string;
-  assistantReferee1?: string;
-  assistantReferee2?: string;
-
-  // Game time
-  currentPeriod: number; // Current half/quarter/set
-  elapsedSeconds: number; // Seconds elapsed in current period
-  isClockRunning: boolean;
-
-  // Period scores (Basketball/Volleyball)
-  periodScores: PeriodScore[];
-
-  // Volleyball specific
-  homeSets?: number;
-  awaySets?: number;
-
-  // Metadata
-  notes?: string;
-  isHighlighted: boolean; // Featured match
-  streamUrl?: string; // Streaming link
-
-  createdAt: Date;
-  updatedAt: Date;
+  createdAt?: Date;
+  updatedAt?: Date;
+  bracketSlotId?: number;
+  legNumber?: number;
+  isActive: boolean;
 }
 
 export interface PeriodScore {
