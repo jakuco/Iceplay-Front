@@ -94,6 +94,8 @@ export class AuthService {
     this.isLoading.set(true);
     this.error.set(null);
 
+    //TODO: Implement login and remove mock
+
     try {
       const response = await firstValueFrom(
         this.api.post<{ user: any; token: string }>('auth/login', {
@@ -178,14 +180,14 @@ export class AuthService {
 
     // 🔴 MOCK — usuario administrador por defecto (sin backend de auth)
     const mockUser: User = {
-      id:             'mock-user-1',
-      email:          'admin@iceplay.dev',
-      firstName:      'Admin',
-      lastName:       'Mock',
-      role:           'admin',
+      id: 'mock-user-1',
+      email: 'admin@iceplay.dev',
+      firstName: 'Admin',
+      lastName: 'Mock',
+      role: 'admin',
       organizationId: '1',
-      isActive:       true,
-      createdAt:      new Date(),
+      isActive: true,
+      createdAt: new Date(),
     };
     this._token.set('mock-token');
     this._currentUser.set(mockUser);
