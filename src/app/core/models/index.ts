@@ -4,8 +4,14 @@ export * from './user.model';
 // Organization
 export * from './organization.model';
 
+// Shared DB types
+export * from './db.types';
+
 // Sport Configuration
 export * from './sport-config.model';
+
+// Access control
+export * from './access-control.model';
 
 // Championship
 export * from './championship.model';

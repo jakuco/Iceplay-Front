@@ -6,12 +6,25 @@ import { MatTabsModule } from '@angular/material/tabs';
 import { TeamService } from '../../../core/services/team.service';
 import { PlayerService } from '../../../core/services/player.service';
 import { Team } from '../../../core/models/team.model';
-import { Player } from '../../../core/models/player.model';
+import { Player, PlayerStatus } from '../../../core/models/player.model';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatTableModule } from '@angular/material/table';
 import { MatMenuModule } from '@angular/material/menu';
-import { Match } from '../../../core/models/match.model';
 import { MatchService } from '../../../core/services/match.service';
+
+/** Fila de tabla de partidos (mock enriquecido; no coincide con `Match` del dominio). */
+interface UserMatchTableRow {
+  id: string;
+  championshipId: string;
+  homeTeam: { name: string };
+  awayTeam: { name: string };
+  homeScore: number;
+  awayScore: number;
+  status: string;
+  scheduledDate: Date;
+  scheduledTime: string;
+  venue?: string;
+}
 
 @Component({
   selector: 'app-team-detail',
@@ -42,13 +55,13 @@ import { MatchService } from '../../../core/services/match.service';
         </div>
       } @else if (team(); as t) {
         <!-- Team Header Card -->
-        <div class="team-header-card" [style.background]="t.primaryColor">
+        <div class="team-header-card" [style.background]="t.primaryColor ?? 'var(--mat-sys-surface-container)'">
           <div class="team-header-content">
             <div class="team-logo">
-              @if (t.logo) {
-                <img [src]="t.logo" [alt]="t.name + ' Logo'" />
+              @if (t.logoUrl) {
+                <img [src]="t.logoUrl" [alt]="t.name + ' Logo'" />
               } @else {
-                <div class="team-avatar">{{ t.shortName }}</div>
+                <div class="team-avatar">{{ t.shortname }}</div>
               }
             </div>
             <div class="team-info">
@@ -69,12 +82,12 @@ import { MatchService } from '../../../core/services/match.service';
                 </div>
                 <div class="info-item">
                   <span class="info-label">Nombre Corto:</span>
-                  <span class="info-value">{{ t.shortName }}</span>
+                  <span class="info-value">{{ t.shortname }}</span>
                 </div>
-                @if (t.city) {
+                @if (t.location) {
                   <div class="info-item">
                     <span class="info-label">Ciudad:</span>
-                    <span class="info-value">{{ t.city }}</span>
+                    <span class="info-value">{{ t.location }}</span>
                   </div>
                 }
                 @if (t.homeVenue) {
@@ -92,26 +105,20 @@ import { MatchService } from '../../../core/services/match.service';
               </div>
             </div>
 
-            @if (t.managerName || t.managerPhone || t.managerEmail) {
+            @if (t.coachName || t.coachPhone) {
               <div class="info-card">
                 <h3 class="info-title">Entrenador</h3>
                 <div class="info-list">
-                  @if (t.managerName) {
+                  @if (t.coachName) {
                     <div class="info-item">
                       <span class="info-label">Nombre:</span>
-                      <span class="info-value">{{ t.managerName }}</span>
+                      <span class="info-value">{{ t.coachName }}</span>
                     </div>
                   }
-                  @if (t.managerPhone) {
+                  @if (t.coachPhone) {
                     <div class="info-item">
                       <span class="info-label">Teléfono:</span>
-                      <span class="info-value">{{ t.managerPhone }}</span>
-                    </div>
-                  }
-                  @if (t.managerEmail) {
-                    <div class="info-item">
-                      <span class="info-label">Email:</span>
-                      <span class="info-value">{{ t.managerEmail }}</span>
+                      <span class="info-value">{{ t.coachPhone }}</span>
                     </div>
                   }
                 </div>
@@ -217,12 +224,12 @@ import { MatchService } from '../../../core/services/match.service';
 
                   <ng-container matColumnDef="name">
                     <th mat-header-cell *matHeaderCellDef>Nombre</th>
-                    <td mat-cell *matCellDef="let player">{{ player.fullName }}</td>
+                    <td mat-cell *matCellDef="let player">{{ playerRowName(player) }}</td>
                   </ng-container>
 
                   <ng-container matColumnDef="position">
                     <th mat-header-cell *matHeaderCellDef>Posición</th>
-                    <td mat-cell *matCellDef="let player">{{ player.position }}</td>
+                    <td mat-cell *matCellDef="let player">{{ playerRowPosition(player) }}</td>
                   </ng-container>
 
                   <ng-container matColumnDef="status">
@@ -234,7 +241,7 @@ import { MatchService } from '../../../core/services/match.service';
                     </td>
                   </ng-container>
 
-                  //TODO: To show the player details
+                  <!-- TODO: detalle del jugador -->
                   <ng-container matColumnDef="actions">
                     <th mat-header-cell *matHeaderCellDef></th>
                     <td mat-cell *matCellDef="let player">
@@ -433,7 +440,7 @@ export default class TeamDetailPage {
 
   team = signal<Team | null>(null);
   players = signal<Player[]>([]);
-  matches = signal<Match[]>([]);
+  matches = signal<UserMatchTableRow[]>([]);
   isLoading = signal(false);
   displayedColumns = ['number', 'name', 'position', 'status', 'actions'];
   displayedColumnsMatches = ['championship', 'teams', 'date', 'venue', 'status', 'actions'];
@@ -463,218 +470,107 @@ export default class TeamDetailPage {
     //   },
     // });
 
-    //TODO: Using  mock data for now
-    const mockTeam = {
-      id: '1',
+    const mockTeam: Team = {
+      id: 1,
+      championshipId: 1,
       name: 'Team 1',
-      shortName: 'T1',
-      city: 'City 1',
-      homeVenue: 'Venue 1',
+      shortname: 'T1',
+      slug: 'team-1',
+      logoUrl: null,
+      documentUrl: null,
+      primaryColor: '#1a237e',
+      secondaryColor: null,
       foundedYear: 2020,
+      homeVenue: 'Venue 1',
+      location: 'City 1',
+      coachName: null,
+      coachPhone: null,
+      isActive: true,
+      hasActiveMatches: false,
+      createdAt: new Date(),
+      updatedAt: new Date(),
     };
-    const mockPlayers = [
-      {
-        id: '1',
-        number: 1,
-        fullName: 'Player 1',
-        position: 'Forward',
-        status: 'active',
+    const positions = ['Delantero', 'Mediocampista', 'Defensa', 'Portero'];
+    const mockPlayers: Player[] = Array.from({ length: 10 }, (_, i) => ({
+      id: String(i + 1),
+      teamId: '1',
+      positionId: 1,
+      photoUrl: null,
+      firstName: 'Jugador',
+      lastName: String(i + 1),
+      nickName: null,
+      birthDate: new Date('2000-01-01'),
+      number: i + 1,
+      height: null,
+      weight: null,
+      status: PlayerStatus.Active,
+      suspensionEndDate: null,
+      suspensionReason: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      position: {
+        id: 1,
+        code: 'FW',
+        label: positions[i % 4],
+        abbreviation: 'JUG',
       },
-      {
-        id: '2',
-        number: 2,
-        fullName: 'Player 2',
-        position: 'Midfielder',
-        status: 'active',
-      },
-      {
-        id: '3',
-        number: 3,
-        fullName: 'Player 3',
-        position: 'Defender',
-        status: 'active',
-      },
-      {
-        id: '4',
-        number: 4,
-        fullName: 'Player 4',
-        position: 'Goalkeeper',
-        status: 'active',
-      },
-      {
-        id: '5',
-        number: 5,
-        fullName: 'Player 5',
-        position: 'Forward',
-        status: 'active',
-      },
-      {
-        id: '6',
-        number: 6,
-        fullName: 'Player 6',
-        position: 'Midfielder',
-        status: 'active',
-      },
-      {
-        id: '7',
-        number: 7,
-        fullName: 'Player 7',
-        position: 'Defender',
-        status: 'active',
-      },
-      {
-        id: '8',
-        number: 8,
-        fullName: 'Player 8',
-        position: 'Goalkeeper',
-        status: 'active',
-      },
-      {
-        id: '9',
-        number: 9,
-        fullName: 'Player 9',
-        position: 'Forward',
-        status: 'active',
-      },
-      {
-        id: '10',
-        number: 10,
-        fullName: 'Player 10',
-        position: 'Midfielder',
-        status: 'active',
-      },
-    ];
+    }));
 
     setTimeout(() => {
-      this.team.set(mockTeam as unknown as Team);
-      this.players.set(mockPlayers as unknown as Player[]);
+      this.team.set(mockTeam);
+      this.players.set(mockPlayers);
       this.isLoading.set(false);
     }, 2000);
   }
 
   private loadMatches(id: string): void {
     this.isLoading.set(true);
-    const mockTeamHome = {
-      id: '1',
-      name: 'Team 1',
-      shortName: 'T1',
-      logo: 'https://api.sofascore.app/api/v1/team/1/image',
-      primaryColor: '#1a237e',
-    };
-    const mockTeamAway = {
-      id: '2',
-      name: 'Team 2',
-      shortName: 'T2',
-      logo: 'https://api.sofascore.app/api/v1/team/2/image',
-      primaryColor: '#b71c1c',
-    };
-    // The mockMatches structure is currently a two-dimensional array and uses MongoDB style entities (ObjectId(), ISODate(), etc).
-    // We'll replace it with a correct, simple array of objects using primitive types, and structure the objects so they match the Match model and your rendering template.
-
-    // For demonstration, uses mockTeamHome and mockTeamAway as teams, and provides realistic fields.
-
-    const mockMatches: Partial<Match>[] = [
+    const mockMatches: UserMatchTableRow[] = [
       {
         id: 'match-1',
         championshipId: 'champ-1',
-        organizationId: 'org-1',
-        homeTeam: mockTeamHome,
-        awayTeam: mockTeamAway,
+        homeTeam: { name: 'Team 1' },
+        awayTeam: { name: 'Team 2' },
         homeScore: 2,
         awayScore: 1,
         status: 'finished',
-        round: 1,
-        matchday: 1,
         scheduledDate: new Date('2024-08-01'),
         scheduledTime: '18:00',
         venue: 'Estadio Monumental',
-        city: 'Guayaquil',
-        currentPeriod: 2,
-        elapsedSeconds: 5400,
-        isClockRunning: false,
-        periodScores: [
-          { period: 1, homeScore: 2, awayScore: 0 },
-          { period: 2, homeScore: 0, awayScore: 1 },
-        ],
-        isHighlighted: false,
-        createdAt: new Date('2024-02-12T04:03:36.228Z'),
-        updatedAt: new Date('2024-02-12T04:03:36.233Z'),
       },
       {
         id: 'match-2',
         championshipId: 'champ-1',
-        organizationId: 'org-1',
-        homeTeam: mockTeamHome,
-        awayTeam: {
-          ...mockTeamAway,
-          id: '3',
-          name: 'Team 3',
-          shortName: 'T3',
-          logo: 'https://api.sofascore.app/api/v1/team/3/image',
-          primaryColor: '#388e3c',
-        },
+        homeTeam: { name: 'Team 1' },
+        awayTeam: { name: 'Team 3' },
         homeScore: 1,
         awayScore: 3,
         status: 'finished',
-        round: 1,
-        matchday: 2,
         scheduledDate: new Date('2024-08-02'),
         scheduledTime: '20:00',
         venue: 'Estadio Capwell',
-        city: 'Guayaquil',
-        currentPeriod: 2,
-        elapsedSeconds: 5400,
-        isClockRunning: false,
-        periodScores: [
-          { period: 1, homeScore: 0, awayScore: 2 },
-          { period: 2, homeScore: 1, awayScore: 1 },
-        ],
-        isHighlighted: false,
-        createdAt: new Date('2024-02-12T04:03:36.228Z'),
-        updatedAt: new Date('2024-02-12T04:03:36.234Z'),
       },
       {
-        id: 'match-2',
+        id: 'match-3',
         championshipId: 'champ-1',
-        organizationId: 'org-1',
-        homeTeam: mockTeamHome,
-        awayTeam: {
-          ...mockTeamAway,
-          id: '3',
-          name: 'Team 3',
-          shortName: 'T3',
-          logo: 'https://api.sofascore.app/api/v1/team/3/image',
-          primaryColor: '#388e3c',
-        },
+        homeTeam: { name: 'Team 1' },
+        awayTeam: { name: 'Team 3' },
         homeScore: 1,
         awayScore: 3,
         status: 'finished',
-        round: 1,
-        matchday: 2,
-        scheduledDate: new Date('2024-08-02'),
+        scheduledDate: new Date('2024-08-03'),
         scheduledTime: '20:00',
         venue: 'Estadio Capwell',
-        city: 'Guayaquil',
-        currentPeriod: 2,
-        elapsedSeconds: 5400,
-        isClockRunning: false,
-        periodScores: [
-          { period: 1, homeScore: 0, awayScore: 2 },
-          { period: 2, homeScore: 1, awayScore: 1 },
-        ],
-        isHighlighted: false,
-        createdAt: new Date('2024-02-12T04:03:36.228Z'),
-        updatedAt: new Date('2024-02-12T04:03:36.234Z'),
       },
     ];
 
     setTimeout(() => {
-      this.matches.set(mockMatches as unknown as Match[]);
+      this.matches.set(mockMatches);
       this.isLoading.set(false);
     }, 2000);
 
     // this.matchService.getMatches(id).subscribe({
-    //   next: (matches: Match[]) => {
+    //   next: (matches) => {
     //     this.matches.set(matches);
     //     this.isLoading.set(false);
     //   },
@@ -685,12 +581,27 @@ export default class TeamDetailPage {
     // });
   }
 
+  playerRowName(p: Player): string {
+    return `${p.firstName} ${p.lastName}`.trim();
+  }
+
+  playerRowPosition(p: Player): string {
+    return p.position?.label ?? '—';
+  }
+
   getStatusLabel(status: string): string {
     const labels: Record<string, string> = {
       active: 'Activo',
       injured: 'Lesionado',
       suspended: 'Suspendido',
       inactive: 'Inactivo',
+      scheduled: 'Programado',
+      live: 'En vivo',
+      finished: 'Finalizado',
+      warmup: 'Calentamiento',
+      halftime: 'Descanso',
+      cancelled: 'Cancelado',
+      postponed: 'Aplazado',
     };
     return labels[status] || status;
   }

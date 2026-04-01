@@ -8,3 +8,5 @@ export {
   SearchAutocompleteComponent,
   type UiSearchAutocompleteItem,
 } from './search-autocomplete/search-autocomplete.component';
+export { FileUploadComponent } from './file-upload/file-upload.component';
+export { PdfViewerComponent } from './pdf-viewer/pdf-viewer.component';

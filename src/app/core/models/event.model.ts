@@ -1,93 +1,90 @@
-import type { PlayerBasicInfo } from './player.model';
-import type { TeamBasicInfo } from './team.model';
+import type { Player } from './player.model';
+import type { Team } from './team.model';
+import type { DbId } from './db.types';
+
+type PlayerBasicInfo = Pick<Player, 'id' | 'firstName' | 'lastName' | 'nickName' | 'number' | 'positionId'>;
+type TeamBasicInfo = Pick<Team, 'id' | 'name' | 'shortname' | 'logoUrl'>;
 
 /**
  * Match event entity
  */
 export interface MatchEvent {
-  id: string;
-  matchId: string;
-  championshipId: string; // Denormalized for queries
-
-  // Event information
-  type: string; // Event type code according to sport
-
-  // Participants
-  playerId: string;
-  player?: PlayerBasicInfo; // Populated
-  teamId: string;
-  team?: TeamBasicInfo; // Populated
-
-  // For substitutions
-  relatedPlayerId?: string; // Player coming out/in
-  relatedPlayer?: PlayerBasicInfo;
-
-  // Time
-  period: number; // Which half/quarter/set
-  minute: number;
-  extraMinute?: number; // For added time: 90+3 -> minute: 90, extraMinute: 3
-
-  // Additional information
-  description?: string;
-
-  // Metadata
-  createdAt: Date;
-  createdBy: string; // Admin ID who logged the event
-  updatedAt?: Date;
-  updatedBy?: string;
+    typeMatchEventId: number;
+    time: number;
+    id: DbId;
+    matchId: DbId;
+    typeMatchEvent: {
+        id: number;
+        label: string;
+        category: string;
+        icon?: string | undefined;
+        color?: string | undefined;
+        matchPoint?: number | undefined;
+        standingPoints?: number | undefined;
+    };
+    teamId?: DbId | undefined;
+    playerId?: DbId | undefined;
+    relatedEventMatchId?: DbId | undefined;
+    description?: string | null;
 }
 
 /**
  * DTO for creating an event
  */
 export interface CreateEventDto {
-  type: string;
-  playerId: string;
-  teamId: string;
-  period: number;
-  minute: number;
-  extraMinute?: number;
-  relatedPlayerId?: string;
-  description?: string;
+    type?: string;
+    typeMatchEventId?: number;
+    playerId: DbId;
+    teamId: DbId;
+    matchId?: DbId;
+    period: number;
+    minute: number;
+    extraMinute?: number;
+    relatedPlayerId?: DbId;
+    relatedEventMatchId?: DbId;
+    description?: string;
 }
 
 /**
  * DTO for updating an event
  */
 export interface UpdateEventDto {
-  type?: string;
-  playerId?: string;
-  period?: number;
-  minute?: number;
-  extraMinute?: number;
-  relatedPlayerId?: string;
-  description?: string;
+    type?: string;
+    typeMatchEventId?: number;
+    playerId?: DbId;
+    teamId?: DbId;
+    period?: number;
+    minute?: number;
+    extraMinute?: number;
+    relatedPlayerId?: DbId;
+    relatedEventMatchId?: DbId;
+    description?: string;
 }
 
 /**
  * Event for display in timeline
  */
 export interface EventTimelineItem {
-  id: string;
-  type: string;
-  typeLabel: string;
-  typeIcon: string;
-  typeColor: string;
-  minute: string; // Formatted: "45'" or "90+3'"
-  player: PlayerBasicInfo;
-  team: TeamBasicInfo;
-  relatedPlayer?: PlayerBasicInfo;
-  description?: string;
-  isHomeTeam: boolean;
+    id: DbId;
+    type: string;
+    typeLabel: string;
+    typeIcon: string;
+    typeColor: string;
+    minute: string; // Formatted: "45'" or "90+3'"
+    player: PlayerBasicInfo;
+    team: TeamBasicInfo;
+    relatedPlayer?: PlayerBasicInfo;
+    description?: string;
+    isHomeTeam: boolean;
 }
 
 /**
  * Format event minute for display
  */
 export function formatEventMinute(minute: number, extraMinute?: number): string {
-  if (extraMinute && extraMinute > 0) {
-    return `${minute}+${extraMinute}'`;
-  }
-  return `${minute}'`;
+    if (extraMinute && extraMinute > 0) {
+        return `${minute}+${extraMinute}'`;
+    }
+    return `${minute}'`;
 }
 

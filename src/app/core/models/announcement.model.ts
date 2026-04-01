@@ -1,3 +1,5 @@
+import type { DbId } from './db.types';
+
 export type AnnouncementType = 'info' | 'warning' | 'success' | 'error';
 export type AnnouncementTarget = 'all' | 'organization' | 'championship';
 
@@ -5,7 +7,7 @@ export type AnnouncementTarget = 'all' | 'organization' | 'championship';
  * Announcement entity
  */
 export interface Announcement {
-  id: string;
+  id: DbId;
 
   // Content
   title: string;
@@ -14,8 +16,8 @@ export interface Announcement {
 
   // Scope
   target: AnnouncementTarget;
-  organizationId?: string; // If target is 'organization' or 'championship'
-  championshipId?: string; // If target is 'championship'
+  organizationId?: DbId; // If target is 'organization' or 'championship'
+  championshipId?: DbId; // If target is 'championship'
 
   // Visibility
   isPublic: boolean; // Visible to public users
@@ -26,7 +28,7 @@ export interface Announcement {
   expirationDate?: Date;
 
   // Metadata
-  createdBy: string;
+  createdBy: DbId;
   createdAt: Date;
   updatedAt?: Date;
 }
@@ -39,8 +41,8 @@ export interface CreateAnnouncementDto {
   content: string;
   type: AnnouncementType;
   target: AnnouncementTarget;
-  organizationId?: string;
-  championshipId?: string;
+  organizationId?: DbId;
+  championshipId?: DbId;
   isPublic: boolean;
   isPinned?: boolean;
   publishDate: Date;

@@ -24,6 +24,7 @@ export class ApiService {
   }
 
   post<T>(path: string, body: any): Observable<T> {
+    console.log('POST request to:', `${this.baseUrl}/${path}`, 'with body:', body);
     return this.http.post<T>(`${this.baseUrl}/${path}`, body);
   }
 
@@ -37,5 +38,10 @@ export class ApiService {
 
   delete<T>(path: string): Observable<T> {
     return this.http.delete<T>(`${this.baseUrl}/${path}`);
+  }
+
+  subscribe(path: string): EventSource {
+    const source = new EventSource(`${this.baseUrl}/${path}`);
+    return source;
   }
 }

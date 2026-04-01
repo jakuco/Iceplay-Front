@@ -6,10 +6,23 @@ import { MatMenuModule } from '@angular/material/menu';
 import { MatTableModule } from '@angular/material/table';
 import { MatTabsModule } from '@angular/material/tabs';
 import { RouterLink } from '@angular/router';
-import { createEmptyPlayerStats, Player, PlayerStats } from '../../../core/models/player.model';
+import { Player, PlayerStatus } from '../../../core/models/player.model';
 import { PlayerService } from '../../../core/services/player.service';
 import { AvatarComponent } from '../../../shared/ui';
-import { Match } from '../../../core/models';
+
+/** Fila de tabla de partidos (mock enriquecido; no coincide con `Match` del dominio). */
+interface UserMatchTableRow {
+  id: string;
+  championshipId: string;
+  homeTeam: { name: string };
+  awayTeam: { name: string };
+  homeScore: number;
+  awayScore: number;
+  status: string;
+  scheduledDate: Date;
+  scheduledTime: string;
+  venue?: string;
+}
 
 @Component({
   selector: 'app-player-detail',
@@ -45,14 +58,14 @@ import { Match } from '../../../core/models';
           <div class="team-header-content flex flex-col items-center justify-center">
             <!-- Player Logo and Name -->
             <div class="team-logo">
-              @if (p.photo) {
-                <img [src]="p.photo" [alt]="p.fullName + ' Photo'" />
+              @if (p.photoUrl) {
+                <img [src]="p.photoUrl" [alt]="playerFullName(p) + ' Photo'" />
               } @else {
-                <ui-avatar name="John Doe" size="xl" />
+                <ui-avatar [name]="playerFullName(p)" size="xl" />
               }
             </div>
             <div class="player-info">
-              <h2 class="player-name text-primary">{{ p.fullName }}</h2>
+              <h2 class="player-name text-primary">{{ playerFullName(p) }}</h2>
             </div>
           </div>
         </div>
@@ -373,7 +386,7 @@ export default class PlayerDetailPage {
   isLoading = signal(false);
   player = signal<Player | null>(null);
   private playerService = inject(PlayerService);
-  matches = signal<Match[]>([]);
+  matches = signal<UserMatchTableRow[]>([]);
   displayedColumns = ['number', 'name', 'position', 'status', 'actions'];
   displayedColumnsMatches = ['championship', 'teams', 'date', 'venue', 'status', 'actions'];
 
@@ -412,29 +425,18 @@ export default class PlayerDetailPage {
       const player: Player = {
         id: '1',
         teamId: '1',
-        championshipId: '1',
-        organizationId: '1',
+        positionId: 1,
+        photoUrl: null,
         firstName: 'John',
         lastName: 'Doe',
-        fullName: 'John Doe',
+        nickName: null,
+        birthDate: new Date('1995-06-15'),
         number: 1,
-        position: 'Forward',
-        status: 'active',
-        stats: {
-          matchesPlayed: 10,
-          minutesPlayed: 1000,
-          goals: 10,
-          assists: 10,
-          yellowCards: 10,
-          redCards: 10,
-          ownGoals: 10,
-          penaltiesScored: 10,
-          penaltiesMissed: 10,
-          points: 10,
-          freeThrows: 10,
-          twoPointers: 10,
-          threePointers: 10,
-        },
+        height: null,
+        weight: null,
+        status: PlayerStatus.Active,
+        suspensionEndDate: null,
+        suspensionReason: null,
         createdAt: new Date(),
         updatedAt: new Date(),
       };
@@ -445,127 +447,52 @@ export default class PlayerDetailPage {
 
   private loadMatches(id: string): void {
     this.isLoading.set(true);
-    const mockTeamHome = {
-      id: '1',
-      name: 'Team 1',
-      shortName: 'T1',
-      logo: 'https://api.sofascore.app/api/v1/team/1/image',
-      primaryColor: '#1a237e',
-    };
-    const mockTeamAway = {
-      id: '2',
-      name: 'Team 2',
-      shortName: 'T2',
-      logo: 'https://api.sofascore.app/api/v1/team/2/image',
-      primaryColor: '#b71c1c',
-    };
-    // The mockMatches structure is currently a two-dimensional array and uses MongoDB style entities (ObjectId(), ISODate(), etc).
-    // We'll replace it with a correct, simple array of objects using primitive types, and structure the objects so they match the Match model and your rendering template.
-
-    // For demonstration, uses mockTeamHome and mockTeamAway as teams, and provides realistic fields.
-
-    const mockMatches: Partial<Match>[] = [
+    const mockMatches: UserMatchTableRow[] = [
       {
         id: 'match-1',
         championshipId: 'champ-1',
-        organizationId: 'org-1',
-        homeTeam: mockTeamHome,
-        awayTeam: mockTeamAway,
+        homeTeam: { name: 'Team 1' },
+        awayTeam: { name: 'Team 2' },
         homeScore: 2,
         awayScore: 1,
         status: 'finished',
-        round: 1,
-        matchday: 1,
         scheduledDate: new Date('2024-08-01'),
         scheduledTime: '18:00',
         venue: 'Estadio Monumental',
-        city: 'Guayaquil',
-        currentPeriod: 2,
-        elapsedSeconds: 5400,
-        isClockRunning: false,
-        periodScores: [
-          { period: 1, homeScore: 2, awayScore: 0 },
-          { period: 2, homeScore: 0, awayScore: 1 },
-        ],
-        isHighlighted: false,
-        createdAt: new Date('2024-02-12T04:03:36.228Z'),
-        updatedAt: new Date('2024-02-12T04:03:36.233Z'),
       },
       {
         id: 'match-2',
         championshipId: 'champ-1',
-        organizationId: 'org-1',
-        homeTeam: mockTeamHome,
-        awayTeam: {
-          ...mockTeamAway,
-          id: '3',
-          name: 'Team 3',
-          shortName: 'T3',
-          logo: 'https://api.sofascore.app/api/v1/team/3/image',
-          primaryColor: '#388e3c',
-        },
+        homeTeam: { name: 'Team 1' },
+        awayTeam: { name: 'Team 3' },
         homeScore: 1,
         awayScore: 3,
         status: 'finished',
-        round: 1,
-        matchday: 2,
         scheduledDate: new Date('2024-08-02'),
         scheduledTime: '20:00',
         venue: 'Estadio Capwell',
-        city: 'Guayaquil',
-        currentPeriod: 2,
-        elapsedSeconds: 5400,
-        isClockRunning: false,
-        periodScores: [
-          { period: 1, homeScore: 0, awayScore: 2 },
-          { period: 2, homeScore: 1, awayScore: 1 },
-        ],
-        isHighlighted: false,
-        createdAt: new Date('2024-02-12T04:03:36.228Z'),
-        updatedAt: new Date('2024-02-12T04:03:36.234Z'),
       },
       {
-        id: 'match-2',
+        id: 'match-3',
         championshipId: 'champ-1',
-        organizationId: 'org-1',
-        homeTeam: mockTeamHome,
-        awayTeam: {
-          ...mockTeamAway,
-          id: '3',
-          name: 'Team 3',
-          shortName: 'T3',
-          logo: 'https://api.sofascore.app/api/v1/team/3/image',
-          primaryColor: '#388e3c',
-        },
+        homeTeam: { name: 'Team 1' },
+        awayTeam: { name: 'Team 3' },
         homeScore: 1,
         awayScore: 3,
         status: 'finished',
-        round: 1,
-        matchday: 2,
-        scheduledDate: new Date('2024-08-02'),
+        scheduledDate: new Date('2024-08-03'),
         scheduledTime: '20:00',
         venue: 'Estadio Capwell',
-        city: 'Guayaquil',
-        currentPeriod: 2,
-        elapsedSeconds: 5400,
-        isClockRunning: false,
-        periodScores: [
-          { period: 1, homeScore: 0, awayScore: 2 },
-          { period: 2, homeScore: 1, awayScore: 1 },
-        ],
-        isHighlighted: false,
-        createdAt: new Date('2024-02-12T04:03:36.228Z'),
-        updatedAt: new Date('2024-02-12T04:03:36.234Z'),
       },
     ];
 
     setTimeout(() => {
-      this.matches = signal<Match[]>(mockMatches as unknown as Match[]);
+      this.matches.set(mockMatches);
       this.isLoading.set(false);
     }, 2000);
 
     // this.matchService.getMatches(id).subscribe({
-    //   next: (matches: Match[]) => {
+    //   next: (matches) => {
     //     this.matches.set(matches);
     //     this.isLoading.set(false);
     //   },
@@ -576,12 +503,23 @@ export default class PlayerDetailPage {
     // });
   }
 
+  playerFullName(p: Player): string {
+    return `${p.firstName} ${p.lastName}`.trim();
+  }
+
   getStatusLabel(status: string): string {
     const labels: Record<string, string> = {
       active: 'Activo',
       injured: 'Lesionado',
       suspended: 'Suspendido',
       inactive: 'Inactivo',
+      scheduled: 'Programado',
+      live: 'En vivo',
+      finished: 'Finalizado',
+      warmup: 'Calentamiento',
+      halftime: 'Descanso',
+      cancelled: 'Cancelado',
+      postponed: 'Aplazado',
     };
     return labels[status] || status;
   }

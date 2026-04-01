@@ -25,25 +25,25 @@ export const routes: Routes = [
 
   //* Public routes (existing)
   {
-    path: '',
+    path: 'team/:teamId',
     pathMatch: 'full',
-    redirectTo: 'matches',
+    loadComponent: () => import("./features/team/pages/details/team-details.page")
   },
-  {
-    path: 'match/:matchId',
-    loadComponent: () => import('./features/matches/pages/match-details/match-details'),
-    title: 'Match Details',
-  },
+  // {
+  //   path: 'match/:matchId',
+  //   loadComponent: () => import('./features/matches/pages/match-details/match-details'),
+  //   title: 'Match Details',
+  // },
   {
     path: 'live-match',
     loadComponent: () => import('./features/matches/pages/live-match-logger/live-match-logger'),
     title: 'Live Match Logger',
   },
-  {
-    path: 'matches',
-    loadComponent: () => import('./features/matches/pages/matches-list/matches-list'),
-    title: 'Matches',
-  },
+  // {
+  //   path: 'matches',
+  //   loadComponent: () => import('./features/matches/pages/matches-list/matches-list'),
+  //   title: 'Matches',
+  // },
   {
     path: 'team/:id',
     loadComponent: () => import('./features/user/page/team-detail.page'),

@@ -1,4 +1,7 @@
-import type { Team, TeamBasicInfo } from './team.model';
+import type { Team } from './team.model';
+import type { DbId } from './db.types';
+
+type TeamBasicInfo = Pick<Team, 'id' | 'name' | 'shortname' | 'logoUrl'>;
 
 export type MatchStatus =
   | 'scheduled'
@@ -17,61 +20,25 @@ export type MatchStatus =
  * Match entity
  */
 export interface Match {
-  id: string;
-  championshipId: string;
-  organizationId: string; // Denormalized
-
-  // Teams
-  homeTeamId: string;
-  awayTeamId: string;
-  homeTeam?: TeamBasicInfo; // Populated
-  awayTeam?: TeamBasicInfo; // Populated
-
-  // Main score
+  id: DbId;
+  groupTeamId: DbId;
+  homeTeamId: DbId;
+  awayTeamId: DbId;
   homeScore: number;
   awayScore: number;
-
-  // Status
   status: MatchStatus;
-
-  // Scheduling
-  round: number; // Matchday/Round
-  matchday: number; // Order within round
-  group?: string; // For group stage: "A", "B", etc.
-  stage?: string; // "group_stage", "quarterfinals", etc.
-
-  // Dates and venue
-  scheduledDate: Date;
-  scheduledTime: string; // "15:00"
+  round: number;
+  matchDay?: number;
+  scheduledStart?: Date;
   actualStartTime?: Date;
   actualEndTime?: Date;
   venue?: string;
   city?: string;
-
-  // Referees
-  referee?: string;
-  assistantReferee1?: string;
-  assistantReferee2?: string;
-
-  // Game time
-  currentPeriod: number; // Current half/quarter/set
-  elapsedSeconds: number; // Seconds elapsed in current period
-  isClockRunning: boolean;
-
-  // Period scores (Basketball/Volleyball)
-  periodScores: PeriodScore[];
-
-  // Volleyball specific
-  homeSets?: number;
-  awaySets?: number;
-
-  // Metadata
-  notes?: string;
-  isHighlighted: boolean; // Featured match
-  streamUrl?: string; // Streaming link
-
-  createdAt: Date;
-  updatedAt: Date;
+  createdAt?: Date;
+  updatedAt?: Date;
+  bracketSlotId?: number;
+  legNumber?: number;
+  isActive: boolean;
 }
 
 export interface PeriodScore {
@@ -84,8 +51,8 @@ export interface PeriodScore {
  * DTO for creating a new match
  */
 export interface CreateMatchDto {
-  homeTeamId: string;
-  awayTeamId: string;
+  homeTeamId: DbId;
+  awayTeamId: DbId;
   scheduledDate: Date;
   scheduledTime: string;
   round: number;
@@ -137,7 +104,7 @@ export interface MatchWithTeams extends Match {
  * Match list item for displaying in lists
  */
 export interface MatchListItem {
-  id: string;
+  id: DbId;
   homeTeam: TeamBasicInfo;
   awayTeam: TeamBasicInfo;
   homeScore: number;

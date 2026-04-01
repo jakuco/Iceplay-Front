@@ -1,160 +1,240 @@
-export type PlayerStatus = 'active' | 'injured' | 'suspended' | 'inactive';
+// ─────────────────────────────────────────────────────────────
+// player.model.ts
+//
+// Nota de dependencias:
+//   · NO importa Team directamente para evitar dependencia circular.
+//     La referencia al equipo se modela como TeamSummary inline.
+//   · Importa Position y TypeMatchEvent desde sport-config.model
+//     para tipar estadísticas y convocatorias.
+// ─────────────────────────────────────────────────────────────
+
+import type { Position, TypeMatchEvent } from './sport-config.model';
+import type { DbId } from './db.types';
+
+
+// ─────────────────────────────────────────────────────────────
+// ENUMS
+// ─────────────────────────────────────────────────────────────
 
 /**
- * Player entity
+ * Estado del jugador.
+ * Afecta directamente la disponibilidad para convocatorias.
+ *
+ *  active     → disponible para ser convocado a partido
+ *  suspended  → sancionado; suspensionEndDate indica cuándo se levanta
+ *  injured    → baja médica; no convocable pero preserva historial
+ *  inactive   → soft-delete; dado de baja del equipo
  */
-export interface Player {
-  id: string;
-  teamId: string;
-  championshipId: string; // Denormalized for queries
-  organizationId: string; // Denormalized for queries
+export enum PlayerStatus {
+  Active = 'active',
+  Suspended = 'suspended',
+  Injured = 'injured',
+  Inactive = 'inactive',
+}
 
-  // Personal information
+
+// ─────────────────────────────────────────────────────────────
+// TIPOS AUXILIARES
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Resumen mínimo del equipo para mostrar en contexto del jugador.
+ * Definido inline para evitar dependencia circular con team.model.
+ */
+export interface TeamSummary {
+  id: DbId;
+  name: string;
+  shortname: string;
+  logoUrl: string | null;
+}
+
+
+// ─────────────────────────────────────────────────────────────
+// ENTIDAD PRINCIPAL
+// ─────────────────────────────────────────────────────────────
+
+export interface Player {
+  id: DbId;
+  teamId: DbId;
+  positionId: DbId;
+  photoUrl?: string | null;
+
+  // Datos personales
   firstName: string;
   lastName: string;
-  fullName: string; // Computed: firstName + lastName
-  nickname?: string;
+  nickName: string | null;
+  birthDate: Date;
 
-  // Sports information
-  number: number;
-  position: string; // Position code according to sport
-  secondaryPosition?: string;
+  // Datos deportivos
+  number: number;        // número de camiseta; único por equipo
+  height: number | null; // cm
+  weight: number | null; // kg
 
-  // Additional information
-  document?: string; // ID number (cedula, DNI, etc.)
-  birthDate?: Date;
-  age?: number; // Computed
-  nationality?: string;
-  height?: number; // In cm
-  weight?: number; // In kg
-  photo?: string;
-
-  // Status
+  // Estado y sanciones
   status: PlayerStatus;
-  suspensionEndDate?: Date;
-  suspensionReason?: string;
-
-  // Accumulated statistics (auto-updated)
-  stats: PlayerStats;
+  suspensionEndDate: Date | null;
+  suspensionReason: string | null;
+  isActive?: boolean;
 
   createdAt: Date;
   updatedAt: Date;
+
+  // Relaciones opcionales
+  position?: Position;
+  team?: TeamSummary;
 }
 
+
+// ─────────────────────────────────────────────────────────────
+// PIVOT Match ↔ Player (convocatoria)
+// ─────────────────────────────────────────────────────────────
+
 /**
- * Player statistics (varies by sport)
+ * UC: jugadores convocados a un partido.
+ * Registra qué jugadores fueron habilitados para un partido específico.
  */
-export interface PlayerStats {
-  matchesPlayed: number;
-  minutesPlayed: number;
-
-  // Football
-  goals?: number;
-  assists?: number;
-  yellowCards?: number;
-  redCards?: number;
-  ownGoals?: number;
-  penaltiesScored?: number;
-  penaltiesMissed?: number;
-
-  // Basketball
-  points?: number;
-  freeThrows?: number;
-  twoPointers?: number;
-  threePointers?: number;
-  rebounds?: number;
-  steals?: number;
-  blocks?: number;
-  turnovers?: number;
-  fouls?: number;
-
-  // Volleyball
-  aces?: number;
-  blockPoints?: number;
-  kills?: number;
-  digs?: number;
-  errors?: number;
+export interface MatchPlayer {
+  matchId: DbId;
+  playerId: DbId;
+  isStarter?: boolean;
+  minutesPlayed?: number | null;
+  player?: Pick<Player, 'id' | 'firstName' | 'lastName' | 'nickName' | 'number' | 'positionId'>;
 }
 
+
+// ─────────────────────────────────────────────────────────────
+// DTOs — CREATE
+// ─────────────────────────────────────────────────────────────
+
 /**
- * DTO for creating a new player
+ * UC: Inscribir jugador en equipo.
+ * positionId debe validarse contra SportPosition del deporte del campeonato.
+ * number debe ser único dentro del equipo.
  */
 export interface CreatePlayerDto {
+  positionId: DbId;
   firstName: string;
   lastName: string;
+  nickName?: string;
+  birthDate: Date;
   number: number;
-  position: string;
-  secondaryPosition?: string;
-  document?: string; // ID number (cedula, DNI, etc.)
-  birthDate?: Date;
-  nationality?: string;
   height?: number;
   weight?: number;
-  photo?: string;
 }
 
-/**
- * DTO for updating a player
- */
+/** UC: Convocar jugador a partido */
+export interface CreateMatchPlayerDto {
+  playerId: DbId;   // validar que pertenezca al homeTeam o awayTeam del Match
+}
+
+
+// ─────────────────────────────────────────────────────────────
+// DTOs — UPDATE
+// ─────────────────────────────────────────────────────────────
+
+/** UC: Editar datos básicos del jugador (sin implicaciones de negocio) */
 export interface UpdatePlayerDto {
   firstName?: string;
   lastName?: string;
-  fullName?: string; // Allow updating fullName directly
-  nickname?: string;
-  number?: number;
-  position?: string;
-  secondaryPosition?: string;
-  document?: string;
-  birthDate?: Date;
-  nationality?: string;
-  height?: number;
-  weight?: number;
-  photo?: string;
+  nickName?: string | null;
+  number?: number;        // validar unicidad dentro del equipo
+  height?: number | null;
+  weight?: number | null;
+}
+
+/**
+ * UC: Cambiar equipo del jugador (transferencia).
+ * El nuevo teamId debe pertenecer al mismo campeonato.
+ * El historial de MatchEvent permanece intacto — referencia playerId, no teamId.
+ */
+export interface TransferPlayerDto {
+  teamId: DbId;
+}
+
+/**
+ * UC: Sancionar jugador.
+ * Separado de UpdatePlayerDto para que el service pueda
+ * auditar y disparar notificaciones específicas de sanción.
+ * Normalmente disparado por acumulación de tarjetas desde MatchEvent.
+ */
+export interface SuspendPlayerDto {
+  suspensionEndDate: Date;
+  suspensionReason: string;
+}
+
+/**
+ * UC: Levantar sanción manualmente (apelación).
+ * Sin payload — el service resetea status=active y nullea los campos de suspensión.
+ */
+export type LiftSuspensionDto = Record<never, never>;
+
+
+// ─────────────────────────────────────────────────────────────
+// DTOs — QUERY
+// ─────────────────────────────────────────────────────────────
+
+/** UC: Listar jugadores de un equipo con filtros */
+export interface PlayerFiltersDto {
   status?: PlayerStatus;
-  suspensionEndDate?: Date;
-  suspensionReason?: string;
-  teamId?: string; // Allow changing team
-  championshipId?: string; // Allow changing championship
+  positionId?: DbId;
+  search?: string;       // sobre firstName, lastName, nickName
+  page?: number;
+  limit?: number;
+}
+
+
+// ─────────────────────────────────────────────────────────────
+// RESPONSE TYPES
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * UC: Perfil de jugador con estadísticas del campeonato.
+ */
+export interface PlayerProfile extends Player {
+  stats: PlayerStats;
 }
 
 /**
- * Simplified player info for lineups and event logging
+ * UC: Estadísticas del jugador calculadas desde MatchEvent.
+ * matchesPlayed viene de MatchPlayer.
+ * eventStats agrupa conteos por TypeMatchEvent (goles, tarjetas, etc.).
  */
-export interface PlayerBasicInfo {
-  id: string;
-  fullName: string;
-  number: number;
-  position: string;
-  photo?: string;
+export interface PlayerStats {
+  playerId: DbId;
+  matchesPlayed: number;
+  minutesPlayed: number | null;   // solo si el deporte registra tiempo exacto
+  eventStats: Array<{
+    typeMatchEvent: Pick<TypeMatchEvent, 'id' | 'label' | 'icon' | 'color' | 'category'>;
+    count: number;
+  }>;
 }
 
 /**
- * Create empty player stats
+ * UC: Jugadores disponibles para convocatoria.
+ * Subset mínimo para poblar el selector de convocatoria.
  */
-export function createEmptyPlayerStats(): PlayerStats {
+export type PlayerConvocationItem = Pick<
+  Player,
+  'id' | 'firstName' | 'lastName' | 'nickName' | 'number' | 'positionId' | 'status'
+> & {
+  position: Pick<Position, 'label' | 'abbreviation'>;
+};
+
+/** Respuesta paginada */
+export interface PaginatedPlayers {
+  data: Player[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+/** Stats vacías hasta que el backend devuelva `PlayerProfile.stats`. */
+export function createEmptyPlayerStats(playerId: DbId): PlayerStats {
   return {
+    playerId,
     matchesPlayed: 0,
-    minutesPlayed: 0,
-    goals: 0,
-    assists: 0,
-    yellowCards: 0,
-    redCards: 0,
-    ownGoals: 0,
-    penaltiesScored: 0,
-    penaltiesMissed: 0,
-    points: 0,
-    freeThrows: 0,
-    twoPointers: 0,
-    threePointers: 0,
-    rebounds: 0,
-    steals: 0,
-    blocks: 0,
-    turnovers: 0,
-    fouls: 0,
-    aces: 0,
-    blockPoints: 0,
-    kills: 0,
-    digs: 0,
-    errors: 0,
+    minutesPlayed: null,
+    eventStats: [],
   };
 }

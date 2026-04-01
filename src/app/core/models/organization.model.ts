@@ -1,10 +1,11 @@
 import type { Sport } from './sport-config.model';
+import type { DbId } from './db.types';
 
 /**
  * Organization entity representing a sports league organization
  */
 export interface Organization {
-  id: string;
+  id: DbId;
   name: string;
   slug: string; // URL-friendly identifier: "liga-quito-norte"
   description?: string;
@@ -16,6 +17,8 @@ export interface Organization {
   city?: string;
   country: string;
   website?: string;
+  primaryColor?: string;
+  secondaryColor?: string;
   socialLinks?: OrganizationSocialLinks;
   settings?: OrganizationSettings;
   createdAt: Date;

@@ -12,11 +12,12 @@ import { MatIcon } from '@angular/material/icon';
 import { MatDivider } from '@angular/material/divider';
 import { SidenavService } from '../../core/services/sidenav.service';
 import { I18nService } from '../../core/services/i18n.service';
-import { SPORT_CONFIGS, type Sport } from '../../core/models/sport-config.model';
 import { TranslatePipe } from '../../core/pipes/translate.pipe';
 
+type SportKey = 'football' | 'basketball' | 'volleyball';
+
 interface SportNavItem {
-  sport: Sport;
+  sport: SportKey;
   icon: string;
   route: string;
 }
@@ -208,23 +209,11 @@ export class SportSidenavComponent {
   private readonly i18nService = inject(I18nService);
   private readonly cdr = inject(ChangeDetectorRef);
 
-  /** Navigation items derived from sport configurations */
+  /** Navigation items for available sports */
   protected readonly sportNavItems: SportNavItem[] = [
-    {
-      sport: 'football',
-      icon: SPORT_CONFIGS.football.icon,
-      route: '/matches',
-    },
-    {
-      sport: 'basketball',
-      icon: SPORT_CONFIGS.basketball.icon,
-      route: '/matches2',
-    },
-    {
-      sport: 'volleyball',
-      icon: SPORT_CONFIGS.volleyball.icon,
-      route: '/matches3',
-    },
+    { sport: 'football',   icon: 'sports_soccer',    route: '/matches' },
+    { sport: 'basketball', icon: 'sports_basketball', route: '/matches2' },
+    { sport: 'volleyball', icon: 'sports_volleyball', route: '/matches3' },
   ];
 
   constructor() {
