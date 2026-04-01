@@ -1,5 +1,6 @@
 import type { Player } from './player.model';
 import type { Team } from './team.model';
+import type { DbId } from './db.types';
 
 type PlayerBasicInfo = Pick<Player, 'id' | 'firstName' | 'lastName' | 'nickName' | 'number' | 'positionId'>;
 type TeamBasicInfo = Pick<Team, 'id' | 'name' | 'shortname' | 'logoUrl'>;
@@ -10,8 +11,8 @@ type TeamBasicInfo = Pick<Team, 'id' | 'name' | 'shortname' | 'logoUrl'>;
 export interface MatchEvent {
     typeMatchEventId: number;
     time: number;
-    id: string;
-    matchId: string;
+    id: DbId;
+    matchId: DbId;
     typeMatchEvent: {
         id: number;
         label: string;
@@ -21,21 +22,26 @@ export interface MatchEvent {
         matchPoint?: number | undefined;
         standingPoints?: number | undefined;
     };
-    teamId?: string | undefined;
-    playerId?: string | undefined;
+    teamId?: DbId | undefined;
+    playerId?: DbId | undefined;
+    relatedEventMatchId?: DbId | undefined;
+    description?: string | null;
 }
 
 /**
  * DTO for creating an event
  */
 export interface CreateEventDto {
-    type: string;
-    playerId: string;
-    teamId: string;
+    type?: string;
+    typeMatchEventId?: number;
+    playerId: DbId;
+    teamId: DbId;
+    matchId?: DbId;
     period: number;
     minute: number;
     extraMinute?: number;
-    relatedPlayerId?: string;
+    relatedPlayerId?: DbId;
+    relatedEventMatchId?: DbId;
     description?: string;
 }
 
@@ -44,11 +50,14 @@ export interface CreateEventDto {
  */
 export interface UpdateEventDto {
     type?: string;
-    playerId?: string;
+    typeMatchEventId?: number;
+    playerId?: DbId;
+    teamId?: DbId;
     period?: number;
     minute?: number;
     extraMinute?: number;
-    relatedPlayerId?: string;
+    relatedPlayerId?: DbId;
+    relatedEventMatchId?: DbId;
     description?: string;
 }
 
@@ -56,7 +65,7 @@ export interface UpdateEventDto {
  * Event for display in timeline
  */
 export interface EventTimelineItem {
-    id: string;
+    id: DbId;
     type: string;
     typeLabel: string;
     typeIcon: string;

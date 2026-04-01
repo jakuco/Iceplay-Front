@@ -9,6 +9,7 @@
 // ─────────────────────────────────────────────────────────────
 
 import type { Position, TypeMatchEvent } from './sport-config.model';
+import type { DbId } from './db.types';
 
 
 // ─────────────────────────────────────────────────────────────
@@ -25,10 +26,10 @@ import type { Position, TypeMatchEvent } from './sport-config.model';
  *  inactive   → soft-delete; dado de baja del equipo
  */
 export enum PlayerStatus {
-  Active    = 'active',
+  Active = 'active',
   Suspended = 'suspended',
-  Injured   = 'injured',
-  Inactive  = 'inactive',
+  Injured = 'injured',
+  Inactive = 'inactive',
 }
 
 
@@ -41,10 +42,10 @@ export enum PlayerStatus {
  * Definido inline para evitar dependencia circular con team.model.
  */
 export interface TeamSummary {
-  id:        number;
-  name:      string;
+  id: DbId;
+  name: string;
   shortname: string;
-  logoUrl:   string | null;
+  logoUrl: string | null;
 }
 
 
@@ -53,32 +54,34 @@ export interface TeamSummary {
 // ─────────────────────────────────────────────────────────────
 
 export interface Player {
-  id:         number;
-  teamId:     number;
-  positionId: number;
+  id: DbId;
+  teamId: DbId;
+  positionId: DbId;
+  photoUrl?: string | null;
 
   // Datos personales
-  firstName:  string;
-  lastName:   string;
-  nickName:   string | null;
-  birthDate:  Date;
+  firstName: string;
+  lastName: string;
+  nickName: string | null;
+  birthDate: Date;
 
   // Datos deportivos
-  number:     number;        // número de camiseta; único por equipo
-  height:     number | null; // cm
-  weight:     number | null; // kg
+  number: number;        // número de camiseta; único por equipo
+  height: number | null; // cm
+  weight: number | null; // kg
 
   // Estado y sanciones
-  status:             PlayerStatus;
-  suspensionEndDate:  Date | null;
-  suspensionReason:   string | null;
+  status: PlayerStatus;
+  suspensionEndDate: Date | null;
+  suspensionReason: string | null;
+  isActive?: boolean;
 
-  createdAt:  Date;
-  updatedAt:  Date;
+  createdAt: Date;
+  updatedAt: Date;
 
   // Relaciones opcionales
-  position?:  Position;
-  team?:      TeamSummary;
+  position?: Position;
+  team?: TeamSummary;
 }
 
 
@@ -91,9 +94,11 @@ export interface Player {
  * Registra qué jugadores fueron habilitados para un partido específico.
  */
 export interface MatchPlayer {
-  matchId:  number;
-  playerId: number;
-  player?:  Pick<Player, 'id' | 'firstName' | 'lastName' | 'nickName' | 'number' | 'positionId'>;
+  matchId: DbId;
+  playerId: DbId;
+  isStarter?: boolean;
+  minutesPlayed?: number | null;
+  player?: Pick<Player, 'id' | 'firstName' | 'lastName' | 'nickName' | 'number' | 'positionId'>;
 }
 
 
@@ -107,19 +112,19 @@ export interface MatchPlayer {
  * number debe ser único dentro del equipo.
  */
 export interface CreatePlayerDto {
-  positionId: number;
-  firstName:  string;
-  lastName:   string;
-  nickName?:  string;
-  birthDate:  Date;
-  number:     number;
-  height?:    number;
-  weight?:    number;
+  positionId: DbId;
+  firstName: string;
+  lastName: string;
+  nickName?: string;
+  birthDate: Date;
+  number: number;
+  height?: number;
+  weight?: number;
 }
 
 /** UC: Convocar jugador a partido */
 export interface CreateMatchPlayerDto {
-  playerId: number;   // validar que pertenezca al homeTeam o awayTeam del Match
+  playerId: DbId;   // validar que pertenezca al homeTeam o awayTeam del Match
 }
 
 
@@ -130,11 +135,11 @@ export interface CreateMatchPlayerDto {
 /** UC: Editar datos básicos del jugador (sin implicaciones de negocio) */
 export interface UpdatePlayerDto {
   firstName?: string;
-  lastName?:  string;
-  nickName?:  string | null;
-  number?:    number;        // validar unicidad dentro del equipo
-  height?:    number | null;
-  weight?:    number | null;
+  lastName?: string;
+  nickName?: string | null;
+  number?: number;        // validar unicidad dentro del equipo
+  height?: number | null;
+  weight?: number | null;
 }
 
 /**
@@ -143,7 +148,7 @@ export interface UpdatePlayerDto {
  * El historial de MatchEvent permanece intacto — referencia playerId, no teamId.
  */
 export interface TransferPlayerDto {
-  teamId: number;
+  teamId: DbId;
 }
 
 /**
@@ -153,8 +158,8 @@ export interface TransferPlayerDto {
  * Normalmente disparado por acumulación de tarjetas desde MatchEvent.
  */
 export interface SuspendPlayerDto {
-  suspensionEndDate:  Date;
-  suspensionReason:   string;
+  suspensionEndDate: Date;
+  suspensionReason: string;
 }
 
 /**
@@ -170,11 +175,11 @@ export type LiftSuspensionDto = Record<never, never>;
 
 /** UC: Listar jugadores de un equipo con filtros */
 export interface PlayerFiltersDto {
-  status?:     PlayerStatus;
-  positionId?: number;
-  search?:     string;       // sobre firstName, lastName, nickName
-  page?:       number;
-  limit?:      number;
+  status?: PlayerStatus;
+  positionId?: DbId;
+  search?: string;       // sobre firstName, lastName, nickName
+  page?: number;
+  limit?: number;
 }
 
 
@@ -195,12 +200,12 @@ export interface PlayerProfile extends Player {
  * eventStats agrupa conteos por TypeMatchEvent (goles, tarjetas, etc.).
  */
 export interface PlayerStats {
-  playerId:      number;
+  playerId: DbId;
   matchesPlayed: number;
   minutesPlayed: number | null;   // solo si el deporte registra tiempo exacto
   eventStats: Array<{
     typeMatchEvent: Pick<TypeMatchEvent, 'id' | 'label' | 'icon' | 'color' | 'category'>;
-    count:          number;
+    count: number;
   }>;
 }
 
@@ -217,9 +222,9 @@ export type PlayerConvocationItem = Pick<
 
 /** Respuesta paginada */
 export interface PaginatedPlayers {
-  data:       Player[];
-  total:      number;
-  page:       number;
-  limit:      number;
+  data: Player[];
+  total: number;
+  page: number;
+  limit: number;
   totalPages: number;
 }

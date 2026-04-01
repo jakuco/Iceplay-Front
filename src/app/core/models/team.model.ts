@@ -8,7 +8,8 @@
 // ─────────────────────────────────────────────────────────────
 
 import type { Championship } from './championship.model';
-import type { Player }       from './player.model';
+import type { Player } from './player.model';
+import type { DbId } from './db.types';
 
 
 // ─────────────────────────────────────────────────────────────
@@ -16,40 +17,41 @@ import type { Player }       from './player.model';
 // ─────────────────────────────────────────────────────────────
 
 export interface Team {
-  id:               number;
-  championshipId:   number;
+  id: DbId;
+  championshipId: DbId;
 
   // Identidad pública
-  name:             string;
-  shortname:        string;
-  slug:             string;
-  logoUrl:          string | null;
-  documentUrl:      string | null;    // URL de documento de inscripción
+  name: string;
+  shortname: string;
+  slug: string;
+  logoUrl: string | null;
+  documentUrl: string | null;    // URL de documento de inscripción
 
   // Identidad visual
-  primaryColor:     string | null;    // hex, ej. '#D4001A'
-  secondaryColor:   string | null;
+  primaryColor: string | null;    // hex, ej. '#D4001A'
+  secondaryColor: string | null;
 
   // Información del club
-  foundedYear:      number | null;
-  homeVenue:        string | null;
-  location:         string | null;
+  foundedYear: number | null;
+  homeVenue: string | null;
+  location: string | null;
 
   // Datos del cuerpo técnico (desnormalizados — no es entidad propia)
-  coachName:        string | null;
-  coachPhone:       string | null;
+  coachName: string | null;
+  coachPhone: string | null;
 
   // Estado operacional
-  isActive:         boolean;
+  isActive: boolean;
   hasActiveMatches: boolean;          // campo materializado; NO calcular en runtime
+  isTeamActive?: boolean;
 
-  createdAt:        Date;
-  updatedAt:        Date;
+  createdAt: Date;
+  updatedAt: Date;
 
   // Relaciones opcionales
-  championship?:    Pick<Championship, 'id' | 'name' | 'slug' | 'maxPlayersPerTeam'>;
-  players?:         Player[];
-  groups?:          TeamGroupTeam[];
+  championship?: Pick<Championship, 'id' | 'name' | 'slug' | 'maxPlayersPerTeam'>;
+  players?: Player[];
+  groups?: TeamGroupTeam[];
 }
 
 
@@ -61,15 +63,15 @@ export interface Team {
  * UC: grupos en que participa un equipo / asignar equipo a grupo.
  */
 export interface TeamGroupTeam {
-  teamId:       number;
-  groupTeamId:  number;
+  teamId: DbId;
+  groupTeamId: DbId;
 
   // JOIN enriquecido para mostrar contexto de la fase
   groupTeam?: {
-    id:         number;
-    order:      number;
-    name:       string | null;
-    phaseId:    number;
+    id: DbId;
+    order: number;
+    name: string | null;
+    phaseId: DbId;
     phaseName?: string;
     phaseType?: string;
   };
@@ -82,24 +84,24 @@ export interface TeamGroupTeam {
 
 /** UC: Inscribir equipo al campeonato */
 export interface CreateTeamDto {
-  name:            string;
-  shortname:       string;
-  slug:            string;
-  logoUrl?:        string;
-  documentUrl?:    string;
-  primaryColor?:   string;
+  name: string;
+  shortname: string;
+  slug: string;
+  logoUrl?: string;
+  documentUrl?: string;
+  primaryColor?: string;
   secondaryColor?: string;
-  foundedYear?:    number;
-  homeVenue?:      string;
-  location?:       string;
-  coachName?:      string;
-  coachPhone?:     string;
+  foundedYear?: number;
+  homeVenue?: string;
+  location?: string;
+  coachName?: string;
+  coachPhone?: string;
 }
 
 /** UC: Asignar equipo a un grupo */
 export interface CreateTeamGroupTeamDto {
-  teamId:      number;
-  groupTeamId: number;
+  teamId: DbId;
+  groupTeamId: DbId;
 }
 
 
@@ -109,18 +111,18 @@ export interface CreateTeamGroupTeamDto {
 
 /** UC: Editar información del equipo */
 export interface UpdateTeamDto {
-  name?:           string;
-  shortname?:      string;
-  slug?:           string;
-  logoUrl?:        string | null;
-  documentUrl?:    string | null;
-  primaryColor?:   string | null;
+  name?: string;
+  shortname?: string;
+  slug?: string;
+  logoUrl?: string | null;
+  documentUrl?: string | null;
+  primaryColor?: string | null;
   secondaryColor?: string | null;
-  foundedYear?:    number | null;
-  homeVenue?:      string | null;
-  location?:       string | null;
-  coachName?:      string | null;
-  coachPhone?:     string | null;
+  foundedYear?: number | null;
+  homeVenue?: string | null;
+  location?: string | null;
+  coachName?: string | null;
+  coachPhone?: string | null;
 }
 
 /**
@@ -139,11 +141,11 @@ export interface UpdateTeamStatusDto {
 
 /** UC: Listar equipos del campeonato con filtros */
 export interface TeamFiltersDto {
-  isActive?:         boolean;
+  isActive?: boolean;
   hasActiveMatches?: boolean;
-  search?:           string;   // sobre name y shortname
-  page?:             number;
-  limit?:            number;
+  search?: string;   // sobre name y shortname
+  page?: number;
+  limit?: number;
 }
 
 
@@ -156,17 +158,17 @@ export interface TeamFiltersDto {
  * Campos planos + playerCount. Sin array de jugadores.
  */
 export interface TeamListItem {
-  id:               number;
-  name:             string;
-  shortname:        string;
-  slug:             string;
-  logoUrl:          string | null;
-  primaryColor:     string | null;
-  secondaryColor:   string | null;
-  coachName:        string | null;
-  isActive:         boolean;
+  id: number;
+  name: string;
+  shortname: string;
+  slug: string;
+  logoUrl: string | null;
+  primaryColor: string | null;
+  secondaryColor: string | null;
+  coachName: string | null;
+  isActive: boolean;
   hasActiveMatches: boolean;
-  playerCount:      number;       // COUNT materializado, no array
+  playerCount: number;       // COUNT materializado, no array
 }
 
 /**
@@ -175,8 +177,8 @@ export interface TeamListItem {
  */
 export interface TeamProfile extends Team {
   players: Player[];
-  groups:  TeamGroupTeam[];
-  stats:   TeamStats;
+  groups: TeamGroupTeam[];
+  stats: TeamStats;
 }
 
 /**
@@ -184,22 +186,22 @@ export interface TeamProfile extends Team {
  * Recomendado materializar en tabla Standing — no calcular en cada request.
  */
 export interface TeamStats {
-  teamId:         number;
-  played:         number;
-  won:            number;
-  drawn:          number;
-  lost:           number;
-  goalsFor:       number;
-  goalsAgainst:   number;
+  teamId: DbId;
+  played: number;
+  won: number;
+  drawn: number;
+  lost: number;
+  goalsFor: number;
+  goalsAgainst: number;
   goalDifference: number;
-  points:         number;
+  points: number;
 }
 
 /** Respuesta paginada */
 export interface PaginatedTeams {
-  data:       TeamListItem[];
-  total:      number;
-  page:       number;
-  limit:      number;
+  data: TeamListItem[];
+  total: number;
+  page: number;
+  limit: number;
   totalPages: number;
 }

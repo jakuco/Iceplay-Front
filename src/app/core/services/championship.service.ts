@@ -23,16 +23,17 @@ import {
   UpdateChampionshipStatusDto,
 } from '../models/championship.model';
 import { CreateTeamDto, TeamProfile } from '../models/team.model';
+import type { DbId } from '../models/db.types';
 
 // ─────────────────────────────────────────────────────────────
 // localStorage keys
 // ─────────────────────────────────────────────────────────────
 
 const LS_CHAMPIONSHIPS = 'iceplay_championships';
-const LS_PHASES        = 'iceplay_phases';
-const LS_RULES         = 'iceplay_rules';
-const LS_TEAMS         = 'iceplay_teams';
-const LS_SOCIAL_LINKS  = 'iceplay_social_links';
+const LS_PHASES = 'iceplay_phases';
+const LS_RULES = 'iceplay_rules';
+const LS_TEAMS = 'iceplay_teams';
+const LS_SOCIAL_LINKS = 'iceplay_social_links';
 
 // ─────────────────────────────────────────────────────────────
 // Reglas por defecto por deporte (seed cuando no hay backend)
@@ -41,15 +42,15 @@ const LS_SOCIAL_LINKS  = 'iceplay_social_links';
 type DefaultRule = ChampionshipRulesResponse['rules'][number];
 
 const FOOTBALL_RULES: DefaultRule[] = [
-  { matchRuleId: 1, name: 'max_players',           defaultValue: 20, currentValue: 20, isOverridden: false },
-  { matchRuleId: 2, name: 'min_players',           defaultValue: 12, currentValue: 12, isOverridden: false },
-  { matchRuleId: 3, name: 'max_substitutions',     defaultValue:  5, currentValue:  5, isOverridden: false },
-  { matchRuleId: 4, name: 'match_duration',        defaultValue: 45, currentValue: 45, isOverridden: false },
+  { matchRuleId: 1, name: 'max_players', defaultValue: 20, currentValue: 20, isOverridden: false },
+  { matchRuleId: 2, name: 'min_players', defaultValue: 12, currentValue: 12, isOverridden: false },
+  { matchRuleId: 3, name: 'max_substitutions', defaultValue: 5, currentValue: 5, isOverridden: false },
+  { matchRuleId: 4, name: 'match_duration', defaultValue: 45, currentValue: 45, isOverridden: false },
   { matchRuleId: 5, name: 'yellow_cards_suspension', defaultValue: 3, currentValue: 3, isOverridden: false },
-  { matchRuleId: 6, name: 'red_card_suspension',   defaultValue:  1, currentValue:  1, isOverridden: false },
-  { matchRuleId: 7, name: 'extra_time',            defaultValue:  0, currentValue:  0, isOverridden: false },
-  { matchRuleId: 8, name: 'penalty_shootout',      defaultValue:  0, currentValue:  0, isOverridden: false },
-  { matchRuleId: 9, name: 'allow_guest_players',   defaultValue:  0, currentValue:  0, isOverridden: false },
+  { matchRuleId: 6, name: 'red_card_suspension', defaultValue: 1, currentValue: 1, isOverridden: false },
+  { matchRuleId: 7, name: 'extra_time', defaultValue: 0, currentValue: 0, isOverridden: false },
+  { matchRuleId: 8, name: 'penalty_shootout', defaultValue: 0, currentValue: 0, isOverridden: false },
+  { matchRuleId: 9, name: 'allow_guest_players', defaultValue: 0, currentValue: 0, isOverridden: false },
 ];
 
 const DEFAULT_RULES_BY_SPORT: Record<number, DefaultRule[]> = {
@@ -61,11 +62,11 @@ const DEFAULT_RULES_BY_SPORT: Record<number, DefaultRule[]> = {
 };
 
 const SOCIAL_NETWORKS: SocialNetwork[] = [
-  { id: 1, name: 'Facebook',  icon: 'thumb_up' },
+  { id: 1, name: 'Facebook', icon: 'thumb_up' },
   { id: 2, name: 'Instagram', icon: 'photo_camera' },
-  { id: 3, name: 'X',         icon: 'close' },
-  { id: 4, name: 'TikTok',    icon: 'music_note' },
-  { id: 5, name: 'YouTube',   icon: 'smart_display' },
+  { id: 3, name: 'X', icon: 'close' },
+  { id: 4, name: 'TikTok', icon: 'music_note' },
+  { id: 5, name: 'YouTube', icon: 'smart_display' },
 ];
 
 @Injectable({ providedIn: 'root' })
@@ -78,17 +79,17 @@ export class ChampionshipService {
     // 🔴 MOCK — localStorage
     let list = this.readList();
     if (filters?.organizationId !== undefined) list = list.filter(c => c.organizationId === filters.organizationId);
-    if (filters?.sportId        !== undefined) list = list.filter(c => c.sportId         === filters.sportId);
-    if (filters?.status)                       list = list.filter(c => c.status          === filters.status);
-    if (filters?.season)                       list = list.filter(c => c.season          === filters.season);
+    if (filters?.sportId !== undefined) list = list.filter(c => c.sportId === filters.sportId);
+    if (filters?.status) list = list.filter(c => c.status === filters.status);
+    if (filters?.season) list = list.filter(c => c.season === filters.season);
     if (filters?.search) {
       const q = filters.search.toLowerCase();
       list = list.filter(c => c.name.toLowerCase().includes(q) || c.slug.includes(q));
     }
-    const page       = filters?.page  ?? 1;
-    const limit      = filters?.limit ?? 20;
-    const start      = (page - 1) * limit;
-    const data       = list.slice(start, start + limit) as unknown as ChampionshipListItem[];
+    const page = filters?.page ?? 1;
+    const limit = filters?.limit ?? 20;
+    const start = (page - 1) * limit;
+    const data = list.slice(start, start + limit) as unknown as ChampionshipListItem[];
     const totalPages = Math.ceil(list.length / limit) || 1;
     return of({ data, total: list.length, page, limit, totalPages });
 
@@ -106,12 +107,12 @@ export class ChampionshipService {
     const teamsStored = this.readRecord<TeamProfile[]>(LS_TEAMS)[id] ?? [];
     const detail = {
       ...champ,
-      organization:     { id: champ.organizationId, name: 'Organización', logo: null },
-      sport:            { id: champ.sportId,         name: 'Deporte',      icon: 'sports' },
-      socialLinks:      this.getStoredSocialLinks(id),
-      phases:           this.readRecord<Phase[]>(LS_PHASES)[id] ?? [],
-      matchRules:       [],
-      teamCount:        teamsStored.length,
+      organization: { id: champ.organizationId, name: 'Organización', logo: null },
+      sport: { id: champ.sportId, name: 'Deporte', icon: 'sports' },
+      socialLinks: this.getStoredSocialLinks(id),
+      phases: this.readRecord<Phase[]>(LS_PHASES)[id] ?? [],
+      matchRules: [],
+      teamCount: teamsStored.length,
       activeMatchCount: 0,
     } as unknown as ChampionshipDetail;
     return of(detail);
@@ -125,27 +126,27 @@ export class ChampionshipService {
 
   create(dto: CreateChampionshipDto): Observable<Championship> {
     // 🔴 MOCK — localStorage
-    const list   = this.readList();
-    const nextId = list.length ? Math.max(...list.map(c => c.id)) + 1 : 1;
-    const now    = new Date();
+    const list = this.readList();
+    const nextId = list.length ? Math.max(...list.map(c => Number(c.id))) + 1 : 1;
+    const now = new Date();
     const champ: Championship = {
-      id:                    nextId,
-      organizationId:        dto.organizationId,
-      sportId:               dto.sportId,
-      name:                  dto.name,
-      slug:                  dto.slug,
-      description:           dto.description           ?? null,
-      season:                dto.season,
-      logo:                  dto.logo                  ?? null,
-      status:                dto.status                ?? ChampionshipStatus.Draft,
+      id: nextId,
+      organizationId: dto.organizationId,
+      sportId: dto.sportId,
+      name: dto.name,
+      slug: dto.slug,
+      description: dto.description ?? null,
+      season: dto.season,
+      logo: dto.logo ?? null,
+      status: dto.status ?? ChampionshipStatus.Draft,
       registrationStartDate: dto.registrationStartDate ?? null,
-      registrationEndDate:   dto.registrationEndDate   ?? null,
-      startDate:             dto.startDate             ?? null,
-      endDate:               dto.endDate               ?? null,
-      maxTeams:              dto.maxTeams              ?? 16,
-      maxPlayersPerTeam:     dto.maxPlayersPerTeam      ?? 20,
-      createdAt:             now,
-      updatedAt:             now,
+      registrationEndDate: dto.registrationEndDate ?? null,
+      startDate: dto.startDate ?? null,
+      endDate: dto.endDate ?? null,
+      maxTeams: dto.maxTeams ?? 16,
+      maxPlayersPerTeam: dto.maxPlayersPerTeam ?? 20,
+      createdAt: now,
+      updatedAt: now,
     };
     this.writeList([...list, champ]);
     return of(champ);
@@ -159,7 +160,7 @@ export class ChampionshipService {
 
   update(id: string, dto: UpdateChampionshipDto): Observable<Championship> {
     // 🔴 MOCK — localStorage
-    const list  = this.readList();
+    const list = this.readList();
     const index = list.findIndex(c => String(c.id) === id);
     if (index === -1) return throwError(() => new Error(`Championship ${id} not found`));
     const updated: Championship = { ...list[index], ...dto, updatedAt: new Date() };
@@ -176,7 +177,7 @@ export class ChampionshipService {
 
   updateStatus(id: string, dto: UpdateChampionshipStatusDto): Observable<Championship> {
     // 🔴 MOCK — localStorage
-    const list  = this.readList();
+    const list = this.readList();
     const index = list.findIndex(c => String(c.id) === id);
     if (index === -1) return throwError(() => new Error(`Championship ${id} not found`));
     const updated: Championship = { ...list[index], status: dto.status, updatedAt: new Date() };
@@ -218,16 +219,16 @@ export class ChampionshipService {
   savePhases(championshipId: string, phases: CreatePhaseDto[]): Observable<Phase[]> {
     // 🔴 MOCK — localStorage
     const saved: Phase[] = phases.map((dto, i) => ({
-      id:             i + 1,
+      id: i + 1,
       championshipId: +championshipId,
-      name:           dto.name,
-      phaseType:      dto.phaseType,
-      phaseOrder:     dto.phaseOrder,
-      status:         dto.status ?? PhaseStatus.Pending,
-      leagueConfig:   dto.leagueConfig   ? { id: i + 1, phaseId: i + 1, ...dto.leagueConfig }   : undefined,
+      name: dto.name,
+      phaseType: dto.phaseType,
+      phaseOrder: dto.phaseOrder,
+      status: dto.status ?? PhaseStatus.Pending,
+      leagueConfig: dto.leagueConfig ? { id: i + 1, phaseId: i + 1, ...dto.leagueConfig } : undefined,
       knockoutConfig: dto.knockoutConfig ? { id: i + 1, phaseId: i + 1, ...dto.knockoutConfig } : undefined,
-      groupsConfig:   dto.groupsConfig   ? { id: i + 1, phaseId: i + 1, ...dto.groupsConfig }   : undefined,
-      swissConfig:    dto.swissConfig    ? { id: i + 1, phaseId: i + 1, ...dto.swissConfig }     : undefined,
+      groupsConfig: dto.groupsConfig ? { id: i + 1, phaseId: i + 1, ...dto.groupsConfig } : undefined,
+      swissConfig: dto.swissConfig ? { id: i + 1, phaseId: i + 1, ...dto.swissConfig } : undefined,
     }));
     const record = this.readRecord<Phase[]>(LS_PHASES);
     record[championshipId] = saved;
@@ -258,11 +259,11 @@ export class ChampionshipService {
     patches: CreateChampionshipMatchRuleDto[],
   ): Observable<ChampionshipRulesResponse> {
     // 🔴 MOCK — localStorage
-    const record  = this.readRecord<ChampionshipRulesResponse>(LS_RULES);
+    const record = this.readRecord<ChampionshipRulesResponse>(LS_RULES);
     const current = record[championshipId] ?? {
       championshipId: +championshipId,
-      sportId:        patches[0]?.sportId ?? 1,
-      rules:          [],
+      sportId: patches[0]?.sportId ?? 1,
+      rules: [],
     };
     for (const patch of patches) {
       const rule = current.rules.find(r => r.matchRuleId === patch.matchRuleId);
@@ -271,8 +272,8 @@ export class ChampionshipService {
         rule.isOverridden = patch.value !== rule.defaultValue;
       } else {
         current.rules.push({
-          matchRuleId:  patch.matchRuleId,
-          name:         `Regla ${patch.matchRuleId}`,
+          matchRuleId: patch.matchRuleId,
+          name: `Regla ${patch.matchRuleId}`,
           defaultValue: patch.value,
           currentValue: patch.value,
           isOverridden: false,
@@ -331,7 +332,7 @@ export class ChampionshipService {
 
   saveSocialLinks(championshipId: string, links: CreateSocialLinkDto[]): Observable<SocialLink[]> {
     // 🔴 MOCK — localStorage
-    const uniqueByNetwork = new Map<number, CreateSocialLinkDto>();
+    const uniqueByNetwork = new Map<DbId, CreateSocialLinkDto>();
     for (const link of links) {
       if (!link.link?.trim()) continue;
       if (!uniqueByNetwork.has(link.socialNetworkId)) {
@@ -363,38 +364,38 @@ export class ChampionshipService {
 
   saveTeams(championshipId: string, teams: (CreateTeamDto & { players?: any[] })[]): Observable<TeamProfile[]> {
     // 🔴 MOCK — localStorage
-    const now   = new Date();
+    const now = new Date();
     const saved: TeamProfile[] = teams.map((dto, i) => ({
-      id:               i + 1,
-      championshipId:   +championshipId,
-      name:             dto.name,
-      shortname:        dto.shortname,
-      slug:             dto.slug,
-      logoUrl:          dto.logoUrl        ?? null,
-      documentUrl:      dto.documentUrl    ?? null,
-      primaryColor:     dto.primaryColor   ?? null,
-      secondaryColor:   dto.secondaryColor ?? null,
-      foundedYear:      dto.foundedYear    ?? null,
-      homeVenue:        dto.homeVenue      ?? null,
-      location:         dto.location       ?? null,
-      coachName:        dto.coachName      ?? null,
-      coachPhone:       dto.coachPhone     ?? null,
-      isActive:         true,
+      id: i + 1,
+      championshipId: +championshipId,
+      name: dto.name,
+      shortname: dto.shortname,
+      slug: dto.slug,
+      logoUrl: dto.logoUrl ?? null,
+      documentUrl: dto.documentUrl ?? null,
+      primaryColor: dto.primaryColor ?? null,
+      secondaryColor: dto.secondaryColor ?? null,
+      foundedYear: dto.foundedYear ?? null,
+      homeVenue: dto.homeVenue ?? null,
+      location: dto.location ?? null,
+      coachName: dto.coachName ?? null,
+      coachPhone: dto.coachPhone ?? null,
+      isActive: true,
       hasActiveMatches: false,
-      createdAt:        now,
-      updatedAt:        now,
-      players:          dto.players ?? [],
-      groups:           [],
+      createdAt: now,
+      updatedAt: now,
+      players: dto.players ?? [],
+      groups: [],
       stats: {
-        teamId:         i + 1,
-        played:         0,
-        won:            0,
-        drawn:          0,
-        lost:           0,
-        goalsFor:       0,
-        goalsAgainst:   0,
+        teamId: i + 1,
+        played: 0,
+        won: 0,
+        drawn: 0,
+        lost: 0,
+        goalsFor: 0,
+        goalsAgainst: 0,
         goalDifference: 0,
-        points:         0,
+        points: 0,
       },
     }));
     const record = this.readRecord<TeamProfile[]>(LS_TEAMS);
@@ -444,12 +445,12 @@ export class ChampionshipService {
       v && typeof v === 'string' ? new Date(v) : (v as Date | null);
     return {
       ...c,
-      startDate:             parse(c.startDate),
-      endDate:               parse(c.endDate),
+      startDate: parse(c.startDate),
+      endDate: parse(c.endDate),
       registrationStartDate: parse(c.registrationStartDate),
-      registrationEndDate:   parse(c.registrationEndDate),
-      createdAt:             parse(c.createdAt) as Date,
-      updatedAt:             parse(c.updatedAt) as Date,
+      registrationEndDate: parse(c.registrationEndDate),
+      createdAt: parse(c.createdAt) as Date,
+      updatedAt: parse(c.updatedAt) as Date,
     };
   }
 

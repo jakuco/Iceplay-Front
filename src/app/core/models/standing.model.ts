@@ -1,4 +1,5 @@
 import type { Team } from './team.model';
+import type { DbId } from './db.types';
 
 type TeamBasicInfo = Pick<Team, 'id' | 'name' | 'shortname' | 'logoUrl'>;
 
@@ -6,9 +7,9 @@ type TeamBasicInfo = Pick<Team, 'id' | 'name' | 'shortname' | 'logoUrl'>;
  * Standing/League table entry
  */
 export interface Standing {
-  id: string;
-  championshipId: string;
-  teamId: string;
+  id: DbId;
+  championshipId: DbId;
+  teamId: DbId;
   team?: TeamBasicInfo; // Populated
   group?: string; // For group stage format: "A", "B", etc.
 
@@ -56,7 +57,7 @@ export interface StandingWithTeam extends Standing {
  * Standings table for a championship or group
  */
 export interface StandingsTable {
-  championshipId: string;
+  championshipId: DbId;
   group?: string;
   standings: StandingWithTeam[];
   lastUpdated: Date;
@@ -65,7 +66,7 @@ export interface StandingsTable {
 /**
  * Create empty standing for a team
  */
-export function createEmptyStanding(championshipId: string, teamId: string): Omit<Standing, 'id'> {
+export function createEmptyStanding(championshipId: DbId, teamId: DbId): Omit<Standing, 'id'> {
   return {
     championshipId,
     teamId,

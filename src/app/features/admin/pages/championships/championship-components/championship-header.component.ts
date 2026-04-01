@@ -25,46 +25,46 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 export type ChampionshipHeaderStatus = 'draft' | 'registration' | 'active' | 'finished' | 'cancelled';
 
 export interface SportOption {
-  id:    number;
+  id: number;
   label: string;
-  icon:  string;
+  icon: string;
 }
 
 export interface ChampionshipHeaderData {
-  name:                 string;
-  description:          string;
-  sportId:              number;
-  season:               string;
-  location:             string;
-  startDate:            string;   // YYYY-MM-DD
-  endDate:              string;   // YYYY-MM-DD
+  name: string;
+  description: string;
+  sportId: number;
+  season: string;
+  location: string;
+  startDate: string;   // YYYY-MM-DD
+  endDate: string;   // YYYY-MM-DD
   registrationStartDate: string;  // YYYY-MM-DD
-  registrationEndDate:   string;  // YYYY-MM-DD
-  maxTeams:             number;
-  currentTeams:         number;
-  maxPlayersPerTeam:    number;
-  phaseCount:           number;
-  status:               ChampionshipHeaderStatus;
-  logoUrl:              string | null;
-  socialLinks:          ChampionshipHeaderSocialLink[];
+  registrationEndDate: string;  // YYYY-MM-DD
+  maxTeams: number;
+  currentTeams: number;
+  maxPlayersPerTeam: number;
+  phaseCount: number;
+  status: ChampionshipHeaderStatus;
+  logoUrl: string | null;
+  socialLinks: ChampionshipHeaderSocialLink[];
 }
 
 export interface ChampionshipHeaderSocialLink {
-  id?:             number;
+  id?: number;
   socialNetworkId: number;
-  link:            string;
-  name?:           string;
-  icon?:           string;
+  link: string;
+  name?: string;
+  icon?: string;
 }
 
 // ─── Constants ───────────────────────────────────────────────
 
 const STATUS_META: Record<ChampionshipHeaderStatus, { label: string; dot: string; pill: string }> = {
-  draft:        { label: 'Borrador',       dot: 'bg-slate-400',  pill: 'bg-slate-500/20  text-slate-300   ring-slate-500/30'  },
-  registration: { label: 'Inscripciones',  dot: 'bg-blue-400',   pill: 'bg-blue-500/20   text-blue-300    ring-blue-500/30'   },
-  active:       { label: 'Activo',         dot: 'bg-green-400',  pill: 'bg-green-500/20  text-green-300   ring-green-500/30'  },
-  finished:     { label: 'Finalizado',     dot: 'bg-slate-500',  pill: 'bg-slate-500/20  text-slate-400   ring-slate-500/30'  },
-  cancelled:    { label: 'Cancelado',      dot: 'bg-red-400',    pill: 'bg-red-500/20    text-red-300     ring-red-500/30'    },
+  draft: { label: 'Borrador', dot: 'bg-slate-400', pill: 'bg-slate-500/20  text-slate-300   ring-slate-500/30' },
+  registration: { label: 'Inscripciones', dot: 'bg-blue-400', pill: 'bg-blue-500/20   text-blue-300    ring-blue-500/30' },
+  active: { label: 'Activo', dot: 'bg-green-400', pill: 'bg-green-500/20  text-green-300   ring-green-500/30' },
+  finished: { label: 'Finalizado', dot: 'bg-slate-500', pill: 'bg-slate-500/20  text-slate-400   ring-slate-500/30' },
+  cancelled: { label: 'Cancelado', dot: 'bg-red-400', pill: 'bg-red-500/20    text-red-300     ring-red-500/30' },
 };
 
 const SOCIAL_NETWORK_OPTIONS: Array<{
@@ -75,47 +75,47 @@ const SOCIAL_NETWORK_OPTIONS: Array<{
   brandBg: string;
   brandBorder: string;
 }> = [
-  {
-    id: 1,
-    name: 'Facebook',
-    icon: 'thumb_up',
-    placeholder: 'https://facebook.com/tu-pagina',
-    brandBg: '#1877F2',
-    brandBorder: '#3B82F6',
-  },
-  {
-    id: 2,
-    name: 'Instagram',
-    icon: 'photo_camera',
-    placeholder: 'https://instagram.com/tu-cuenta',
-    brandBg: 'linear-gradient(135deg, #F58529, #DD2A7B 45%, #8134AF 75%, #515BD4)',
-    brandBorder: '#DD2A7B',
-  },
-  {
-    id: 3,
-    name: 'X',
-    icon: 'close',
-    placeholder: 'https://x.com/tu-cuenta',
-    brandBg: '#111827',
-    brandBorder: '#374151',
-  },
-  {
-    id: 4,
-    name: 'TikTok',
-    icon: 'music_note',
-    placeholder: 'https://tiktok.com/@tu-cuenta',
-    brandBg: '#111827',
-    brandBorder: '#14B8A6',
-  },
-  {
-    id: 5,
-    name: 'YouTube',
-    icon: 'smart_display',
-    placeholder: 'https://youtube.com/@tu-canal',
-    brandBg: '#FF0000',
-    brandBorder: '#EF4444',
-  },
-];
+    {
+      id: 1,
+      name: 'Facebook',
+      icon: 'thumb_up',
+      placeholder: 'https://facebook.com/tu-pagina',
+      brandBg: '#1877F2',
+      brandBorder: '#3B82F6',
+    },
+    {
+      id: 2,
+      name: 'Instagram',
+      icon: 'photo_camera',
+      placeholder: 'https://instagram.com/tu-cuenta',
+      brandBg: 'linear-gradient(135deg, #F58529, #DD2A7B 45%, #8134AF 75%, #515BD4)',
+      brandBorder: '#DD2A7B',
+    },
+    {
+      id: 3,
+      name: 'X',
+      icon: 'close',
+      placeholder: 'https://x.com/tu-cuenta',
+      brandBg: '#111827',
+      brandBorder: '#374151',
+    },
+    {
+      id: 4,
+      name: 'TikTok',
+      icon: 'music_note',
+      placeholder: 'https://tiktok.com/@tu-cuenta',
+      brandBg: '#111827',
+      brandBorder: '#14B8A6',
+    },
+    {
+      id: 5,
+      name: 'YouTube',
+      icon: 'smart_display',
+      placeholder: 'https://youtube.com/@tu-canal',
+      brandBg: '#FF0000',
+      brandBorder: '#EF4444',
+    },
+  ];
 
 // ─────────────────────────────────────────────────────────────
 // Component
@@ -583,30 +583,30 @@ const SOCIAL_NETWORK_OPTIONS: Array<{
 export class ChampionshipHeaderComponent {
 
   // ── Inputs ────────────────────────────────────────────────────
-  readonly data    = input.required<ChampionshipHeaderData>();
-  readonly sports  = input<SportOption[]>([]);
+  readonly data = input.required<ChampionshipHeaderData>();
+  readonly sports = input<SportOption[]>([]);
   readonly editable = input(false);
 
   // ── Outputs ───────────────────────────────────────────────────
-  readonly dataChange   = output<Partial<ChampionshipHeaderData>>();
+  readonly dataChange = output<Partial<ChampionshipHeaderData>>();
   readonly logoSelected = output<File>();
 
   // ── Template refs ─────────────────────────────────────────────
-  private fileInputRef    = viewChild<ElementRef<HTMLInputElement>>('fileInput');
+  private fileInputRef = viewChild<ElementRef<HTMLInputElement>>('fileInput');
   private nameContainerRef = viewChild<ElementRef<HTMLElement>>('nameContainer');
-  private sportWrapRef    = viewChild<ElementRef<HTMLElement>>('sportWrap');
-  private nameInputRef    = viewChild<ElementRef<HTMLInputElement>>('nameInput');
-  private teamsInputRef   = viewChild<ElementRef<HTMLInputElement>>('teamsInput');
+  private sportWrapRef = viewChild<ElementRef<HTMLElement>>('sportWrap');
+  private nameInputRef = viewChild<ElementRef<HTMLInputElement>>('nameInput');
+  private teamsInputRef = viewChild<ElementRef<HTMLInputElement>>('teamsInput');
   private playersInputRef = viewChild<ElementRef<HTMLInputElement>>('playersInput');
   private locationInputRef = viewChild<ElementRef<HTMLInputElement>>('locationInput');
 
   // ── UI state ──────────────────────────────────────────────────
-  popoverOpen     = signal(false);
-  sportDropOpen   = signal(false);
-  editingTeams    = signal(false);
-  editingPlayers  = signal(false);
+  popoverOpen = signal(false);
+  sportDropOpen = signal(false);
+  editingTeams = signal(false);
+  editingPlayers = signal(false);
   editingLocation = signal(false);
-  logoPreview     = signal<string | null>(null);
+  logoPreview = signal<string | null>(null);
   socialEditorOpen = signal(false);
   socialEditorError = signal('');
   socialEditingNetworkId = signal<number | null>(null);
@@ -615,26 +615,26 @@ export class ChampionshipHeaderComponent {
 
   // ── Editable field mirrors (ngModel) ──────────────────────────
   // Initialized from data() on first render; changes emitted via dataChange output
-  nameTemp        = '';
+  nameTemp = '';
   descriptionTemp = '';
 
-  get seasonModel():   string  { return this.data().season;   }
-  set seasonModel(v)           { this.dataChange.emit({ season: v }); }
+  get seasonModel(): string { return this.data().season; }
+  set seasonModel(v) { this.dataChange.emit({ season: v }); }
 
-  get teamsModel():    number  { return this.data().maxTeams; }
-  set teamsModel(v)            { this.dataChange.emit({ maxTeams: +v }); }
+  get teamsModel(): number { return this.data().maxTeams; }
+  set teamsModel(v) { this.dataChange.emit({ maxTeams: +v }); }
 
-  get playersModel():  number  { return this.data().maxPlayersPerTeam; }
-  set playersModel(v)          { this.dataChange.emit({ maxPlayersPerTeam: +v }); }
+  get playersModel(): number { return this.data().maxPlayersPerTeam; }
+  set playersModel(v) { this.dataChange.emit({ maxPlayersPerTeam: +v }); }
 
-  get locationModel(): string  { return this.data().location; }
-  set locationModel(v)         { this.dataChange.emit({ location: v }); }
+  get locationModel(): string { return this.data().location; }
+  set locationModel(v) { this.dataChange.emit({ location: v }); }
 
   get startDateModel(): string { return this.data().startDate; }
-  set startDateModel(v)        { this.dataChange.emit({ startDate: v }); }
+  set startDateModel(v) { this.dataChange.emit({ startDate: v }); }
 
-  get endDateModel():   string { return this.data().endDate; }
-  set endDateModel(v)          { this.dataChange.emit({ endDate: v }); }
+  get endDateModel(): string { return this.data().endDate; }
+  set endDateModel(v) { this.dataChange.emit({ endDate: v }); }
 
   get regStartModel(): string { return this.data().registrationStartDate; }
   set regStartModel(v: string) { this.dataChange.emit({ registrationStartDate: v }); }
@@ -648,7 +648,7 @@ export class ChampionshipHeaderComponent {
     if (!start && !end) return 'none';
     const now = Date.now();
     const s = start ? new Date(start + 'T00:00:00').getTime() : null;
-    const e = end   ? new Date(end   + 'T23:59:59').getTime() : null;
+    const e = end ? new Date(end + 'T23:59:59').getTime() : null;
     if (s && now < s) return 'upcoming';
     if (e && now > e) return 'closed';
     return 'open';
@@ -660,7 +660,7 @@ export class ChampionshipHeaderComponent {
     const fmt = (iso: string) =>
       new Date(iso + 'T00:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
     if (start && end) return `Inscr. ${fmt(start)} → ${fmt(end)}`;
-    if (start)        return `Inscr. desde ${fmt(start)}`;
+    if (start) return `Inscr. desde ${fmt(start)}`;
     return `Inscr. hasta ${fmt(end!)}`;
   });
 
@@ -697,9 +697,9 @@ export class ChampionshipHeaderComponent {
     const meta = SOCIAL_NETWORK_OPTIONS.find(opt => opt.id === this.socialNetworkDraft);
     return meta?.placeholder ?? 'https://...';
   });
-  statusLabel()     { return STATUS_META[this.data().status].label; }
-  statusDotClass()  { return STATUS_META[this.data().status].dot;   }
-  statusPillClass() { return STATUS_META[this.data().status].pill;  }
+  statusLabel() { return STATUS_META[this.data().status].label; }
+  statusDotClass() { return STATUS_META[this.data().status].dot; }
+  statusPillClass() { return STATUS_META[this.data().status].pill; }
 
   // ── Click outside ──────────────────────────────────────────────
   @HostListener('document:click', ['$event'])
@@ -732,7 +732,7 @@ export class ChampionshipHeaderComponent {
 
   // ── Name popover ──────────────────────────────────────────────
   openPopover(): void {
-    this.nameTemp        = this.data().name;
+    this.nameTemp = this.data().name;
     this.descriptionTemp = this.data().description;
     this.popoverOpen.set(true);
     setTimeout(() => this.nameInputRef()?.nativeElement.focus());
@@ -867,7 +867,7 @@ export class ChampionshipHeaderComponent {
       new Date(iso + 'T00:00:00').toLocaleDateString('es-ES',
         { day: 'numeric', month: 'short', ...(yr ? { year: 'numeric' } : {}) });
     const s = startDate ? fmt(startDate, false) : '?';
-    const e = endDate   ? fmt(endDate,   true)  : '?';
+    const e = endDate ? fmt(endDate, true) : '?';
     return `${s} → ${e}`;
   }
 }

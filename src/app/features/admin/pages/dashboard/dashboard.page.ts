@@ -572,7 +572,7 @@ export default class DashboardPage {
     effect((onCleanup) => {
       const user = this.authService.currentUser();
       if (user?.organizationId) {
-        const sub = this.loadDashboardData(user.organizationId);
+        const sub = this.loadDashboardData(String(user.organizationId));
         onCleanup(() => {
           sub.unsubscribe();
           this.reloadSub?.unsubscribe();
@@ -634,7 +634,7 @@ export default class DashboardPage {
                   const homeTeam = teams.find((t) => t.id.toString() === m.homeTeamId);
                   const awayTeam = teams.find((t) => t.id.toString() === m.awayTeamId);
                   return {
-                    id: m.id,
+                    id: String(m.id),
                     homeTeam: homeTeam?.name || 'Equipo Desconocido',
                     awayTeam: awayTeam?.name || 'Equipo Desconocido',
                     date: this.formatDate(m.scheduledStart!),
@@ -653,7 +653,7 @@ export default class DashboardPage {
                   const homeTeam = teams.find((t) => t.id.toString() === m.homeTeamId);
                   const awayTeam = teams.find((t) => t.id.toString() === m.awayTeamId);
                   return {
-                    id: m.id,
+                    id: String(m.id),
                     icon: 'sports_soccer',
                     text: `${homeTeam?.name || 'Equipo'} ${m.homeScore}-${m.awayScore} ${awayTeam?.name || 'Equipo'} (Finalizado)`,
                     time:
@@ -689,7 +689,7 @@ export default class DashboardPage {
           const user = this.authService.currentUser();
           if (user?.organizationId) {
             this.reloadSub?.unsubscribe();
-            this.reloadSub = this.loadDashboardData(user.organizationId);
+            this.reloadSub = this.loadDashboardData(String(user.organizationId));
           }
         },
         error: (error) => {

@@ -1,4 +1,5 @@
 import type { Team } from './team.model';
+import type { DbId } from './db.types';
 
 type TeamBasicInfo = Pick<Team, 'id' | 'name' | 'shortname' | 'logoUrl'>;
 
@@ -19,13 +20,13 @@ export type MatchStatus =
  * Match entity
  */
 export interface Match {
-  id: string;
-  groupTeamId: number;
-  homeTeamId: string;
-  awayTeamId: string;
+  id: DbId;
+  groupTeamId: DbId;
+  homeTeamId: DbId;
+  awayTeamId: DbId;
   homeScore: number;
   awayScore: number;
-  status: string;
+  status: MatchStatus;
   round: number;
   matchDay?: number;
   scheduledStart?: Date;
@@ -50,8 +51,8 @@ export interface PeriodScore {
  * DTO for creating a new match
  */
 export interface CreateMatchDto {
-  homeTeamId: string;
-  awayTeamId: string;
+  homeTeamId: DbId;
+  awayTeamId: DbId;
   scheduledDate: Date;
   scheduledTime: string;
   round: number;
@@ -103,7 +104,7 @@ export interface MatchWithTeams extends Match {
  * Match list item for displaying in lists
  */
 export interface MatchListItem {
-  id: string;
+  id: DbId;
   homeTeam: TeamBasicInfo;
   awayTeam: TeamBasicInfo;
   homeScore: number;

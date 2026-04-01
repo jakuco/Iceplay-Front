@@ -15,8 +15,8 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 
 import { ChampionshipService } from '../../../../core/services/championship.service';
-import { AuthService }         from '../../../../core/services/auth.service';
-import { SportService }        from '../../../../core/services/sport.service';
+import { AuthService } from '../../../../core/services/auth.service';
+import { SportService } from '../../../../core/services/sport.service';
 import {
   Championship,
   ChampionshipDetail,
@@ -188,20 +188,20 @@ interface NavTab { id: string; label: string; icon: string; count: number | null
 export default class ChampionshipFormPage implements OnInit {
 
   // ── Services ──────────────────────────────────────────────────
-  private router          = inject(Router);
-  private route           = inject(ActivatedRoute);
+  private router = inject(Router);
+  private route = inject(ActivatedRoute);
   private championshipSvc = inject(ChampionshipService);
-  private sportSvc        = inject(SportService);
-  private authService     = inject(AuthService);
-  private snackBar        = inject(MatSnackBar);
-  private cdr             = inject(ChangeDetectorRef);
-  private destroyRef      = inject(DestroyRef);
+  private sportSvc = inject(SportService);
+  private authService = inject(AuthService);
+  private snackBar = inject(MatSnackBar);
+  private cdr = inject(ChangeDetectorRef);
+  private destroyRef = inject(DestroyRef);
 
   // ── Page state ─────────────────────────────────────────────────
-  pageMode       = signal<PageMode>('create');
-  isSaving       = signal(false);
-  isDirty        = signal(false);
-  activeNavTab   = signal('fases');
+  pageMode = signal<PageMode>('create');
+  isSaving = signal(false);
+  isDirty = signal(false);
+  activeNavTab = signal('fases');
   championshipId = signal<string | null>(null);
   logoFile: File | null = null;
 
@@ -218,7 +218,7 @@ export default class ChampionshipFormPage implements OnInit {
   });
 
   // ── Phase state ─────────────────────────────────────────────────
-  phases       = signal<PhaseCardData[]>([]);
+  phases = signal<PhaseCardData[]>([]);
   activeFormat = signal<ChampionshipFormat | null>(null);
 
   // ── Rules state ─────────────────────────────────────────────────
@@ -229,9 +229,9 @@ export default class ChampionshipFormPage implements OnInit {
 
   // ── Nav tabs (computed — count reacciona a cambios) ─────────────
   navTabs = computed<NavTab[]>(() => [
-    { id: 'fases',   label: 'Fases',   icon: 'layers', count: this.phases().length || null },
-    { id: 'reglas',  label: 'Reglas',  icon: 'gavel',  count: null },
-    { id: 'equipos', label: 'Equipos', icon: 'group',  count: this.headerData().currentTeams || null },
+    { id: 'fases', label: 'Fases', icon: 'layers', count: this.phases().length || null },
+    { id: 'reglas', label: 'Reglas', icon: 'gavel', count: null },
+    { id: 'equipos', label: 'Equipos', icon: 'group', count: this.headerData().currentTeams || null },
   ]);
 
   // ── Computed ───────────────────────────────────────────────────
@@ -240,7 +240,7 @@ export default class ChampionshipFormPage implements OnInit {
   actionLabel = computed(() => {
     if (this.isSaving()) return this.pageMode() === 'create' ? 'Creando...' : 'Guardando...';
     if (this.pageMode() === 'create') return 'Crear Campeonato';
-    if (this.pageMode() === 'edit')   return 'Guardar Cambios';
+    if (this.pageMode() === 'edit') return 'Guardar Cambios';
     return 'Editar';
   });
 
@@ -251,7 +251,7 @@ export default class ChampionshipFormPage implements OnInit {
   // ── Constructor — persist active tab in sessionStorage ─────────
   constructor() {
     effect(() => {
-      const id  = this.championshipId() ?? 'new';
+      const id = this.championshipId() ?? 'new';
       sessionStorage.setItem(`championship_tab_${id}`, this.activeNavTab());
     });
   }
@@ -260,7 +260,7 @@ export default class ChampionshipFormPage implements OnInit {
   ngOnInit(): void {
     // Cargar deportes del servicio (mapeados al formato del header)
     this.sportSvc.getAll().pipe(takeUntilDestroyed(this.destroyRef)).subscribe(list => {
-      this.sports.set(list.map(s => ({ id: s.id, label: s.name, icon: s.icon })));
+      this.sports.set(list.map(s => ({ id: Number(s.id), label: s.name, icon: s.icon })));
       this.cdr.markForCheck();
     });
 
@@ -275,7 +275,7 @@ export default class ChampionshipFormPage implements OnInit {
         } else {
           this.pageMode.set('create');
           // Cargar reglas por defecto del deporte seleccionado
-          this.loadDefaultRules(this.headerData().sportId);
+          this.loadDefaultRules(Number(this.headerData().sportId));
         }
         // Restaurar el tab activo desde sessionStorage (sobrevive a cualquier re-init)
         const savedTab = sessionStorage.getItem(`championship_tab_${id ?? 'new'}`);
@@ -306,7 +306,7 @@ export default class ChampionshipFormPage implements OnInit {
     const id = this.championshipId();
     if (!id) { this.snackBar.open('Fases guardadas', 'Cerrar', { duration: 2000 }); return; }
     const dtos = phases.map(p => ({
-      name:      p.name,
+      name: p.name,
       phaseType: p.phaseType,
       phaseOrder: p.phaseOrder,
     }));
@@ -340,19 +340,19 @@ export default class ChampionshipFormPage implements OnInit {
       return;
     }
     const dtos = teams.map(t => ({
-      name:           t.name,
-      shortname:      t.shortname,
-      slug:           t.slug,
-      logoUrl:        t.logoUrl        ?? undefined,
-      documentUrl:    t.documentUrl    ?? undefined,
-      primaryColor:   t.primaryColor   ?? undefined,
+      name: t.name,
+      shortname: t.shortname,
+      slug: t.slug,
+      logoUrl: t.logoUrl ?? undefined,
+      documentUrl: t.documentUrl ?? undefined,
+      primaryColor: t.primaryColor ?? undefined,
       secondaryColor: t.secondaryColor ?? undefined,
-      location:       t.location       ?? undefined,
-      foundedYear:    t.foundedYear    ?? undefined,
-      homeVenue:      t.homeVenue      || undefined,
-      coachName:      t.coachName      ?? undefined,
-      coachPhone:     t.coachPhone     ?? undefined,
-      players:        t.players,
+      location: t.location ?? undefined,
+      foundedYear: t.foundedYear ?? undefined,
+      homeVenue: t.homeVenue || undefined,
+      coachName: t.coachName ?? undefined,
+      coachPhone: t.coachPhone ?? undefined,
+      players: t.players,
     }));
     this.championshipSvc.saveTeams(id, dtos).subscribe({
       next: (saved) => {
@@ -408,16 +408,16 @@ export default class ChampionshipFormPage implements OnInit {
     if (this.pageMode() === 'edit' && this.championshipId()) {
       const socialDtos = this.toSocialLinkDtos(hd.socialLinks);
       const dto: UpdateChampionshipDto = {
-        name:             hd.name,
-        slug:             this.toSlug(hd.name),
-        description:      hd.description || undefined,
-        season:           hd.season,
-        startDate:            hd.startDate ? new Date(hd.startDate) : undefined,
-        endDate:              hd.endDate   ? new Date(hd.endDate)   : undefined,
+        name: hd.name,
+        slug: this.toSlug(hd.name),
+        description: hd.description || undefined,
+        season: hd.season,
+        startDate: hd.startDate ? new Date(hd.startDate) : undefined,
+        endDate: hd.endDate ? new Date(hd.endDate) : undefined,
         registrationStartDate: hd.registrationStartDate ? new Date(hd.registrationStartDate) : null,
-        registrationEndDate:   hd.registrationEndDate   ? new Date(hd.registrationEndDate)   : null,
-        maxTeams:              hd.maxTeams,
-        maxPlayersPerTeam:     hd.maxPlayersPerTeam,
+        registrationEndDate: hd.registrationEndDate ? new Date(hd.registrationEndDate) : null,
+        maxTeams: hd.maxTeams,
+        maxPlayersPerTeam: hd.maxPlayersPerTeam,
       };
       forkJoin([
         this.championshipSvc.update(this.championshipId()!, dto),
@@ -436,18 +436,18 @@ export default class ChampionshipFormPage implements OnInit {
       });
     } else {
       const dto: CreateChampionshipDto = {
-        organizationId:   +user.organizationId,
-        sportId:          hd.sportId,
-        name:             hd.name,
-        slug:             this.toSlug(hd.name),
-        season:           hd.season || String(new Date().getFullYear()),
-        description:      hd.description || undefined,
-        startDate:            hd.startDate ? new Date(hd.startDate) : undefined,
-        endDate:              hd.endDate   ? new Date(hd.endDate)   : undefined,
+        organizationId: +user.organizationId,
+        sportId: hd.sportId,
+        name: hd.name,
+        slug: this.toSlug(hd.name),
+        season: hd.season || String(new Date().getFullYear()),
+        description: hd.description || undefined,
+        startDate: hd.startDate ? new Date(hd.startDate) : undefined,
+        endDate: hd.endDate ? new Date(hd.endDate) : undefined,
         registrationStartDate: hd.registrationStartDate ? new Date(hd.registrationStartDate) : undefined,
-        registrationEndDate:   hd.registrationEndDate   ? new Date(hd.registrationEndDate)   : undefined,
-        maxTeams:              hd.maxTeams,
-        maxPlayersPerTeam:     hd.maxPlayersPerTeam,
+        registrationEndDate: hd.registrationEndDate ? new Date(hd.registrationEndDate) : undefined,
+        maxTeams: hd.maxTeams,
+        maxPlayersPerTeam: hd.maxPlayersPerTeam,
       };
       this.championshipSvc.create(dto).subscribe({
         next: (c: any) => {
@@ -491,19 +491,19 @@ export default class ChampionshipFormPage implements OnInit {
 
     if (this.teamsData().length > 0) {
       const dtos = this.teamsData().map(t => ({
-        name:           t.name,
-        shortname:      t.shortname,
-        slug:           t.slug,
-        logoUrl:        t.logoUrl        ?? undefined,
-        documentUrl:    t.documentUrl    ?? undefined,
-        primaryColor:   t.primaryColor   ?? undefined,
+        name: t.name,
+        shortname: t.shortname,
+        slug: t.slug,
+        logoUrl: t.logoUrl ?? undefined,
+        documentUrl: t.documentUrl ?? undefined,
+        primaryColor: t.primaryColor ?? undefined,
         secondaryColor: t.secondaryColor ?? undefined,
-        location:       t.location       ?? undefined,
-        foundedYear:    t.foundedYear    ?? undefined,
-        homeVenue:      t.homeVenue      || undefined,
-        coachName:      t.coachName      ?? undefined,
-        coachPhone:     t.coachPhone     ?? undefined,
-        players:        t.players,
+        location: t.location ?? undefined,
+        foundedYear: t.foundedYear ?? undefined,
+        homeVenue: t.homeVenue || undefined,
+        coachName: t.coachName ?? undefined,
+        coachPhone: t.coachPhone ?? undefined,
+        players: t.players,
       }));
       saves.push(this.championshipSvc.saveTeams(id, dtos));
     }
@@ -529,24 +529,24 @@ export default class ChampionshipFormPage implements OnInit {
     this.championshipSvc.getById(id).subscribe({
       next: (c: ChampionshipDetail) => {
         this.headerData.set({
-          name:         c.name,
-          description:  c.description ?? '',
-          sportId:      c.sportId,
-          season:       c.season,
-          location:     '',
-          startDate:    c.startDate ? this.toIsoDate(c.startDate) : '',
-          endDate:      c.endDate   ? this.toIsoDate(c.endDate)   : '',
+          name: c.name,
+          description: c.description ?? '',
+          sportId: Number(c.sportId),
+          season: c.season,
+          location: '',
+          startDate: c.startDate ? this.toIsoDate(c.startDate) : '',
+          endDate: c.endDate ? this.toIsoDate(c.endDate) : '',
           registrationStartDate: c.registrationStartDate ? this.toIsoDate(c.registrationStartDate) : '',
-          registrationEndDate:   c.registrationEndDate   ? this.toIsoDate(c.registrationEndDate)   : '',
-          maxTeams:           c.maxTeams,
-          currentTeams:       0,
-          maxPlayersPerTeam:  c.maxPlayersPerTeam ?? 20,
-          phaseCount:         this.phases().length,
-          status:       (c.status as any) ?? 'active',
-          logoUrl:      c.logo ?? null,
-          socialLinks:  (c.socialLinks ?? []).map(link => ({
-            id: link.id,
-            socialNetworkId: link.socialNetworkId,
+          registrationEndDate: c.registrationEndDate ? this.toIsoDate(c.registrationEndDate) : '',
+          maxTeams: c.maxTeams,
+          currentTeams: 0,
+          maxPlayersPerTeam: c.maxPlayersPerTeam ?? 20,
+          phaseCount: this.phases().length,
+          status: (c.status as any) ?? 'active',
+          logoUrl: c.logo ?? null,
+          socialLinks: (c.socialLinks ?? []).map(link => ({
+            id: Number(link.id),
+            socialNetworkId: Number(link.socialNetworkId),
             link: link.link,
             name: link.socialNetwork?.name,
             icon: link.socialNetwork?.icon,
@@ -566,15 +566,15 @@ export default class ChampionshipFormPage implements OnInit {
         });
         this.championshipSvc.getPhases(id).subscribe(phasesFromSvc => {
           const mapped: PhaseCardData[] = phasesFromSvc.map(p => ({
-            id:         p.id,
-            name:       p.name,
-            phaseType:  p.phaseType,
+            id: Number(p.id),
+            name: p.name,
+            phaseType: p.phaseType,
             phaseOrder: p.phaseOrder,
-            status:     p.status,
-            league:     p.leagueConfig   ? { winsPoints: 3, drawPoints: 1, lossPoints: 0, totalRounds: p.leagueConfig.advanceCount, legs: p.leagueConfig.legs, advanceCount: p.leagueConfig.advanceCount, tiebreakOrder: p.leagueConfig.tiebreakOrder } : undefined,
-            knockout:   p.knockoutConfig ? { legs: p.knockoutConfig.legs, bracketSize: 0, thirdPlaceMatch: p.knockoutConfig.thirdPlaceMatch, seeding: p.knockoutConfig.seeding, awayGoalsRule: p.knockoutConfig.awayGoalsRule, tieBreak: p.knockoutConfig.tieBreak } : undefined,
-            groups:     p.groupsConfig   ? { numGroups: p.groupsConfig.numGroups, teamsPerGroup: p.groupsConfig.teamsPerGroup, legs: p.groupsConfig.legs, advancePerGroup: p.groupsConfig.advancePerGroup, advanceBestThirds: p.groupsConfig.advanceBestThirds, tiebreakOrder: p.groupsConfig.tiebreakOrder } : undefined,
-            swiss:      p.swissConfig    ? { numRounds: p.swissConfig.numRounds, pairingSystem: p.swissConfig.pairingSystem, firstRound: p.swissConfig.firstRound, allowRematch: p.swissConfig.allowRematch, tiebreakOrder: p.swissConfig.tiebreakOrder, directAdvancedCount: p.swissConfig.directAdvancedCount, playoffCount: p.swissConfig.playoffCount } : undefined,
+            status: p.status,
+            league: p.leagueConfig ? { winsPoints: 3, drawPoints: 1, lossPoints: 0, totalRounds: p.leagueConfig.advanceCount, legs: p.leagueConfig.legs, advanceCount: p.leagueConfig.advanceCount, tiebreakOrder: p.leagueConfig.tiebreakOrder } : undefined,
+            knockout: p.knockoutConfig ? { legs: p.knockoutConfig.legs, bracketSize: 0, thirdPlaceMatch: p.knockoutConfig.thirdPlaceMatch, seeding: p.knockoutConfig.seeding, awayGoalsRule: p.knockoutConfig.awayGoalsRule, tieBreak: p.knockoutConfig.tieBreak } : undefined,
+            groups: p.groupsConfig ? { numGroups: p.groupsConfig.numGroups, teamsPerGroup: p.groupsConfig.teamsPerGroup, legs: p.groupsConfig.legs, advancePerGroup: p.groupsConfig.advancePerGroup, advanceBestThirds: p.groupsConfig.advanceBestThirds, tiebreakOrder: p.groupsConfig.tiebreakOrder } : undefined,
+            swiss: p.swissConfig ? { numRounds: p.swissConfig.numRounds, pairingSystem: p.swissConfig.pairingSystem, firstRound: p.swissConfig.firstRound, allowRematch: p.swissConfig.allowRematch, tiebreakOrder: p.swissConfig.tiebreakOrder, directAdvancedCount: p.swissConfig.directAdvancedCount, playoffCount: p.swissConfig.playoffCount } : undefined,
           }));
           this.phases.set(mapped);
           this.activeFormat.set(this.inferFormat(mapped));
@@ -583,34 +583,34 @@ export default class ChampionshipFormPage implements OnInit {
         // Cargar equipos del campeonato
         this.championshipSvc.getTeams(id).subscribe(profiles => {
           const mapped: TeamItem[] = profiles.map(p => ({
-            id:             p.id,
-            championshipId: p.championshipId,
-            name:           p.name,
-            shortname:      p.shortname,
-            slug:           p.slug,
-            logoUrl:        p.logoUrl,
-            documentUrl:    p.documentUrl    ?? null,
-            primaryColor:   p.primaryColor   ?? '#1a56db',
+            id: Number(p.id),
+            championshipId: Number(p.championshipId),
+            name: p.name,
+            shortname: p.shortname,
+            slug: p.slug,
+            logoUrl: p.logoUrl,
+            documentUrl: p.documentUrl ?? null,
+            primaryColor: p.primaryColor ?? '#1a56db',
             secondaryColor: p.secondaryColor ?? '#e5e7eb',
-            location:       p.location       ?? '',
-            foundedYear:    (p as any).foundedYear  ?? null,
-            homeVenue:      (p as any).homeVenue    ?? '',
-            coachName:      p.coachName      ?? '',
-            coachPhone:     p.coachPhone     ?? '',
-            isActive:       p.isActive,
-            players:        (p.players ?? []).map(pl => ({
-              id:         pl.id,
-              teamId:     pl.teamId,
-              positionId: pl.positionId,
-              firstName:  pl.firstName,
-              lastName:   pl.lastName,
-              nickName:   pl.nickName ?? null,
-              number:     pl.number,
-              birthDate:  pl.birthDate ? String(pl.birthDate) : null,
-              height:     pl.height    ?? null,
-              weight:     pl.weight    ?? null,
-              status:     (pl.status as TeamItem['players'][number]['status']) ?? 'active',
-              photoUrl:   (pl as any).photoUrl ?? null,
+            location: p.location ?? '',
+            foundedYear: (p as any).foundedYear ?? null,
+            homeVenue: (p as any).homeVenue ?? '',
+            coachName: p.coachName ?? '',
+            coachPhone: p.coachPhone ?? '',
+            isActive: p.isActive,
+            players: (p.players ?? []).map(pl => ({
+              id: Number(pl.id),
+              teamId: Number(pl.teamId),
+              positionId: Number(pl.positionId),
+              firstName: pl.firstName,
+              lastName: pl.lastName,
+              nickName: pl.nickName ?? null,
+              number: pl.number,
+              birthDate: pl.birthDate ? String(pl.birthDate) : null,
+              height: pl.height ?? null,
+              weight: pl.weight ?? null,
+              status: (pl.status as TeamItem['players'][number]['status']) ?? 'active',
+              photoUrl: (pl as any).photoUrl ?? null,
             })),
           }));
           this.teamsData.set(mapped);
@@ -628,10 +628,10 @@ export default class ChampionshipFormPage implements OnInit {
   // ── Helpers ────────────────────────────────────────────────────
   private inferFormat(phases: PhaseCardData[]): ChampionshipFormat | null {
     const types = new Set(phases.map(p => p.phaseType));
-    if (types.has(PhaseType.Swiss))                                     return 'swiss_playoff';
-    if (types.has(PhaseType.Groups))                                    return 'groups_knockout';
+    if (types.has(PhaseType.Swiss)) return 'swiss_playoff';
+    if (types.has(PhaseType.Groups)) return 'groups_knockout';
     if (types.has(PhaseType.Knockout) && !types.has(PhaseType.League)) return 'knockout';
-    if (types.has(PhaseType.League))                                    return 'league';
+    if (types.has(PhaseType.League)) return 'league';
     return null;
   }
 
@@ -649,8 +649,9 @@ export default class ChampionshipFormPage implements OnInit {
     for (const item of links) {
       const url = item.link.trim();
       if (!this.isHttpsUrl(url)) continue;
-      if (!mapByNetwork.has(item.socialNetworkId)) {
-        mapByNetwork.set(item.socialNetworkId, { socialNetworkId: item.socialNetworkId, link: url });
+      const socialNetworkId = Number(item.socialNetworkId);
+      if (!mapByNetwork.has(socialNetworkId)) {
+        mapByNetwork.set(socialNetworkId, { socialNetworkId, link: url });
       }
     }
     return Array.from(mapByNetwork.values());

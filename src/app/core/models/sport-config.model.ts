@@ -10,6 +10,8 @@
 // ─────────────────────────────────────────────────────────────
 
 
+import type { DbId } from './db.types';
+
 // ─────────────────────────────────────────────────────────────
 // ENUMS
 // ─────────────────────────────────────────────────────────────
@@ -24,10 +26,10 @@
  *  other        → eventos informativos (lesión, VAR, tiempo extra, etc.)
  */
 export enum MatchEventCategory {
-  Scoring      = 'scoring',
-  Card         = 'card',
+  Scoring = 'scoring',
+  Card = 'card',
   Substitution = 'substitution',
-  Other        = 'other',
+  Other = 'other',
 }
 
 
@@ -44,26 +46,27 @@ export enum MatchEventCategory {
  * de varias horas — casi nunca cambia en producción.
  */
 export interface Sport {
-  id:   number;
+  id: DbId;
   name: string; // Campo implícito; asumido de la relación en el diagrama
   icon: string;
 
   // Estructura temporal del partido
-  periods:          number;   // cantidad de períodos (2 mitades, 3 sets, 4 cuartos...)
-  periodDuration:   number;   // duración en minutos por período
-  periodLabel:      string;   // 'Tiempo', 'Set', 'Cuarto', 'Período'
+  periods: number;   // cantidad de períodos (2 mitades, 3 sets, 4 cuartos...)
+  periodDuration: number;   // duración en minutos por período
+  periodLabel: string;   // 'Tiempo', 'Set', 'Cuarto', 'Período'
   periodLabelPlural: string;  // 'Tiempos', 'Sets', 'Cuartos', 'Períodos'
 
   // Unidad de medición del resultado
   matchTypeSingular: string;  // 'gol', 'punto', 'set'
-  matchTypePlural:   string;  // 'goles', 'puntos', 'sets'
+  matchTypePlural: string;  // 'goles', 'puntos', 'sets'
 
   // Relaciones cargadas opcionalmente (joins).
   // Tipadas como la entidad destino (no el pivot) para que
   // SportDetail pueda extender Sport sin conflicto de tipos.
-  positions?:       Position[];
+  positions?: Position[];
   matchEventTypes?: TypeMatchEvent[];
-  matchRules?:      MatchRule[];
+  matchRules?: MatchRule[];
+  isActive?: boolean;
 }
 
 
@@ -76,10 +79,11 @@ export interface Sport {
  * Son globales y se asocian a uno o varios deportes via SportPosition.
  */
 export interface Position {
-  id:           number;
-  code:         string;         // 'GK', 'FW', 'MF', 'DF'
-  label:        string;         // 'Portero', 'Delantero'
+  id: DbId;
+  code: string;         // 'GK', 'FW', 'MF', 'DF'
+  label: string;         // 'Portero', 'Delantero'
   abbreviation: string;         // 'POR', 'DEL'
+  isActive?: boolean;
 }
 
 /**
@@ -87,9 +91,9 @@ export interface Position {
  * UC: Posiciones disponibles para el deporte (form de inscripción de jugador).
  */
 export interface SportPosition {
-  sportId:    number;
-  positionId: number;
-  position?:  Position;   // JOIN para mostrar label y abbreviation
+  sportId: DbId;
+  positionId: DbId;
+  position?: Position;   // JOIN para mostrar label y abbreviation
 }
 
 
@@ -107,13 +111,15 @@ export interface SportPosition {
  *                   (normalmente se calcula a nivel partido, no por evento)
  */
 export interface TypeMatchEvent {
-  id:             number;
-  label:          string;              // 'Gol', 'Tarjeta amarilla', 'Sustitución'
-  icon:           string;              // nombre del icono o URL
-  color:          string;              // hex o nombre CSS para mostrar en UI
-  matchPoint:     number;              // puntos que suma al marcador del equipo
-  category:       MatchEventCategory;
+  id: DbId;
+  label: string;              // 'Gol', 'Tarjeta amarilla', 'Sustitución'
+  icon: string;              // nombre del icono o URL
+  color: string;              // hex o nombre CSS para mostrar en UI
+  matchPoint: number;              // puntos que suma al marcador del equipo
+  category: MatchEventCategory;
   standingPoints: number;              // puntos de tabla (para casos edge como walkover)
+  relatedEventId?: DbId;
+  isActive?: boolean;
 }
 
 /**
@@ -122,9 +128,9 @@ export interface TypeMatchEvent {
  * (Fútbol tiene tarjetas; Voleibol no; Basket tiene faltas técnicas.)
  */
 export interface SportTypeMatchEvent {
-  sportId:          number;
-  typeMatchEventId: number;
-  typeMatchEvent?:  TypeMatchEvent;   // JOIN para mostrar label, icon, color
+  sportId: DbId;
+  typeMatchEventId: DbId;
+  typeMatchEvent?: TypeMatchEvent;   // JOIN para mostrar label, icon, color
 }
 
 
@@ -141,9 +147,10 @@ export interface SportTypeMatchEvent {
  * Puede ser sobreescrito a nivel campeonato via ChampionshipMatchRule.
  */
 export interface MatchRule {
-  id:    number;
-  name:  string;   // 'max_players', 'max_yellow_cards', 'extra_time_duration'
+  id: DbId;
+  name: string;   // 'max_players', 'max_yellow_cards', 'extra_time_duration'
   value: number;   // valor default
+  isActive?: boolean;
 }
 
 /**
@@ -152,9 +159,9 @@ export interface MatchRule {
  * El campeonato puede hacer override via ChampionshipMatchRule.
  */
 export interface SportMatchRule {
-  sportId:    number;
-  matchRuleId: number;
-  matchRule?:  MatchRule;   // JOIN para mostrar name y value default
+  sportId: DbId;
+  matchRuleId: DbId;
+  matchRule?: MatchRule;   // JOIN para mostrar name y value default
 }
 
 
@@ -168,14 +175,14 @@ export interface SportMatchRule {
  * en llamadas separadas a los pivotes.
  */
 export interface CreateSportDto {
-  name:              string;
-  icon:              string;
-  periods:           number;
-  periodDuration:    number;
-  periodLabel:       string;
+  name: string;
+  icon: string;
+  periods: number;
+  periodDuration: number;
+  periodLabel: string;
   periodLabelPlural: string;
   matchTypeSingular: string;
-  matchTypePlural:   string;
+  matchTypePlural: string;
 }
 
 /**
@@ -188,17 +195,17 @@ export type UpdateSportDto = Partial<Omit<CreateSportDto, 'name'>>;
 
 /** UC: Agregar posición a un deporte */
 export interface AddSportPositionDto {
-  positionId: number;
+  positionId: DbId;
 }
 
 /** UC: Agregar tipo de evento a un deporte */
 export interface AddSportTypeMatchEventDto {
-  typeMatchEventId: number;
+  typeMatchEventId: DbId;
 }
 
 /** UC: Agregar regla a un deporte */
 export interface AddSportMatchRuleDto {
-  matchRuleId: number;
+  matchRuleId: DbId;
 }
 
 
@@ -217,9 +224,9 @@ export type SportOption = Pick<Sport, 'id' | 'name' | 'icon'>;
  * Incluye todas las relaciones. Apto para cachear con TTL largo.
  */
 export interface SportDetail extends Sport {
-  positions:       Position[];
+  positions: Position[];
   matchEventTypes: TypeMatchEvent[];
-  matchRules:      MatchRule[];
+  matchRules: MatchRule[];
 }
 
 /**
@@ -228,20 +235,20 @@ export interface SportDetail extends Sport {
  * cómo se puntúa, qué eventos existen y qué reglas aplican.
  */
 export interface SportMatchConfig {
-  sportId:           number;
+  sportId: DbId;
   matchTypeSingular: string;
-  matchTypePlural:   string;
-  periods:           number;
-  periodDuration:    number;
-  periodLabel:       string;
+  matchTypePlural: string;
+  periods: number;
+  periodDuration: number;
+  periodLabel: string;
 
   // Eventos disponibles agrupados por categoría para facilitar el render en UI
   eventsByCategory: Record<MatchEventCategory, TypeMatchEvent[]>;
 
   // Reglas con su valor default (el campeonato puede hacer override)
   rules: Array<{
-    matchRuleId:  number;
-    name:         string;
+    matchRuleId: DbId;
+    name: string;
     defaultValue: number;
   }>;
 }

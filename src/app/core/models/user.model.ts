@@ -1,3 +1,5 @@
+import type { DbId } from './db.types';
+
 /**
  * User roles in the system
  * - super_admin: Fropen employee with full system access
@@ -9,12 +11,17 @@ export type UserRole = 'super_admin' | 'admin';
  * User entity representing authenticated users
  */
 export interface User {
-  id: string;
+  id: DbId;
+  name?: string;
   email: string;
   firstName: string;
   lastName: string;
   role: UserRole;
-  organizationId?: string; // Only for admin role
+  roleId?: DbId;
+  organizationId?: DbId; // Only for admin role
+  emailValidated?: boolean;
+  password?: string;
+  img?: string;
   avatar?: string;
   phone?: string;
   createdAt: Date;
@@ -57,7 +64,7 @@ export interface CreateAdminDto {
   email: string;
   firstName: string;
   lastName: string;
-  organizationId: string;
+  organizationId: DbId;
   phone?: string;
 }
 
