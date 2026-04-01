@@ -124,21 +124,21 @@ export class MatchService {
    * Parse date strings to Date objects
    */
   private parseMatchDates(match: Match): Match {
-    if (match.scheduledDate && typeof match.scheduledDate === 'string') {
-      match.scheduledDate = new Date(match.scheduledDate);
-    }
-    if (match.actualStartTime && typeof match.actualStartTime === 'string') {
-      match.actualStartTime = new Date(match.actualStartTime);
-    }
-    if (match.actualEndTime && typeof match.actualEndTime === 'string') {
-      match.actualEndTime = new Date(match.actualEndTime);
-    }
-    if (match.createdAt && typeof match.createdAt === 'string') {
-      match.createdAt = new Date(match.createdAt);
-    }
-    if (match.updatedAt && typeof match.updatedAt === 'string') {
-      match.updatedAt = new Date(match.updatedAt);
-    }
+    // if (match.scheduledStart && typeof match.scheduledStart === 'string') {
+    //   match.scheduledStart = new Date(match.scheduledDate);
+    // }
+    // if (match.actualStartTime && typeof match.actualStartTime === 'string') {
+    //   match.actualStartTime = new Date(match.actualStartTime);
+    // }
+    // if (match.actualEndTime && typeof match.actualEndTime === 'string') {
+    //   match.actualEndTime = new Date(match.actualEndTime);
+    // }
+    // if (match.createdAt && typeof match.createdAt === 'string') {
+    //   match.createdAt = new Date(match.createdAt);
+    // }
+    // if (match.updatedAt && typeof match.updatedAt === 'string') {
+    //   match.updatedAt = new Date(match.updatedAt);
+    // }
     return match;
   }
 
