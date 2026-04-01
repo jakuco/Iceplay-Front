@@ -24,7 +24,7 @@ export class TeamService {
    */
   getTeams(championshipId: string): Observable<Team[]> {
     return this.api.get<Team[]>('teams', { championshipId }).pipe(
-      map((teams) => teams.map((t) => this.parseTeamDates(t))),
+      // map((teams) => teams.map((t) => this.parseTeamDates(t))),
       catchError((error) => this.handleError('Error fetching teams', error)),
     );
   }
@@ -49,7 +49,7 @@ export class TeamService {
    */
   getTeamById(id: string): Observable<Team> {
     return this.api.get<Team>(`teams/${id}`).pipe(
-      map((team) => this.parseTeamDates(team)),
+      // map((team) => this.parseTeamDates(team)),
       catchError((error) => this.handleError('Error fetching team', error)),
     );
   }
@@ -77,7 +77,7 @@ export class TeamService {
     team: CreateTeamDto & { championshipId: string; organizationId: string },
   ): Observable<Team> {
     return this.api.post<Team>('teams', team).pipe(
-      map((t) => this.parseTeamDates(t)),
+      // map((t) => this.parseTeamDates(t)),
       catchError((error) => this.handleError('Error creating team', error)),
     );
   }
@@ -87,7 +87,7 @@ export class TeamService {
    */
   updateTeam(id: string, team: UpdateTeamDto): Observable<Team> {
     return this.api.patch<Team>(`teams/${id}`, team).pipe(
-      map((t) => this.parseTeamDates(t)),
+      // map((t) => this.parseTeamDates(t)),
       catchError((error) => this.handleError('Error updating team', error)),
     );
   }
@@ -126,15 +126,15 @@ export class TeamService {
   /**
    * Parse date strings to Date objects for Team
    */
-  private parseTeamDates(team: Team): Team {
-    if (team.createdAt && typeof team.createdAt === 'string') {
-      team.createdAt = new Date(team.createdAt);
-    }
-    if (team.updatedAt && typeof team.updatedAt === 'string') {
-      team.updatedAt = new Date(team.updatedAt);
-    }
-    return team;
-  }
+  // private parseTeamDates(team: Team): Team {
+  //   if (team.createdAt && typeof team.createdAt === 'string') {
+  //     team.createdAt = new Date(team.createdAt);
+  //   }
+  //   if (team.updatedAt && typeof team.updatedAt === 'string') {
+  //     team.updatedAt = new Date(team.updatedAt);
+  //   }
+  //   return team;
+  // }
 
   /**
    * Parse date strings to Date objects for Player
@@ -164,94 +164,96 @@ export class TeamService {
   }
 
   // Simulated CSV Import
-  importFromCsv(
-    championshipId: string,
-    organizationId: string,
-    csvContent: string,
-  ): Observable<CsvImportResult> {
-    const lines = csvContent.split('\n');
-    const headers = lines[0].split(',');
-    const data = lines.slice(1).filter((line) => line.trim() !== '');
+  // importFromCsv(
+  //   championshipId: string,
+  //   organizationId: string,
+  //   csvContent: string,
+  // ): Observable<CsvImportResult>
+  //   {
+  //     const lines = csvContent.split('\n');
+  //     const headers = lines[0].split(',');
+  //     const data = lines.slice(1).filter((line) => line.trim() !== '');
 
-    const result: CsvImportResult = {
-      teamsImported: 0,
-      playersImported: 0,
-      teamsSkipped: [],
-      playersSkipped: [],
-      warnings: [],
-    };
+  //     const result: CsvImportResult = {
+  //       teamsImported: 0,
+  //       playersImported: 0,
+  //       teamsSkipped: [],
+  //       playersSkipped: [],
+  //       warnings: [],
+  //     };
 
-    // This is a simplified simulation. In a real app, we'd need robust parsing.
-    // We'll assume the CSV columns match the requirement:
-    // team_name, short_name, coach, category, group, player_firstname, player_lastname, player_document, player_number, player_position
+  //     // This is a simplified simulation. In a real app, we'd need robust parsing.
+  //     // We'll assume the CSV columns match the requirement:
+  //     // team_name, short_name, coach, category, group, player_firstname, player_lastname, player_document, player_number, player_position
 
-    return from(data).pipe(
-      mergeMap((line) => {
-        const cols = line.split(',');
-        const teamName = cols[0]?.trim();
+  //     return from(data).pipe(
+  //       mergeMap((line) => {
+  //         const cols = line.split(',');
+  //         const teamName = cols[0]?.trim();
 
-        if (!teamName) return of(null);
+  //         if (!teamName) return of(null);
 
-        // Check if team exists
-        return this.api.get<Team[]>('teams', { name: teamName, championshipId }).pipe(
-          switchMap((teams) => {
-            let teamObs: Observable<Team>;
-            if (teams.length > 0) {
-              teamObs = of(teams[0]);
-            } else {
-              // Create new team
-              const newTeam: CreateTeamDto & { championshipId: string; organizationId: string } = {
-                championshipId,
-                organizationId,
-                name: teamName,
-                shortName: cols[1]?.trim() || teamName.substring(0, 3).toUpperCase(),
-                primaryColor: '#1e40af',
-                secondaryColor: '#ffffff',
-                logo: 'https://via.placeholder.com/50',
-                managerName: cols[2]?.trim() || '',
-                city: cols[3]?.trim() || '',
-              };
-              teamObs = this.createTeam(newTeam).pipe(tap(() => result.teamsImported++));
-            }
+  //         // Check if team exists
+  //         return this.api.get<Team[]>('teams', { name: teamName, championshipId }).pipe(
+  //           switchMap((teams) => {
+  //             let teamObs: Observable<Team>;
+  //             if (teams.length > 0) {
+  //               teamObs = of(teams[0]);
+  //             } else {
+  //               // Create new team
+  //               const newTeam: CreateTeamDto & { championshipId: string; organizationId: string } = {
+  //                 championshipId,
+  //                 organizationId,
+  //                 name: teamName,
+  //                 shortName: cols[1]?.trim() || teamName.substring(0, 3).toUpperCase(),
+  //                 primaryColor: '#1e40af',
+  //                 secondaryColor: '#ffffff',
+  //                 logo: 'https://via.placeholder.com/50',
+  //                 managerName: cols[2]?.trim() || '',
+  //                 city: cols[3]?.trim() || '',
+  //               };
+  //               teamObs = this.createTeam(newTeam).pipe(tap(() => result.teamsImported++));
+  //             }
 
-            return teamObs.pipe(
-              switchMap((team) => {
-                // Create player
-                const playerDoc = cols[7]?.trim();
-                if (!playerDoc) return of(null);
+  //             return teamObs.pipe(
+  //               switchMap((team) => {
+  //                 // Create player
+  //                 const playerDoc = cols[7]?.trim();
+  //                 if (!playerDoc) return of(null);
 
-                // Check for duplicate player by document
-                return this.api.get<Player[]>('players', { document: playerDoc }).pipe(
-                  switchMap((existingPlayers) => {
-                    if (existingPlayers.length > 0) {
-                      result.warnings.push(`Documento duplicado: ${playerDoc}`);
-                      result.playersSkipped.push(playerDoc);
-                      return of(null);
-                    }
+  //                 // Check for duplicate player by document
+  //                 return this.api.get<Player[]>('players', { document: playerDoc }).pipe(
+  //                   switchMap((existingPlayers) => {
+  //                     if (existingPlayers.length > 0) {
+  //                       result.warnings.push(`Documento duplicado: ${playerDoc}`);
+  //                       result.playersSkipped.push(playerDoc);
+  //                       return of(null);
+  //                     }
 
-                    const newPlayer: CreatePlayerDto & {
-                      teamId: string;
-                      championshipId: string;
-                      organizationId: string;
-                    } = {
-                      teamId: team.id,
-                      championshipId,
-                      organizationId,
-                      firstName: cols[5]?.trim() || '',
-                      lastName: cols[6]?.trim() || '',
-                      number: parseInt(cols[8]?.trim() || '0', 10),
-                      position: cols[9]?.trim() || 'Player',
-                    };
-                    return this.createPlayer(newPlayer).pipe(tap(() => result.playersImported++));
-                  }),
-                );
-              }),
-            );
-          }),
-        );
-      }),
-      toArray(),
-      map(() => result),
-    );
-  }
+  //                     const newPlayer: CreatePlayerDto & {
+  //                       teamId: string;
+  //                       championshipId: string;
+  //                       organizationId: string;
+  //                     } = {
+  //                       teamId: team.id,
+  //                       championshipId,
+  //                       organizationId,
+  //                       firstName: cols[5]?.trim() || '',
+  //                       lastName: cols[6]?.trim() || '',
+  //                       number: parseInt(cols[8]?.trim() || '0', 10),
+  //                       position: cols[9]?.trim() || 'Player',
+  //                     };
+  //                     return this.createPlayer(newPlayer).pipe(tap(() => result.playersImported++));
+  //                   }),
+  //                 );
+  //               }),
+  //             );
+  //           }),
+  //         );
+  //       }),
+  //       toArray(),
+  //       map(() => result),
+  //     );
+  //   }
+  // }
 }

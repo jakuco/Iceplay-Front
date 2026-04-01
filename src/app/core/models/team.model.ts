@@ -1,39 +1,53 @@
+export interface Team {
+  id: number;
+  championship_id: number;
+  name: string;
+  shortname: string;
+  slug: string;
+  logoUrl: string;
+  documentURL: string;
+  primaryColor: string;
+  secondaryColor: string;
+  foundedYear: number;
+  homeVenue: number;
+  location: string;
+  isTeamActive: boolean;
+  hasActiveMatches: boolean;
+  coachName: string;
+  coachPhone: string;
+  IsActive: boolean;
+}
+
 /**
  * Team entity
  */
 export interface Team {
-  id: string;
-  championshipId: string;
-  organizationId: string; // Denormalized for queries
-  name: string;
-  shortName: string; // "FCB", "RMA"
-  slug: string;
-  logo?: string;
-  coverImage?: string;
-
-  // Colors
-  primaryColor: string;
-  secondaryColor: string;
-
-  // Information
-  foundedYear?: number;
-  homeVenue?: string;
-  city?: string;
-
-  // Contact
-  managerName?: string;
-  managerPhone?: string;
-  managerEmail?: string;
-
-  // State
-  isActive: boolean;
-  hasActiveMatches: boolean; // Prevents deletion if has matches
-
-  // Summary statistics (denormalized)
-  playersCount: number;
-
-  createdAt: Date;
-  updatedAt: Date;
+  // id: string;
+  // championshipId: string;
+  // organizationId: string; // Denormalized for queries
+  // name: string;
+  // shortName: string; // "FCB", "RMA"
+  // slug: string;
+  // logo?: string;
+  // coverImage?: string;
+  // // Colors
+  // primaryColor: string;
+  // secondaryColor: string;
+  // // Information
+  // foundedYear?: number;
+  // homeVenue?: string;
+  // city?: string;
+  // // Contact
+  // managerName?: string;
+  // managerPhone?: string;
+  // managerEmail?: string;
+  // // State
+  // isActive: boolean;
+  // hasActiveMatches: boolean; // Prevents deletion if has matches
+  // // Summary statistics (denormalized)
+  // playersCount: number;
+  // createdAt: Date;
+  // updatedAt: Date;
 }
 
 /**
