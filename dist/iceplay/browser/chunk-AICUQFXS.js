@@ -1,1 +1,0 @@
-import"./chunk-2NFLSA4Y.js";var t=[{path:"login",loadComponent:()=>import("./chunk-MEZALRE2.js"),title:"Iniciar Sesi\xF3n - IcePlay"},{path:"",redirectTo:"login",pathMatch:"full"}],o=t;export{o as default};
