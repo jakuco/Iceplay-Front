@@ -1,7 +1,0 @@
-{
-  "version": 3,
-  "sources": ["src/app/layouts/header/components/language-selector/language-selector.ts", "language-selector.ts"],
-  "sourcesContent": ["\n    .active-lang {\n      background: color-mix(in srgb, var(--mat-sys-primary) 15%, transparent);\n    }\n\n    .check-icon {\n      margin-left: auto;\n      font-size: 1.25rem;\n      width: 1.25rem;\n      height: 1.25rem;\n    }\n  ", ".active-lang {\n  background: color-mix(in srgb, var(--mat-sys-primary) 15%, transparent);\n}\n\n.check-icon {\n  margin-left: auto;\n  font-size: 1.25rem;\n  width: 1.25rem;\n  height: 1.25rem;\n}\n/*# sourceMappingURL=data:application/json;charset=utf-8;base64,eyJ2ZXJzaW9uIjozLCJzb3VyY2VSb290IjoiIiwic291cmNlcyI6WyJmaWxlOi8vL0Q6L0Zyb3Blbi9JY2VwbGF5L0ljZXBsYXktRnJvbnQvc3JjL2FwcC9sYXlvdXRzL2hlYWRlci9jb21wb25lbnRzL2xhbmd1YWdlLXNlbGVjdG9yL2xhbmd1YWdlLXNlbGVjdG9yLnRzIl0sIm5hbWVzIjpbXSwibWFwcGluZ3MiOiJBQUNJO0VBQ0U7OztBQUdGO0VBQ0U7RUFDQTtFQUNBO0VBQ0EiLCJzb3VyY2VzQ29udGVudCI6WyJcbiAgICAuYWN0aXZlLWxhbmcge1xuICAgICAgYmFja2dyb3VuZDogY29sb3ItbWl4KGluIHNyZ2IsIHZhcigtLW1hdC1zeXMtcHJpbWFyeSkgMTUlLCB0cmFuc3BhcmVudCk7XG4gICAgfVxuXG4gICAgLmNoZWNrLWljb24ge1xuICAgICAgbWFyZ2luLWxlZnQ6IGF1dG87XG4gICAgICBmb250LXNpemU6IDEuMjVyZW07XG4gICAgICB3aWR0aDogMS4yNXJlbTtcbiAgICAgIGhlaWdodDogMS4yNXJlbTtcbiAgICB9XG4gICJdfQ== */"],
-  "mappings": ";AACI,CAAA;AACE,cAAA,UAAA,GAAA,IAAA,EAAA,IAAA,mBAAA,GAAA,EAAA;ACAN;ADGI,CAAA;AACE,eAAA;AACA,aAAA;AACA,SAAA;AACA,UAAA;ACAN;",
-  "names": []
-}
