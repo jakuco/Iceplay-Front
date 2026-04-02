@@ -14,6 +14,7 @@ import { AuthService } from './core/services/auth.service';
 
 /** Dispara POST /auth/refresh en paralelo; no bloquea el bootstrap (no pantalla blanca). */
 function kickOffAuthBootstrap(): void {
+  console.log("kickOffAuthBootstrap");
   void inject(AuthService).ensureBootstrapped();
 }
 

@@ -4,6 +4,57 @@ Este documento describe **cómo está implementada** la autenticación en Angula
 
 ---
 
+## Guía rápida (sin jerga)
+
+### ¿Qué es el “bootstrap” de Angular?
+
+Es **el arranque de la aplicación**: Angular registra servicios, crea el `Injector`, pinta el componente raíz (`app-root`) y deja la app lista. Eso ocurre **una vez** al cargar la página (o al recargar con F5).
+
+No es algo “mágico” distinto del resto: es el **momento inicial** en el que todo empieza a funcionar.
+
+### La función con `void` en `app.config.ts`
+
+Tienes algo como:
+
+```ts
+function kickOffAuthBootstrap(): void {
+  void inject(AuthService).ensureBootstrapped();
+}
+```
+
+- **`ensureBootstrapped()`** devuelve una **Promise** (una operación que termina más tarde: la llamada a `/auth/refresh`).
+- Delante va **`void`**: significa *“inicia esta Promise pero **no la esperes** aquí”*.
+- La función del initializer **no devuelve** esa Promise a Angular.
+
+**Por qué importa:** si el initializer **devolviera** la Promise, Angular **esperaría** a que terminara el refresh **antes** de mostrar la app → pantalla en blanco varios segundos.  
+Al usar **`void`**, Angular **sigue** el arranque **al instante** y el refresh ocurre **en paralelo** (en segundo plano).
+
+En una frase: **“Arranca el intento de recuperar sesión, pero no bloquees la pantalla esperando.”**
+
+### ¿Qué es un “mutex” aquí?
+
+**Mutex** viene de *mutual exclusion* (“solo uno a la vez”). En código no es una palabra especial de Angular: es un **patrón**.
+
+**Problema que evita:** imagina que **10 peticiones** a la API fallan a la vez con **401** (token caducado). Sin control, podrías lanzar **10** `POST /auth/refresh` a la vez. Tu backend **rota** el refresh: la primera llamada puede invalidar la cookie y las otras fallan o lian el estado.
+
+**Solución:** guardas **una sola Promise** de refresh en curso (`rotatePromise`). Quien llegue primero **crea** la petición; el resto **espera la misma** hasta que termine. Así solo hay **un** refresh concurrente por ese “candado”.
+
+Lo mismo con **`bootstrapPromise`**: el primer intento de sesión al cargar la página es **uno**; el initializer y el guard pueden **compartir** esa misma Promise en lugar de duplicar llamadas.
+
+Analogía: **un baño con una llave** — si alguien ya está dentro, los demás esperan a la misma “salida”, no abren 10 puertas a la vez.
+
+### Flujo en 5 frases
+
+1. **Login:** el servidor te manda el JWT en el JSON y deja la **cookie** de refresh en el navegador; tú guardas solo el JWT en **memoria**.
+2. **Cada petición normal:** el interceptor pone `Authorization: Bearer` con ese JWT.
+3. **Al cargar la página (F5):** en paralelo se intenta `POST /auth/refresh` **con la cookie**; si va bien, vuelves a tener JWT + usuario en memoria.
+4. **Rutas protegidas:** el guard **espera** a que ese primer intento termine (éxito o fallo) y luego decide si dejarte pasar o mandarte al login.
+5. **Si el JWT caduca en mitad de uso:** un 401 dispara **otro** refresh (con su “una a la vez”) y se **reintenta** la petición una sola vez.
+
+Si algo de esto sigue confuso, lee primero esta sección y luego el resto del documento como **referencia detallada**.
+
+---
+
 ## 1. Visión general
 
 | Pieza en el back | Qué hace el front |

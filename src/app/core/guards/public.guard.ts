@@ -11,6 +11,8 @@ export const publicGuard: CanActivateFn = () => {
   const auth = inject(AuthService);
   const router = inject(Router);
 
+  console.log("publicGuard");
+  
   return from(auth.ensureBootstrapped()).pipe(
     map(() => {
       if (!auth.isAuthenticated()) {
