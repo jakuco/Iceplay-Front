@@ -5,7 +5,7 @@ import { from, map } from 'rxjs';
 import { AuthService } from '../services/auth.service';
 
 /**
- ** Espera a que termine el intento inicial con cookie `refreshToken` antes de decidir.
+ * Espera a que termine el intento inicial con cookie `refreshToken` antes de decidir.
  */
 export const authGuard: CanActivateFn = () => {
   const auth = inject(AuthService);

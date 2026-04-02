@@ -1,7 +1,7 @@
 import {
   I18nService,
   TranslatePipe
-} from "./chunk-F7SMTHKQ.js";
+} from "./chunk-DECWEXJP.js";
 import {
   toSignal
 } from "./chunk-RSSJKDFU.js";
@@ -11,36 +11,36 @@ import {
   MatSidenavContent,
   MatToolbar,
   ThemeService
-} from "./chunk-KIJADVR3.js";
-import "./chunk-2E4V5AN3.js";
+} from "./chunk-QLOEP5MP.js";
+import "./chunk-N35N62WD.js";
 import {
   MatTooltip
-} from "./chunk-LO5YR6BY.js";
+} from "./chunk-5PCYIOFH.js";
 import {
   AuthService
-} from "./chunk-FSVGDXPH.js";
-import "./chunk-MEYU7MSQ.js";
+} from "./chunk-CTYH5NZ2.js";
+import "./chunk-I4DDBC3P.js";
 import {
   MatMenu,
   MatMenuItem,
   MatMenuModule,
   MatMenuTrigger
-} from "./chunk-J2LIL7SP.js";
+} from "./chunk-N73HKLCH.js";
 import {
   MatListItem,
   MatListItemIcon,
   MatListItemTitle,
   MatNavList
-} from "./chunk-7ZWBAUSJ.js";
-import "./chunk-42GIDBWK.js";
+} from "./chunk-DRU5KYA4.js";
+import "./chunk-7MBHIBBN.js";
 import {
   MatDivider,
   MatDividerModule
-} from "./chunk-3AVQKCYA.js";
-import "./chunk-I2HRK3GA.js";
-import "./chunk-GJ7RVCNK.js";
-import "./chunk-M3WFE2HV.js";
-import "./chunk-P774KGLL.js";
+} from "./chunk-KLQVA5RB.js";
+import "./chunk-UVODHWP6.js";
+import "./chunk-VMJIIGHX.js";
+import "./chunk-2C543PJY.js";
+import "./chunk-DNCNJ5D2.js";
 import {
   NavigationEnd,
   Router,
@@ -49,32 +49,38 @@ import {
   RouterOutlet,
   provideRouter,
   withComponentInputBinding
-} from "./chunk-OUAXBHXP.js";
+} from "./chunk-XIJO5SZ4.js";
 import {
   MatButtonModule,
   MatIconButton
-} from "./chunk-T2MKQVTJ.js";
+} from "./chunk-TWF5BIFR.js";
 import {
+  HttpContextToken,
   MatIcon,
   MatIconModule,
   bootstrapApplication,
   provideHttpClient,
   withInterceptors
-} from "./chunk-AAICBOD7.js";
+} from "./chunk-2QF6PXYN.js";
 import {
   ChangeDetectionStrategy,
   ChangeDetectorRef,
   Component,
   Injectable,
+  catchError,
   computed,
   effect,
   filter,
+  from,
   inject,
   map,
+  provideAppInitializer,
   provideBrowserGlobalErrorListeners,
   provideZonelessChangeDetection,
   setClassMetadata,
   signal,
+  switchMap,
+  throwError,
   ɵsetClassDebugInfo,
   ɵɵadvance,
   ɵɵattribute,
@@ -107,12 +113,9 @@ import {
 
 // src/app/core/guards/auth.guard.ts
 var authGuard = () => {
-  const authService = inject(AuthService);
+  const auth = inject(AuthService);
   const router = inject(Router);
-  if (authService.isAuthenticated()) {
-    return true;
-  }
-  return router.createUrlTree(["/auth/login"]);
+  return from(auth.ensureBootstrapped()).pipe(map(() => auth.isAuthenticated() ? true : router.createUrlTree(["/auth/login"])));
 };
 
 // src/app/core/guards/admin.guard.ts
@@ -144,19 +147,19 @@ var routes = [
   {
     path: "auth",
     // canActivate: [publicGuard],
-    loadChildren: () => import("./chunk-3P3UZJ4J.js")
+    loadChildren: () => import("./chunk-IVEXZDGK.js")
   },
   //* Super Admin routes - requires super_admin role
   {
     path: "super-admin",
     canActivate: [authGuard, superAdminGuard],
-    loadChildren: () => import("./chunk-YQMCAPML.js")
+    loadChildren: () => import("./chunk-PFDQ3IX3.js")
   },
   //* Admin routes - requires admin or super_admin role
   {
     path: "admin",
     canActivate: [authGuard, adminGuard],
-    loadChildren: () => import("./chunk-4NGMIKN2.js")
+    loadChildren: () => import("./chunk-PMRJRGAE.js")
   },
   //* Public routes (existing)
   // {
@@ -171,22 +174,22 @@ var routes = [
   // },
   {
     path: "live-match",
-    loadComponent: () => import("./chunk-CWQ5BS5W.js"),
+    loadComponent: () => import("./chunk-G4N563E6.js"),
     title: "Live Match Logger"
   },
   {
     path: "matches",
-    loadComponent: () => import("./chunk-5SRKESQ7.js"),
+    loadComponent: () => import("./chunk-4LSXDCAS.js"),
     title: "Matches"
   },
   {
     path: "team/:id",
-    loadComponent: () => import("./chunk-MGTEFPCF.js"),
+    loadComponent: () => import("./chunk-PFQW4JUA.js"),
     title: "Team Detail"
   },
   {
     path: "player/:id",
-    loadComponent: () => import("./chunk-N5G2RJTI.js"),
+    loadComponent: () => import("./chunk-HKXYYEHU.js"),
     title: "Player Detail"
   },
   {
@@ -196,12 +199,12 @@ var routes = [
   },
   {
     path: "ui-showcase",
-    loadComponent: () => import("./chunk-7HFV7QFA.js").then((m) => m.UiShowcasePage),
+    loadComponent: () => import("./chunk-HROZBXFU.js").then((m) => m.UiShowcasePage),
     title: "UI Showcase - IcePlay"
   },
   {
     path: "cup/:cupName",
-    loadComponent: () => import("./chunk-RBXFM42V.js"),
+    loadComponent: () => import("./chunk-LFLBAP2M.js"),
     title: "Cup Overview - IcePlay"
   },
   //* Catch-all redirect
@@ -212,24 +215,43 @@ var routes = [
 ];
 
 // src/app/core/interceptors/auth.interceptor.ts
+var retriedAfterRefresh = new HttpContextToken(() => false);
+var skipBearerAndRefreshOn401 = /\/auth\/(login|refresh|logout)(?:\?|#|$)/i;
 var authInterceptor = (req, next) => {
+  if (skipBearerAndRefreshOn401.test(req.url)) {
+    return next(req);
+  }
   const auth = inject(AuthService);
   const token = auth.getAccessToken()();
-  if (token) {
-    req = req.clone({
-      setHeaders: { Authorization: `Bearer ${token}` }
-    });
-  }
-  return next(req);
+  const reqWithAuth = token ? req.clone({ setHeaders: { Authorization: `Bearer ${token}` } }) : req;
+  return next(reqWithAuth).pipe(catchError((err) => {
+    if (err.status !== 401 || req.context.get(retriedAfterRefresh)) {
+      return throwError(() => err);
+    }
+    return from(auth.rotateAccessToken()).pipe(switchMap(() => {
+      const nextToken = auth.getAccessToken()();
+      if (!nextToken) {
+        return throwError(() => err);
+      }
+      return next(req.clone({
+        setHeaders: { Authorization: `Bearer ${nextToken}` },
+        context: req.context.set(retriedAfterRefresh, true)
+      }));
+    }), catchError(() => throwError(() => err)));
+  }));
 };
 
 // src/app/app.config.ts
+function kickOffAuthBootstrap() {
+  void inject(AuthService).ensureBootstrapped();
+}
 var appConfig = {
   providers: [
     provideBrowserGlobalErrorListeners(),
     provideZonelessChangeDetection(),
     provideRouter(routes, withComponentInputBinding()),
-    provideHttpClient(withInterceptors([authInterceptor]))
+    provideHttpClient(withInterceptors([authInterceptor])),
+    provideAppInitializer(kickOffAuthBootstrap)
   ]
 };
 

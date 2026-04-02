@@ -5,7 +5,7 @@ import { from, map } from 'rxjs';
 import { AuthService } from '../services/auth.service';
 
 /**
- ** Rutas solo para anónimos (p. ej. login): respeta sesión restaurada por cookie.
+ * Rutas solo para anónimos (p. ej. login): respeta sesión restaurada por cookie.
  */
 export const publicGuard: CanActivateFn = () => {
   const auth = inject(AuthService);

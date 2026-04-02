@@ -18,10 +18,10 @@ export class AuthService {
 
   private _accessToken = signal<string | null>(null);
 
-  //** Una vez por carga: intento silencioso POST /auth/refresh (cookie httpOnly). */
+  /** Una vez por carga: intento silencioso POST /auth/refresh (cookie httpOnly). */
   private bootstrapPromise: Promise<void> | null = null;
 
-  //** Mutex para varios 401 en paralelo durante rotación de refresh. */
+  /** Mutex para varios 401 en paralelo durante rotación de refresh. */
   private rotatePromise: Promise<void> | null = null;
 
   setAccessToken(token: string | null) {
@@ -81,8 +81,8 @@ export class AuthService {
   }
 
   /**
-   ** Espera el primer intento de sesión vía cookie `refreshToken` (F5 / entrada directa a URL).
-   ** No lanza: si no hay cookie o 403, quedas anónimo.
+   * Espera el primer intento de sesión vía cookie `refreshToken` (F5 / entrada directa a URL).
+   * No lanza: si no hay cookie o 403, quedas anónimo.
    */
   ensureBootstrapped(): Promise<void> {
     if (!this.bootstrapPromise) {
@@ -93,7 +93,9 @@ export class AuthService {
     return this.bootstrapPromise;
   }
 
-  //** POST /auth/refresh con credenciales; usa mutex para peticiones concurrentes (p. ej. varios 401).
+  /**
+   * POST /auth/refresh con credenciales; mutex si varias peticiones disparan 401 a la vez.
+   */
   rotateAccessToken(): Promise<void> {
     if (!this.rotatePromise) {
       this.rotatePromise = this.fetchRefreshAndApplySession().finally(() => {
@@ -103,7 +105,7 @@ export class AuthService {
     return this.rotatePromise;
   }
 
-  //** POST /auth/refresh con credenciales; usa mutex para peticiones concurrentes (p. ej. varios 401).
+  /** Llama al back y aplica accessToken + user en memoria. */
   private async fetchRefreshAndApplySession(): Promise<void> {
     const response = await firstValueFrom(
       this.api.post<AuthRefreshResponse>(
@@ -119,14 +121,12 @@ export class AuthService {
     this.applySession(accessToken, response.user);
   }
 
-  //** Aplica la sesión al servicio.
   private applySession(accessToken: string, rawUser: unknown): void {
     const user = this.mapUserFromBackend(rawUser);
     this._accessToken.set(accessToken);
     this._currentUser.set(user);
   }
 
-  //** Mapea el usuario desde el backend.
   private mapUserFromBackend(raw: unknown): User {
     if (!raw || typeof raw !== 'object') {
       throw new Error('Respuesta de usuario inválida');
