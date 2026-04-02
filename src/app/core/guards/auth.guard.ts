@@ -1,19 +1,21 @@
 import { inject } from '@angular/core';
 import { Router, type CanActivateFn } from '@angular/router';
+import { from, map } from 'rxjs';
 
 import { AuthService } from '../services/auth.service';
 
 /**
- * Guard that checks if user is authenticated
- * Redirects to login page if not authenticated
+ ** Espera a que termine el intento inicial con cookie `refreshToken` antes de decidir.
  */
 export const authGuard: CanActivateFn = () => {
-  const authService = inject(AuthService);
+  const auth = inject(AuthService);
   const router = inject(Router);
 
-  if (authService.isAuthenticated()) {
-    return true;
-  }
-
-  return router.createUrlTree(['/auth/login']);
+  return from(auth.ensureBootstrapped()).pipe(
+    map(() =>
+      auth.isAuthenticated()
+        ? true
+        : router.createUrlTree(['/auth/login']),
+    ),
+  );
 };

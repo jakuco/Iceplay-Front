@@ -1,5 +1,7 @@
 import {
   ApplicationConfig,
+  inject,
+  provideAppInitializer,
   provideBrowserGlobalErrorListeners,
   provideZonelessChangeDetection,
 } from '@angular/core';
@@ -8,6 +10,12 @@ import { provideRouter, withComponentInputBinding } from '@angular/router';
 
 import { routes } from './app.routes';
 import { authInterceptor } from './core/interceptors';
+import { AuthService } from './core/services/auth.service';
+
+/** Dispara POST /auth/refresh en paralelo; no bloquea el bootstrap (no pantalla blanca). */
+function kickOffAuthBootstrap(): void {
+  void inject(AuthService).ensureBootstrapped();
+}
 
 export const appConfig: ApplicationConfig = {
   providers: [
@@ -15,5 +23,6 @@ export const appConfig: ApplicationConfig = {
     provideZonelessChangeDetection(),
     provideRouter(routes, withComponentInputBinding()),
     provideHttpClient(withInterceptors([authInterceptor])),
+    provideAppInitializer(kickOffAuthBootstrap),
   ],
 };

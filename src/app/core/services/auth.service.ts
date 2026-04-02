@@ -2,6 +2,7 @@ import { Injectable, signal, inject, computed } from '@angular/core';
 import { ApiService } from './api.service';
 import { firstValueFrom, tap } from 'rxjs';
 import { Router } from '@angular/router';
+import type { AuthLoginResponse, AuthRefreshResponse } from '../models/auth-api.model';
 import { User } from '../models/user.model';
 
 @Injectable({
@@ -15,25 +16,24 @@ export class AuthService {
   isLoading = signal(false);
   error = signal<string | null>(null);
 
-
-  //* Access token signal
   private _accessToken = signal<string | null>(null);
 
-  //* Set access token
+  //** Una vez por carga: intento silencioso POST /auth/refresh (cookie httpOnly). */
+  private bootstrapPromise: Promise<void> | null = null;
+
+  //** Mutex para varios 401 en paralelo durante rotación de refresh. */
+  private rotatePromise: Promise<void> | null = null;
+
   setAccessToken(token: string | null) {
     this._accessToken.set(token);
   }
 
-  //* Get access token (readonly signal)
   getAccessToken() {
     return this._accessToken.asReadonly();
   }
 
-  //* Public signals
   user = this._currentUser.asReadonly();
-  // private _tokenSignal = this._token.asReadonly();
 
-  // Alias for backward compatibility
   get currentUser() {
     return this.user;
   }
@@ -59,20 +59,7 @@ export class AuthService {
     const last = user.lastName?.charAt(0).toUpperCase() || '';
     return first + last || user.email.charAt(0).toUpperCase();
   });
-  private _getDefaultRoute = computed(() => {
-    const user = this._currentUser();
-    if (!user) return '/auth/login';
-    if (user.role === 'super_admin') return '/super-admin';
-    return '/admin/dashboard';
-  });
 
-  // Public methods that return computed signals
-  //* Constructor - restore session on page reload
-  // constructor() {
-  //   this.restoreSession();
-  // }
-
-  // Public methods that return computed signals
   isAuthenticated() {
     return this._isAuthenticated();
   }
@@ -93,14 +80,105 @@ export class AuthService {
     return this._userInitials();
   }
 
-  //* Login
+  /**
+   ** Espera el primer intento de sesión vía cookie `refreshToken` (F5 / entrada directa a URL).
+   ** No lanza: si no hay cookie o 403, quedas anónimo.
+   */
+  ensureBootstrapped(): Promise<void> {
+    if (!this.bootstrapPromise) {
+      this.bootstrapPromise = this.fetchRefreshAndApplySession().catch(() => {
+        //* sin sesión
+      });
+    }
+    return this.bootstrapPromise;
+  }
+
+  //** POST /auth/refresh con credenciales; usa mutex para peticiones concurrentes (p. ej. varios 401).
+  rotateAccessToken(): Promise<void> {
+    if (!this.rotatePromise) {
+      this.rotatePromise = this.fetchRefreshAndApplySession().finally(() => {
+        this.rotatePromise = null;
+      });
+    }
+    return this.rotatePromise;
+  }
+
+  //** POST /auth/refresh con credenciales; usa mutex para peticiones concurrentes (p. ej. varios 401).
+  private async fetchRefreshAndApplySession(): Promise<void> {
+    const response = await firstValueFrom(
+      this.api.post<AuthRefreshResponse>(
+        'auth/refresh',
+        {},
+        { withCredentials: true },
+      ),
+    );
+    const accessToken = response.accessToken;
+    if (!accessToken) {
+      throw new Error('Refresh sin accessToken');
+    }
+    this.applySession(accessToken, response.user);
+  }
+
+  //** Aplica la sesión al servicio.
+  private applySession(accessToken: string, rawUser: unknown): void {
+    const user = this.mapUserFromBackend(rawUser);
+    this._accessToken.set(accessToken);
+    this._currentUser.set(user);
+  }
+
+  //** Mapea el usuario desde el backend.
+  private mapUserFromBackend(raw: unknown): User {
+    if (!raw || typeof raw !== 'object') {
+      throw new Error('Respuesta de usuario inválida');
+    }
+    const backUser = raw as Record<string, unknown>;
+    const nameStr =
+      typeof backUser['name'] === 'string' ? backUser['name'] : '';
+    const parts = nameStr.trim().split(/\s+/).filter(Boolean);
+    const firstName =
+      typeof backUser['firstName'] === 'string'
+        ? backUser['firstName']
+        : (parts[0] ?? '');
+    const lastName =
+      typeof backUser['lastName'] === 'string'
+        ? backUser['lastName']
+        : parts.slice(1).join(' ');
+
+    const roleRaw = backUser['role'];
+    let role: User['role'] = 'admin';
+    if (roleRaw === 'super_admin' || roleRaw === 'admin') {
+      role = roleRaw;
+    } else {
+      const n = typeof roleRaw === 'number' ? roleRaw : Number(roleRaw);
+      role = Number.isFinite(n) ? this.mapRole(n) : 'admin';
+    }
+
+    const base = raw as User;
+
+    return {
+      ...base,
+      firstName,
+      lastName,
+      role,
+      createdAt: new Date(
+        (backUser['createdAt'] as string | number | Date | undefined) ??
+        Date.now(),
+      ),
+      lastLoginAt: backUser['lastLoginAt']
+        ? new Date(backUser['lastLoginAt'] as string | number | Date)
+        : undefined,
+      email: String(backUser['email'] ?? base.email),
+      isActive: Boolean(backUser['isActive'] ?? base.isActive ?? true),
+    };
+  }
+
   async login(credentials: { email: string; password?: string }): Promise<void> {
     this.isLoading.set(true);
     this.error.set(null);
 
     try {
       const response = await firstValueFrom(
-        this.api.post<{ user: any; accessToken?: string; token?: string }>(
+        this.api.post<AuthLoginResponse>(
           'auth/login',
           { email: credentials.email, password: credentials.password },
           { withCredentials: true },
@@ -114,26 +192,11 @@ export class AuthService {
 
       const accessToken = response.accessToken ?? response.token;
       if (!accessToken) {
-        throw new Error('El servidor no devolvió token de acceso');
+        throw new Error('El servidor no devolvió accessToken');
       }
 
-      const backUser = response.user;
-      const [firstName, ...rest] = (backUser.name as string).split(' ');
-      const lastName = rest.join(' ');
-
-      const user: User = {
-        ...backUser,
-        firstName,
-        lastName,
-        role: this.mapRole(backUser.role),
-        createdAt: new Date(backUser.createdAt ?? Date.now()),
-        lastLoginAt: backUser.lastLoginAt
-          ? new Date(backUser.lastLoginAt)
-          : undefined,
-      };
-
-      this._accessToken.set(accessToken);
-      this._currentUser.set(user);
+      this.applySession(accessToken, response.user);
+      this.bootstrapPromise = Promise.resolve();
       this.router.navigate([this.getDefaultRoute()]);
     } catch (err: unknown) {
       const errorMessage =
@@ -148,15 +211,12 @@ export class AuthService {
     }
   }
 
-  //* Map role
-  //? The back saves: 1 = admin, 2 = super_admin (adjust if different)
   private mapRole(roles: number): User['role'] {
     if (roles === 1) return 'super_admin';
     if (roles === 2) return 'admin';
     return 'admin';
   }
 
-  //* Get default route
   getDefaultRoute() {
     const user = this._currentUser();
     if (!user) return '/auth/login';
@@ -164,33 +224,21 @@ export class AuthService {
     return '/admin/dashboard';
   }
 
-  //* Logout 
-  async logout() {
+  async logout(): Promise<void> {
     await firstValueFrom(
       this.api.post('auth/logout', {}, { withCredentials: true }).pipe(
-        tap(() => {
-          this.setAccessToken(null);
-        }),
+        tap(() => this.setAccessToken(null)),
       ),
     );
 
     this._currentUser.set(null);
     this._accessToken.set(null);
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    this.router.navigate(['/auth/login']);
+    this.bootstrapPromise = null;
+    this.rotatePromise = null;
+    await this.router.navigate(['/auth/login']);
   }
 
   clearError() {
     this.error.set(null);
-  }
-
-  //* Restore session from localStorage on page reload
-  async restoreSession(): Promise<void> {
-    const response = await firstValueFrom(this.api.post<{ user: any; accessToken: string }>('auth/refresh', {}, { withCredentials: true }));
-    // const token = localStorage.getItem('token');//! ESTO NO SE DEBE HACER, SE DEBE SOLO GUARDAR EN MEMORIA (RAM) 
-    // const raw = localStorage.getItem('user');
-    this.setAccessToken(response.accessToken);
-    this._currentUser.set(response.user);
   }
 }
