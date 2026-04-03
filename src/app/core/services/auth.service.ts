@@ -1,7 +1,8 @@
 import { Injectable, signal, inject, computed } from '@angular/core';
 import { ApiService } from './api.service';
-import { firstValueFrom } from 'rxjs';
+import { firstValueFrom, tap } from 'rxjs';
 import { Router } from '@angular/router';
+import type { AuthLoginResponse, AuthRefreshResponse } from '../models/auth-api.model';
 import { User } from '../models/user.model';
 
 @Injectable({
@@ -12,25 +13,31 @@ export class AuthService {
   private router = inject(Router);
 
   private _currentUser = signal<User | null>(null);
-  private _token = signal<string | null>(null);
   isLoading = signal(false);
   error = signal<string | null>(null);
 
-  // Public signals
-  user = this._currentUser.asReadonly();
-  private _tokenSignal = this._token.asReadonly();
+  private _accessToken = signal<string | null>(null);
 
-  // Alias for backward compatibility
+  /** Una vez por carga: intento silencioso POST /auth/refresh (cookie httpOnly). */
+  private bootstrapPromise: Promise<void> | null = null;
+
+  /** Mutex para varios 401 en paralelo durante rotación de refresh. */
+  private rotatePromise: Promise<void> | null = null;
+
+  setAccessToken(token: string | null) {
+    this._accessToken.set(token);
+  }
+
+  getAccessToken() {
+    return this._accessToken.asReadonly();
+  }
+
+  user = this._currentUser.asReadonly();
+
   get currentUser() {
     return this.user;
   }
 
-  // Public methods
-  token() {
-    return this._tokenSignal();
-  }
-
-  // Computed signals
   private _isAuthenticated = computed(() => this._currentUser() !== null);
   private _isAdmin = computed(() => {
     const user = this._currentUser();
@@ -52,19 +59,7 @@ export class AuthService {
     const last = user.lastName?.charAt(0).toUpperCase() || '';
     return first + last || user.email.charAt(0).toUpperCase();
   });
-  private _getDefaultRoute = computed(() => {
-    const user = this._currentUser();
-    if (!user) return '/auth/login';
-    if (user.role === 'super_admin') return '/super-admin';
-    return '/admin/dashboard';
-  });
 
-  // ✅ Constructor — restaura sesión al recargar la página
-  constructor() {
-    this.restoreSession();
-  }
-
-  // Public methods that return computed signals
   isAuthenticated() {
     return this._isAuthenticated();
   }
@@ -85,63 +80,130 @@ export class AuthService {
     return this._userInitials();
   }
 
-  getDefaultRoute() {
-    return this._getDefaultRoute();
+  /**
+   * Espera el primer intento de sesión vía cookie `refreshToken` (F5 / entrada directa a URL).
+   * No lanza: si no hay cookie o 403, quedas anónimo.
+   */
+  ensureBootstrapped(): Promise<void> {
+    if (!this.bootstrapPromise) {
+      this.bootstrapPromise = this.fetchRefreshAndApplySession().catch(() => {
+        //* sin sesión
+      });
+    }
+    return this.bootstrapPromise;
   }
 
-  // ✅ Login conectado al backend real
+  /**
+   * POST /auth/refresh con credenciales; mutex si varias peticiones disparan 401 a la vez.
+   */
+  rotateAccessToken(): Promise<void> {
+    if (!this.rotatePromise) {
+      this.rotatePromise = this.fetchRefreshAndApplySession().finally(() => {
+        this.rotatePromise = null;
+      });
+    }
+    return this.rotatePromise;
+  }
+
+  /** Llama al back y aplica accessToken + user en memoria. */
+  private async fetchRefreshAndApplySession(): Promise<void> {
+    const response = await firstValueFrom(
+      this.api.post<AuthRefreshResponse>(
+        'auth/refresh',
+        {},
+        { withCredentials: true },
+      ),
+    );
+    const accessToken = response.accessToken;
+    if (!accessToken) {
+      throw new Error('Refresh sin accessToken');
+    }
+    this.applySession(accessToken, response.user);
+  }
+
+  private applySession(accessToken: string, rawUser: unknown): void {
+    const user = this.mapUserFromBackend(rawUser);
+    this._accessToken.set(accessToken);
+    this._currentUser.set(user);
+  }
+
+  private mapUserFromBackend(raw: unknown): User {
+    if (!raw || typeof raw !== 'object') {
+      throw new Error('Respuesta de usuario inválida');
+    }
+    const backUser = raw as Record<string, unknown>;
+    const nameStr =
+      typeof backUser['name'] === 'string' ? backUser['name'] : '';
+    const parts = nameStr.trim().split(/\s+/).filter(Boolean);
+    const firstName =
+      typeof backUser['firstName'] === 'string'
+        ? backUser['firstName']
+        : (parts[0] ?? '');
+    const lastName =
+      typeof backUser['lastName'] === 'string'
+        ? backUser['lastName']
+        : parts.slice(1).join(' ');
+
+    const roleRaw = backUser['role'];
+    let role: User['role'] = 'admin';
+    if (roleRaw === 'super_admin' || roleRaw === 'admin') {
+      role = roleRaw;
+    } else {
+      const n = typeof roleRaw === 'number' ? roleRaw : Number(roleRaw);
+      role = Number.isFinite(n) ? this.mapRole(n) : 'admin';
+    }
+
+    const base = raw as User;
+
+    return {
+      ...base,
+      firstName,
+      lastName,
+      role,
+      createdAt: new Date(
+        (backUser['createdAt'] as string | number | Date | undefined) ??
+        Date.now(),
+      ),
+      lastLoginAt: backUser['lastLoginAt']
+        ? new Date(backUser['lastLoginAt'] as string | number | Date)
+        : undefined,
+      email: String(backUser['email'] ?? base.email),
+      isActive: Boolean(backUser['isActive'] ?? base.isActive ?? true),
+    };
+  }
+
   async login(credentials: { email: string; password?: string }): Promise<void> {
     this.isLoading.set(true);
     this.error.set(null);
 
-    //TODO: Implement login and remove mock
-
     try {
       const response = await firstValueFrom(
-        this.api.post<{ user: any; token: string }>('auth/login', {
-          email: credentials.email,
-          password: credentials.password,
-        })
+        this.api.post<AuthLoginResponse>(
+          'auth/login',
+          { email: credentials.email, password: credentials.password },
+          { withCredentials: true },
+        ).pipe(
+          tap((res) => {
+            const t = res.accessToken ?? res.token;
+            if (t) this.setAccessToken(t);
+          }),
+        ),
       );
 
-      // Mapear nombre del back ("John Doe") a firstName/lastName del front
-      const backUser = response.user;
-      console.log('👤 backUser completo:', backUser);
-      console.log('🎭 role recibido:', backUser.role, typeof backUser.role);
-      const [firstName, ...rest] = (backUser.name as string).split(' ');
-      const lastName = rest.join(' ');
-
-      const user: User = {
-        ...backUser,
-        firstName,
-        lastName,
-        role: this.mapRole(backUser.role),
-        createdAt: new Date(backUser.createdAt ?? Date.now()),
-        lastLoginAt: backUser.lastLoginAt
-          ? new Date(backUser.lastLoginAt)
-          : undefined,
-      };
-
-      console.log('✅ role mapeado:', user.role); // 👈 agrega esto
-
-      // Persistir sesión en localStorage
-      localStorage.setItem('token', response.token);
-      localStorage.setItem('user', JSON.stringify(user));
-
-      this._token.set(response.token);
-      this._currentUser.set(user);
-
-      // Redirigir según rol
-      if (user.role === 'super_admin') {
-        this.router.navigate(['/super-admin']);
-      } else {
-        this.router.navigate(['/admin/dashboard']);
+      const accessToken = response.accessToken ?? response.token;
+      if (!accessToken) {
+        throw new Error('El servidor no devolvió accessToken');
       }
 
-
-    } catch (err: any) {
+      this.applySession(accessToken, response.user);
+      this.bootstrapPromise = Promise.resolve();
+      this.router.navigate([this.getDefaultRoute()]);
+    } catch (err: unknown) {
       const errorMessage =
-        err?.error?.message ?? err?.message ?? 'Error al iniciar sesión';
+        (err as { error?: { message?: string }; message?: string })?.error
+          ?.message ??
+        (err as { message?: string })?.message ??
+        'Error al iniciar sesión';
       this.error.set(errorMessage);
       throw err;
     } finally {
@@ -149,58 +211,34 @@ export class AuthService {
     }
   }
 
-  // ✅ Logout limpia localStorage también
-  logout() {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
+  private mapRole(roles: number): User['role'] {
+    if (roles === 1) return 'super_admin';
+    if (roles === 2) return 'admin';
+    return 'admin';
+  }
+
+  getDefaultRoute() {
+    const user = this._currentUser();
+    if (!user) return '/auth/login';
+    if (user.role === 'super_admin') return '/super-admin';
+    return '/admin/dashboard';
+  }
+
+  async logout(): Promise<void> {
+    await firstValueFrom(
+      this.api.post('auth/logout', {}, { withCredentials: true }).pipe(
+        tap(() => this.setAccessToken(null)),
+      ),
+    );
+
     this._currentUser.set(null);
-    this._token.set(null);
-    this.router.navigate(['/auth/login']);
+    this._accessToken.set(null);
+    this.bootstrapPromise = null;
+    this.rotatePromise = null;
+    await this.router.navigate(['/auth/login']);
   }
 
   clearError() {
     this.error.set(null);
-  }
-
-  // ✅ Restaurar sesión desde localStorage al recargar
-  private restoreSession(): void {
-    const token = localStorage.getItem('token');
-    const raw = localStorage.getItem('user');
-    if (token && raw) {
-      try {
-        this._token.set(token);
-        this._currentUser.set(JSON.parse(raw));
-        return;
-      } catch {
-        // Si el JSON está corrupto, limpiar
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-      }
-    }
-
-    // 🔴 MOCK — usuario administrador por defecto (sin backend de auth)
-    const mockUser: User = {
-      id: 'mock-user-1',
-      email: 'admin@iceplay.dev',
-      firstName: 'Admin',
-      lastName: 'Mock',
-      role: 'admin',
-      organizationId: '1',
-      isActive: true,
-      createdAt: new Date(),
-    };
-    this._token.set('mock-token');
-    this._currentUser.set(mockUser);
-
-    // 🟢 BACKEND — eliminar el bloque MOCK de arriba cuando el login esté activo
-  }
-
-  // ✅ Mapear roles numéricos del back a strings del front
-  // El back guarda: 1 = admin, 2 = super_admin (ajusta si es diferente)
-  private mapRole(roles: number): User['role'] {
-    //if (!Array.isArray(roles)) return 'admin';
-    if (roles === 1) return 'super_admin';
-    if (roles === 2) return 'admin';
-    return 'admin';
   }
 }

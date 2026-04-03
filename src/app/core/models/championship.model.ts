@@ -376,7 +376,7 @@ export interface ChampionshipListItem {
   phaseCount: number;
 
   // JOIN mínimo
-  organization: Pick<Organization, 'id' | 'name' | 'logo'>;
+  organization: Pick<Organization, 'id' | 'name' | 'logo' | 'country'>;
   sport: Pick<Sport, 'id' | 'name' | 'icon'>;
 }
 
