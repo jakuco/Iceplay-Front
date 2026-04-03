@@ -16,22 +16,7 @@ import { RouterLink } from '@angular/router';
 import { I18nService } from '../../../../core/services/i18n.service';
 import { TranslatePipe } from '../../../../core/pipes/translate.pipe';
 import { MatchService } from '../../../../core/services/match.service';
-import {
-  Match as BackendMatch,
-  MatchStatus,
-  ScheduleByDateApiMatch,
-  ScheduleByDateChampionshipMeta,
-  ScheduleByDateResponse,
-} from '../../../../core/models/match.model';
-import { ChampionshipListItem, ChampionshipStatus } from '../../../../core/models/championship.model';
-import { Team } from '../../../../core/models/team.model';
-import { environment } from '../../../../../environments/environment.development';
-
-/** Partido con campeonato (el API no incluye championshipId en `Match`). */
-interface MatchWithChampionship {
-  championshipId: string;
-  match: BackendMatch;
-}
+import { Match as BackendMatch } from '../../../../core/models/match.model';
 
 interface DayOption {
   dayOfWeek: string;
@@ -80,11 +65,9 @@ interface FilteredLeague {
     <div class="mx-auto flex max-w-5xl flex-col gap-6 p-4 md:p-6">
       <!-- Date Picker -->
       <div class="card rounded-xl p-3 sm:p-4">
-        <!-- Month/Year Header -->
         <div class="mb-3 flex items-center justify-between">
           <h2 class="text-lg font-semibold">{{ formattedMonthYear() }}</h2>
 
-          <!-- Calendar Picker -->
           <div class="flex items-center">
             <input
               matInput
@@ -100,7 +83,6 @@ interface FilteredLeague {
           </div>
         </div>
 
-        <!-- Days Navigation -->
         <div class="flex items-center gap-1">
           <button matIconButton (click)="previousDay()" aria-label="Previous day" class="shrink-0">
             <mat-icon>chevron_left</mat-icon>
@@ -129,7 +111,6 @@ interface FilteredLeague {
         </div>
       </div>
 
-      <!-- Loading State -->
       @if (isLoading()) {
         <div class="card rounded-xl p-8 text-center">
           <mat-icon class="mb-2 animate-spin text-5xl! opacity-50">refresh</mat-icon>
@@ -137,11 +118,9 @@ interface FilteredLeague {
         </div>
       }
 
-      <!-- Leagues and Matches -->
       @if (!isLoading()) {
         @for (league of filteredLeagues(); track league.id) {
           <div class="card overflow-hidden rounded-xl">
-            <!-- League Header -->
             <div
               class="flex items-center justify-between border-b border-(--mat-sys-outline-variant) p-4"
             >
@@ -158,24 +137,27 @@ interface FilteredLeague {
               </button>
             </div>
 
-            <!-- Matches -->
             <div class="divide-y divide-(--mat-sys-outline-variant)">
               @for (match of league.matches; track match.id) {
                 <div
                   class="match-row flex cursor-pointer items-center justify-between p-4"
                   [routerLink]="['/match', match.id]"
                 >
-                  <!-- Home Team -->
                   <div class="flex w-2/5 items-center justify-end gap-3 text-right">
                     <span
                       class="hidden text-sm font-medium sm:inline-block"
                       [class.text-red-500]="match.status === 'live'"
-                      >{{ match.homeTeam.name }}</span
                     >
-                    <img [src]="match.homeTeam.logo" (error)="match.homeTeam.logo = defaultTeamLogoUrl" [alt]="match.homeTeam.name" class="h-7 w-7" />
+                      {{ match.homeTeam.name }}
+                    </span>
+                    <img
+                      [src]="match.homeTeam.logo"
+                      (error)="match.homeTeam.logo = defaultTeamLogoUrl"
+                      [alt]="match.homeTeam.name"
+                      class="h-7 w-7"
+                    />
                   </div>
 
-                  <!-- Score/Time -->
                   <div class="w-1/5 text-center">
                     @switch (match.status) {
                       @case ('scheduled') {
@@ -185,33 +167,37 @@ interface FilteredLeague {
                       }
                       @case ('live') {
                         <div class="status-badge live">
-                          <span class="text-sm font-bold"
-                            >{{ match.homeScore }} - {{ match.awayScore }}</span
-                          >
+                          <span class="text-sm font-bold">
+                            {{ match.homeScore }} - {{ match.awayScore }}
+                          </span>
                         </div>
-                        <span class="text-primary mt-1 block text-xs font-semibold"
-                          >{{ match.minute }}'</span
-                        >
+                        <span class="text-primary mt-1 block text-xs font-semibold">
+                          {{ match.minute }}
+                        </span>
                       }
                       @case ('finished') {
                         <div class="status-badge finished">
-                          <span class="text-sm font-bold"
-                            >{{ match.homeScore }} - {{ match.awayScore }}</span
-                          >
+                          <span class="text-sm font-bold">
+                            {{ match.homeScore }} - {{ match.awayScore }}
+                          </span>
                         </div>
-                        <span class="text-secondary mt-1 block text-xs">{{
-                          'common.finished' | translate
-                        }}</span>
+                        <span class="text-secondary mt-1 block text-xs">
+                          {{ 'common.finished' | translate }}
+                        </span>
                       }
                     }
                   </div>
 
-                  <!-- Away Team -->
                   <div class="flex w-2/5 items-center justify-start gap-3 text-left">
-                    <img [src]="match.awayTeam.logo" (error)="match.awayTeam.logo = defaultTeamLogoUrl" [alt]="match.awayTeam.name" class="h-7 w-7" />
-                    <span class="hidden text-sm font-medium sm:inline-block">{{
-                      match.awayTeam.name
-                    }}</span>
+                    <img
+                      [src]="match.awayTeam.logo"
+                      (error)="match.awayTeam.logo = defaultTeamLogoUrl"
+                      [alt]="match.awayTeam.name"
+                      class="h-7 w-7"
+                    />
+                    <span class="hidden text-sm font-medium sm:inline-block">
+                      {{ match.awayTeam.name }}
+                    </span>
                   </div>
                 </div>
               }
@@ -220,7 +206,6 @@ interface FilteredLeague {
         }
       }
 
-      <!-- Empty State -->
       @if (!isLoading() && filteredLeagues().length === 0) {
         <div class="card rounded-xl p-8 text-center">
           <mat-icon class="mb-2 text-5xl! opacity-50">sports_soccer</mat-icon>
@@ -256,7 +241,6 @@ interface FilteredLeague {
       border: 2px solid var(--mat-sys-primary);
     }
 
-    /* Hide extra days on small screens */
     .day-hidden {
       display: none;
     }
@@ -301,10 +285,11 @@ interface FilteredLeague {
 })
 export default class MatchesList {
   private readonly i18nService = inject(I18nService);
-  private readonly TOTAL_DAYS = 7;
-  private readonly VISIBLE_MOBILE = 3; // Days visible on mobile (centered)
+  private readonly matchService = inject(MatchService);
 
-  /** Logo genérico cuando el API no envía `logoUrl` o viene vacío. */
+  private readonly TOTAL_DAYS = 7;
+  private readonly VISIBLE_MOBILE = 3;
+
   readonly defaultTeamLogoUrl =
     'data:image/svg+xml,' +
     encodeURIComponent(
@@ -312,8 +297,15 @@ export default class MatchesList {
     );
 
   selectedDate = signal(this.getToday());
+  private allMatches = signal<BackendMatch[]>([]);
+  isLoading = signal(false);
 
-  // Generate days centered around selected date
+  constructor() {
+    effect(() => {
+      this.loadMatchesByDate();
+    });
+  }
+
   visibleDays = computed<DayOption[]>(() => {
     const today = this.getToday();
     const selected = this.selectedDate();
@@ -323,7 +315,6 @@ export default class MatchesList {
     startDate.setDate(selected.getDate() - daysBeforeCenter);
 
     const days: DayOption[] = [];
-    // Use locale-aware day names based on current language
     const locale = this.i18nService.getLocale();
     const dayNames = this.getDayNames(locale);
     const monthNames = this.getMonthNames(locale);
@@ -344,96 +335,68 @@ export default class MatchesList {
     return days;
   });
 
-  /**
-   * Formatted month and year for header, automatically translated based on current language
-   */
   formattedMonthYear = computed(() => {
     const date = this.selectedDate();
     return this.i18nService.formatDate(date, { month: 'long', year: 'numeric' });
   });
 
-  private matchService = inject(MatchService);
-  private allMatches = signal<MatchWithChampionship[]>([]);
-  private allChampionships = signal<ChampionshipListItem[]>([]);
-  private allTeams = signal<Team[]>([]);
-  isLoading = signal(false);
-
-  constructor() {
-    // Load initial data
-    effect(() => {
-      this.loadMatchesByDate();
-    });
-  }
-
-  // Filter leagues and matches by selected date
   filteredLeagues = computed<FilteredLeague[]>(() => {
     const selectedDateStr = this.formatDateToISO(this.selectedDate());
     const matches = this.allMatches();
-    const championships = this.allChampionships();
-    const teams = this.allTeams();
 
-    // Group matches by championship
     const matchesByChampionship = new Map<string, DisplayMatch[]>();
 
-    for (const { championshipId, match } of matches) {
+    for (const match of matches) {
       const start = match.scheduledStart;
       if (!start) continue;
+
       const startDate = start instanceof Date ? start : new Date(start);
+      if (isNaN(startDate.getTime())) continue;
+
       const matchDate = this.formatDateToISO(startDate);
-      if (matchDate === selectedDateStr) {
-        const homeTeam = teams.find((t) => String(t.id) === String(match.homeTeamId));
-        const awayTeam = teams.find((t) => String(t.id) === String(match.awayTeamId));
+      if (matchDate !== selectedDateStr) continue;
 
-        if (!homeTeam || !awayTeam) continue;
+      const championshipId =
+        match.championshipId != null && String(match.championshipId).trim() !== ''
+          ? String(match.championshipId)
+          : 'sin-campeonato';
 
-        const championship = championships.find((c) => String(c.id) === championshipId);
-        if (!championship) continue;
+      const displayMatch: DisplayMatch = {
+        id: String(match.id),
+        homeTeam: {
+          id: String(match.homeTeamId),
+          name: this.fallbackTeamName(match.homeTeamId),
+          logo: this.defaultTeamLogoUrl,
+        },
+        awayTeam: {
+          id: String(match.awayTeamId),
+          name: this.fallbackTeamName(match.awayTeamId),
+          logo: this.defaultTeamLogoUrl,
+        },
+        status: this.mapMatchStatus(match.status),
+        time: this.formatTimeFromDate(startDate),
+        homeScore: match.homeScore,
+        awayScore: match.awayScore,
+        minute: this.liveMinuteLabel(match),
+        date: matchDate,
+        league: this.fallbackLeagueName(championshipId),
+      };
 
-        const displayMatch: DisplayMatch = {
-          id: String(match.id),
-          homeTeam: {
-            id: String(homeTeam.id),
-            name: homeTeam.name,
-            logo: homeTeam.logoUrl ?? this.defaultTeamLogoUrl,
-          },
-          awayTeam: {
-            id: String(awayTeam.id),
-            name: awayTeam.name,
-            logo: awayTeam.logoUrl ?? this.defaultTeamLogoUrl,
-          },
-          status: this.mapMatchStatus(match.status),
-          time: this.formatTimeFromDate(startDate),
-          homeScore: match.homeScore,
-          awayScore: match.awayScore,
-          minute: this.liveMinuteLabel(match),
-          date: matchDate,
-          league: championship.name,
-        };
-
-        if (!matchesByChampionship.has(championshipId)) {
-          matchesByChampionship.set(championshipId, []);
-        }
-        matchesByChampionship.get(championshipId)!.push(displayMatch);
+      if (!matchesByChampionship.has(championshipId)) {
+        matchesByChampionship.set(championshipId, []);
       }
+
+      matchesByChampionship.get(championshipId)!.push(displayMatch);
     }
 
-    // Convert to FilteredLeague format
     const filtered: FilteredLeague[] = [];
     for (const [championshipId, championshipMatches] of matchesByChampionship) {
-      const championship = championships.find((c) => String(c.id) === championshipId);
-      if (!championship) continue;
-
-      const org = championship.organization;
-      const countryLabel = championship.organization?.country?.trim() || 'Ecuador';
-      const flagCode = this.countryToFlagCode(countryLabel);
-
       filtered.push({
         id: championshipId,
-        name: championship.name,
-        country: countryLabel,
-        flagUrl: `https://flagcdn.com/w40/${flagCode}.png`,
+        name: this.fallbackLeagueName(championshipId),
+        country: 'Ecuador',
+        flagUrl: 'https://flagcdn.com/w40/ec.png',
         matches: championshipMatches.sort((a, b) => {
-          // Sort by scheduled time
           const timeA = a.time || '00:00';
           const timeB = b.time || '00:00';
           return timeA.localeCompare(timeB);
@@ -447,213 +410,30 @@ export default class MatchesList {
   private loadMatchesByDate(): void {
     const date = this.formatDateToISO(this.selectedDate());
     this.isLoading.set(true);
-    this.matchService.getScheduleByDate(date).subscribe({
-      next: (res) => {
-        this.applyScheduleResponse(res);
+
+    this.matchService.getMatchesByDate(date).subscribe({
+      next: (matches) => {
+        this.allMatches.set(matches);
         this.isLoading.set(false);
       },
       error: (err: unknown) => {
         console.error('Error loading matches by date', err);
         this.allMatches.set([]);
-        this.allChampionships.set([]);
-        this.allTeams.set([]);
         this.isLoading.set(false);
       },
     });
   }
 
-  /**
-   * Rellena `allMatches`, `allChampionships` y `allTeams` como espera `filteredLeagues`,
-   * a partir del JSON del endpoint schedule-by-date.
-   */
-  private applyScheduleResponse(res: ScheduleByDateResponse): void {
-    const championshipById = new Map<string, ChampionshipListItem>();
-    const teamById = new Map<string, Team>();
-    const matchesWC: MatchWithChampionship[] = [];
-
-    for (const block of res.championships ?? []) {
-      for (const m of block.matches ?? []) {
-        const rowChampId = m.championshipId != null && m.championshipId !== '' ? String(m.championshipId) : '';
-        if (!rowChampId) continue;
-
-        if (!championshipById.has(rowChampId)) {
-          championshipById.set(
-            rowChampId,
-            this.buildSyntheticChampionshipListItem(rowChampId, block.championship),
-          );
-        }
-
-        this.ingestScheduleTeams(m, rowChampId, teamById);
-        matchesWC.push({
-          championshipId: rowChampId,
-          match: this.scheduleApiRowToMatch(m),
-        });
-      }
-    }
-
-    this.allChampionships.set([...championshipById.values()]);
-    this.allTeams.set([...teamById.values()]);
-    this.allMatches.set(matchesWC);
+  private fallbackTeamName(teamId: string | number): string {
+    const raw = String(teamId);
+    return raw.length > 10 ? `Equipo ${raw.slice(0, 8)}` : `Equipo ${raw}`;
   }
 
-  private buildSyntheticChampionshipListItem(
-    id: string,
-    meta: ScheduleByDateChampionshipMeta,
-  ): ChampionshipListItem {
-    const name =
-      meta.name && String(meta.name).trim() !== '' ? meta.name : 'Competición';
-    const org = meta.organization;
-    const organization = {
-      id: org?.id ?? 'schedule',
-      name: org?.name ?? '',
-      logo: org?.logo ?? null,
-      ...(org?.country !== undefined ? { country: org.country } : {}),
-    } as ChampionshipListItem['organization'];
-
-    return {
-      id,
-      name,
-      slug: id,
-      season: '',
-      logo: null,
-      status: ChampionshipStatus.Active,
-      startDate: null,
-      endDate: null,
-      maxTeams: 0,
-      teamCount: 0,
-      phaseCount: 0,
-      organization,
-      sport: { id: 0, name: '', icon: 'sports' },
-    };
-  }
-
-  private ingestScheduleTeams(
-    m: ScheduleByDateApiMatch,
-    championshipId: string,
-    teamById: Map<string, Team>,
-  ): void {
-    const ensure = (snippet: ScheduleByDateApiMatch['homeTeam'], fallbackId: string) => {
-      const id = snippet?.id ?? fallbackId;
-      if (teamById.has(id)) return;
-      teamById.set(
-        id,
-        snippet
-          ? this.scheduleSnippetToTeam(snippet, championshipId)
-          : this.placeholderScheduleTeam(fallbackId, championshipId),
-      );
-    };
-    ensure(m.homeTeam, String(m.homeTeamId));
-    ensure(m.awayTeam, String(m.awayTeamId));
-  }
-
-  private scheduleSnippetToTeam(
-    snippet: NonNullable<ScheduleByDateApiMatch['homeTeam']>,
-    championshipId: string,
-  ): Team {
-    const now = new Date();
-    const slug = snippet.shortname?.trim() || String(snippet.id);
-    return {
-      id: snippet.id,
-      championshipId,
-      name: snippet.name,
-      shortname: snippet.shortname,
-      slug: slug.toLowerCase().replace(/\s+/g, '-'),
-      logoUrl: snippet.logoUrl ?? this.defaultTeamLogoUrl,
-      documentUrl: null,
-      primaryColor: null,
-      secondaryColor: null,
-      foundedYear: null,
-      homeVenue: null,
-      location: null,
-      coachName: null,
-      coachPhone: null,
-      isActive: true,
-      hasActiveMatches: false,
-      createdAt: now,
-      updatedAt: now,
-    };
-  }
-
-  private placeholderScheduleTeam(id: string, championshipId: string): Team {
-    const now = new Date();
-    return {
-      id,
-      championshipId,
-      name: '—',
-      shortname: '—',
-      slug: String(id),
-      logoUrl: null,
-      documentUrl: null,
-      primaryColor: null,
-      secondaryColor: null,
-      foundedYear: null,
-      homeVenue: null,
-      location: null,
-      coachName: null,
-      coachPhone: null,
-      isActive: true,
-      hasActiveMatches: false,
-      createdAt: now,
-      updatedAt: now,
-    };
-  }
-
-  private scheduleApiRowToMatch(m: ScheduleByDateApiMatch): BackendMatch {
-    return {
-      id: m.id,
-      championshipId: m.championshipId,
-      groupTeamId: '',
-      homeTeamId: m.homeTeamId,
-      awayTeamId: m.awayTeamId,
-      homeScore: m.homeScore,
-      awayScore: m.awayScore,
-      status: m.status as MatchStatus,
-      round: 0,
-      scheduledStart: new Date(m.scheduledDate),
-      venue: m.venue,
-      city: m.city,
-      isActive: true,
-    };
-  }
-
-  // /**
-  //  * Convierte rutas relativas del API (`teams/foo.png`) en URL absoluta.
-  //  * Usa el origen de `environment.baseUrl` sin el sufijo `/api`.
-  //  */
-  // private resolveScheduleAssetUrl(path: string | null | undefined): string | null {
-  //   if (path == null) return null;
-  //   const raw = String(path).trim();
-  //   if (raw === '') return null;
-  //   if (/^https?:\/\//i.test(raw)) return raw;
-  //   const apiBase = environment.baseUrl.replace(/\/+$/, '');
-  //   const originBase = apiBase.replace(/\/api\/?$/i, '') || apiBase;
-  //   const segment = raw.startsWith('/') ? raw : `/${raw}`;
-  //   return `${originBase}${segment}`;
-  // }
-
-  // private displayTeamLogo(url: string | null | undefined): string {
-  //   if (url != null && String(url).trim() !== '') {
-  //     return String(url).trim();
-  //   }
-  //   return this.defaultTeamLogoUrl;
-  // }
-
-  /** ISO 3166-1 alpha-2 para flagcdn; fallback ec. */
-  private countryToFlagCode(country: string): string {
-    const c = country.trim().toLowerCase();
-    if (c.length === 2 && /^[a-z]{2}$/.test(c)) return c;
-    const map: Record<string, string> = {
-      ecuador: 'ec',
-      spain: 'es',
-      switzerland: 'ch',
-      england: 'gb-eng',
-      'united kingdom': 'gb',
-      portugal: 'pt',
-      france: 'fr',
-      germany: 'de',
-      italy: 'it',
-    };
-    return map[c] ?? 'ec';
+  private fallbackLeagueName(championshipId: string): string {
+    if (championshipId === 'sin-campeonato') return 'Partidos del día';
+    return championshipId.length > 10
+      ? `Campeonato ${championshipId.slice(0, 8)}`
+      : `Campeonato ${championshipId}`;
   }
 
   private formatTimeFromDate(d: Date): string {
@@ -664,16 +444,21 @@ export default class MatchesList {
     });
   }
 
-  /** Minuto aproximado en vivo si hay `actualStartTime`; si no, sin etiqueta. */
   private liveMinuteLabel(match: BackendMatch): string | undefined {
-    if (match.status !== 'live' || !match.actualStartTime) {
-      return undefined;
+    if (match.status !== 'live') return undefined;
+
+    if (match.actualStartTime) {
+      const start =
+        match.actualStartTime instanceof Date
+          ? match.actualStartTime
+          : new Date(match.actualStartTime);
+
+      if (!isNaN(start.getTime())) {
+        return `${Math.max(0, Math.floor((Date.now() - start.getTime()) / 60_000))}'`;
+      }
     }
-    const start =
-      match.actualStartTime instanceof Date
-        ? match.actualStartTime
-        : new Date(match.actualStartTime);
-    return Math.max(0, Math.floor((Date.now() - start.getTime()) / 60_000)).toString();
+
+    return "EN VIVO";
   }
 
   private mapMatchStatus(status: string): 'scheduled' | 'live' | 'finished' {
@@ -687,9 +472,11 @@ export default class MatchesList {
     ) {
       return 'live';
     }
+
     if (status === 'finished') {
       return 'finished';
     }
+
     return 'scheduled';
   }
 
@@ -708,10 +495,12 @@ export default class MatchesList {
   }
 
   private formatDateToISO(date: Date): string {
-    return date.toISOString().split('T')[0];
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   }
 
-  // Determine if day should be hidden on mobile (only show center 3)
   shouldHideDay(index: number): boolean {
     const centerIndex = Math.floor(this.TOTAL_DAYS / 2);
     const range = Math.floor(this.VISIBLE_MOBILE / 2);
@@ -746,11 +535,8 @@ export default class MatchesList {
     this.selectedDate.set(newDate);
   }
 
-  /**
-   * Gets abbreviated day names based on locale
-   */
   private getDayNames(locale: string): string[] {
-    const baseDate = new Date(2024, 0, 7); // Sunday, January 7, 2024
+    const baseDate = new Date(2024, 0, 7);
     const days: string[] = [];
     for (let i = 0; i < 7; i++) {
       const date = new Date(baseDate);
@@ -761,9 +547,6 @@ export default class MatchesList {
     return days;
   }
 
-  /**
-   * Gets abbreviated month names based on locale
-   */
   private getMonthNames(locale: string): string[] {
     const months: string[] = [];
     for (let i = 0; i < 12; i++) {

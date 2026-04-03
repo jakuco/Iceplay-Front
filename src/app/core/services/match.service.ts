@@ -1,14 +1,29 @@
 import { Injectable, inject } from '@angular/core';
+import { Observable, catchError, map, throwError } from 'rxjs';
 import { ApiService } from './api.service';
-import { Observable, map, catchError, throwError } from 'rxjs';
-import {
-  Match,
-  MatchStatus,
-  ScheduleByDateApiMatch,
-  ScheduleByDateResponse,
-  UpdateMatchDto,
-  UpdateMatchScoreDto,
-} from '../models/match.model';
+import { Match, UpdateMatchDto, UpdateMatchScoreDto } from '../models/match.model';
+
+export interface MatchSearchFilters {
+  championship_id?: string;
+  state?: string;
+  date?: string;
+  match_id?: string;
+}
+
+export interface MatchPaginationParams extends MatchSearchFilters {
+  page?: number;
+  limit?: number;
+}
+
+export interface PostMatchEventDto {
+  typeMatchEventId: number;
+  time?: number;
+  playerId?: string;
+  teamId?: string;
+  relatedEventMatchId?: string;
+  description?: string;
+}
+
 @Injectable({
   providedIn: 'root',
 })
@@ -16,95 +31,104 @@ export class MatchService {
   private api = inject(ApiService);
 
   /**
-   * Get all matches for a championship
+   * GET /matches
+   * Lista paginada básica
    */
-  getMatches(championshipId: string): Observable<Match[]> {
-    return this.api.get<Match[]>('matches', { championshipId }).pipe(
+  getPaginatedMatches(page = 1, limit = 10): Observable<any> {
+    return this.api.get<any>('matches', { page, limit }).pipe(
+      catchError((error) => this.handleError('Error fetching paginated matches', error)),
+    );
+  }
+
+  /**
+   * GET /matches/all
+   * Todos los partidos
+   */
+  getAllMatches(): Observable<Match[]> {
+    return this.api.get<Match[]>('matches/all').pipe(
       map((matches) => matches.map((m) => this.parseMatchDates(m))),
-      catchError((error) => this.handleError('Error fetching matches', error)),
+      catchError((error) => this.handleError('Error fetching all matches', error)),
     );
   }
 
   /**
-   * Respuesta cruda del calendario por fecha (`date`: YYYY-MM-DD).
+   * GET /matches/search
+   * Búsqueda paginada con filtros
    */
-  getScheduleByDate(date: string): Observable<ScheduleByDateResponse> {
-    return this.api.get<ScheduleByDateResponse>('matches/schedule-by-date', { date }).pipe(
-      catchError((error) => this.handleError('Error fetching matches by date', error)),
+  searchMatches(params: MatchPaginationParams = {}): Observable<any> {
+    const query = {
+      page: params.page ?? 1,
+      limit: params.limit ?? 10,
+      ...(params.championship_id ? { championship_id: params.championship_id } : {}),
+      ...(params.state ? { state: params.state } : {}),
+      ...(params.date ? { date: params.date } : {}),
+      ...(params.match_id ? { match_id: params.match_id } : {}),
+    };
+
+    return this.api.get<any>('matches/search', query).pipe(
+      catchError((error) => this.handleError('Error searching paginated matches', error)),
     );
   }
 
   /**
-   * Partidos del calendario para una fecha, aplanados a `Match[]`.
+   * GET /matches/search/all
+   * Búsqueda sin paginación con filtros
+   */
+  searchAllMatches(filters: MatchSearchFilters = {}): Observable<Match[]> {
+    const query = {
+      ...(filters.championship_id ? { championship_id: filters.championship_id } : {}),
+      ...(filters.state ? { state: filters.state } : {}),
+      ...(filters.date ? { date: filters.date } : {}),
+      ...(filters.match_id ? { match_id: filters.match_id } : {}),
+    };
+
+    return this.api.get<Match[]>('matches/search/all', query).pipe(
+      map((matches) => matches.map((m) => this.parseMatchDates(m))),
+      catchError((error) => this.handleError('Error searching all matches', error)),
+    );
+  }
+
+  /**
+   * Buscar partidos por campeonato
+   */
+  getMatchesByChampionship(championshipId: string): Observable<Match[]> {
+    return this.searchAllMatches({ championship_id: championshipId });
+  }
+
+  /**
+   * Buscar partidos por fecha
+   * Ruta real del back: /matches/search/all?date=YYYY-MM-DD
    */
   getMatchesByDate(date: string): Observable<Match[]> {
-    return this.getScheduleByDate(date).pipe(map((res) => this.flattenScheduleByDate(res)));
-  }
-
-  private flattenScheduleByDate(res: ScheduleByDateResponse): Match[] {
-    const rows: Match[] = [];
-    for (const block of res.championships ?? []) {
-      for (const m of block.matches ?? []) {
-        rows.push(this.parseMatchDates(this.mapScheduleApiMatchToMatch(m)));
-      }
-    }
-    return rows;
-  }
-
-  private mapScheduleApiMatchToMatch(m: ScheduleByDateApiMatch): Match {
-    return {
-      id: m.id,
-      championshipId: m.championshipId,
-      groupTeamId: '',
-      homeTeamId: m.homeTeamId,
-      awayTeamId: m.awayTeamId,
-      homeScore: m.homeScore,
-      awayScore: m.awayScore,
-      status: m.status as MatchStatus,
-      round: 0,
-      scheduledStart: new Date(m.scheduledDate),
-      venue: m.venue,
-      city: m.city,
-      isActive: true,
-    };
+    return this.searchAllMatches({ date });
   }
 
   /**
-   * Get a single match by ID
+   * Buscar partidos en vivo
+   */
+  getLiveMatches(): Observable<Match[]> {
+    return this.searchAllMatches({ state: 'live' });
+  }
+
+  /**
+   * Buscar un partido por match_id usando filtros
+   */
+  findMatchByFilter(matchId: string): Observable<Match[]> {
+    return this.searchAllMatches({ match_id: matchId });
+  }
+
+  /**
+   * GET /matches/:match_id
    */
   getMatchById(id: string): Observable<Match> {
     return this.api.get<Match>(`matches/${id}`).pipe(
       map((match) => this.parseMatchDates(match)),
-      catchError((error) => this.handleError('Error fetching match', error)),
+      catchError((error) => this.handleError('Error fetching match by id', error)),
     );
   }
 
   /**
-   * Get matches for an organization
-   */
-  getMatchesByOrganization(organizationId: string): Observable<Match[]> {
-    return this.api.get<Match[]>('matches', { organizationId }).pipe(
-      map((matches) => matches.map((m) => this.parseMatchDates(m))),
-      catchError((error) => this.handleError('Error fetching organization matches', error)),
-    );
-  }
-
-  /**
-   * Get live matches
-   */
-  getLiveMatches(organizationId?: string): Observable<Match[]> {
-    const params: any = { status: 'live' };
-    if (organizationId) {
-      params.organizationId = organizationId;
-    }
-    return this.api.get<Match[]>('matches', params).pipe(
-      map((matches) => matches.map((m) => this.parseMatchDates(m))),
-      catchError((error) => this.handleError('Error fetching live matches', error)),
-    );
-  }
-
-  /**
-   * Create a new match
+   * POST /matches
    */
   createMatch(match: Partial<Match>): Observable<Match> {
     return this.api.post<Match>('matches', match).pipe(
@@ -114,75 +138,93 @@ export class MatchService {
   }
 
   /**
-   * Update match details
+   * PUT /matches/:match_id
+   * Tu backend usa PUT, no PATCH
    */
   updateMatch(id: string, match: UpdateMatchDto): Observable<Match> {
-    return this.api.patch<Match>(`matches/${id}`, match).pipe(
+    return this.api.put<Match>(`matches/${id}`, match).pipe(
       map((m) => this.parseMatchDates(m)),
       catchError((error) => this.handleError('Error updating match', error)),
     );
   }
 
   /**
-   * Update match score (for live control)
+   * PUT /matches/:match_id
+   * El backend no tiene ruta separada para score
    */
   updateMatchScore(id: string, score: UpdateMatchScoreDto): Observable<Match> {
-    return this.api.patch<Match>(`matches/${id}`, score).pipe(
+    return this.api.put<Match>(`matches/${id}`, score).pipe(
       map((m) => this.parseMatchDates(m)),
       catchError((error) => this.handleError('Error updating match score', error)),
     );
   }
 
   /**
-   * Delete a match
+   * DELETE /matches/:match_id
    */
   deleteMatch(id: string): Observable<void> {
-    return this.api
-      .delete<void>(`matches/${id}`)
-      .pipe(catchError((error) => this.handleError('Error deleting match', error)));
-  }
-
-  /**
-   * Get match with populated team data
-   */
-  getMatchWithTeams(id: string): Observable<Match> {
-    return this.getMatchById(id).pipe(
-      map((match) => {
-        // In a real backend, teams would be populated
-        // For now, we'll need to fetch teams separately if needed
-        return match;
-      }),
+    return this.api.delete<void>(`matches/${id}`).pipe(
+      catchError((error) => this.handleError('Error deleting match', error)),
     );
   }
 
+  /**
+   * POST /matches/:match_id/events
+   */
+  postMatchEvent(matchId: string, event: PostMatchEventDto): Observable<void> {
+    return this.api.post<void>(`matches/${matchId}/events`, event).pipe(
+      catchError((error) => this.handleError('Error posting match event', error)),
+    );
+  }
 
   /**
-   * Parse date strings to Date objects
+   * DELETE /matches/:match_id/events/:event_id
+   */
+  deleteMatchEvent(matchId: string, eventId: string): Observable<void> {
+    return this.api.delete<void>(`matches/${matchId}/events/${eventId}`).pipe(
+      catchError((error) => this.handleError('Error deleting match event', error)),
+    );
+  }
+
+  /**
+   * SSE /matches/:match_id/events/stream
+   */
+  subscribeToMatchEvents(matchId: string): EventSource {
+    return this.api.subscribe(`matches/${matchId}/events/stream`);
+  }
+
+  /**
+   * Parsear strings de fecha a objetos Date
    */
   private parseMatchDates(match: Match): Match {
-    // if (match.scheduledStart && typeof match.scheduledStart === 'string') {
-    //   match.scheduledStart = new Date(match.scheduledDate);
-    // }
-    // if (match.actualStartTime && typeof match.actualStartTime === 'string') {
-    //   match.actualStartTime = new Date(match.actualStartTime);
-    // }
-    // if (match.actualEndTime && typeof match.actualEndTime === 'string') {
-    //   match.actualEndTime = new Date(match.actualEndTime);
-    // }
-    // if (match.createdAt && typeof match.createdAt === 'string') {
-    //   match.createdAt = new Date(match.createdAt);
-    // }
-    // if (match.updatedAt && typeof match.updatedAt === 'string') {
-    //   match.updatedAt = new Date(match.updatedAt);
-    // }
+    if (match.scheduledStart && typeof match.scheduledStart === 'string') {
+      match.scheduledStart = new Date(match.scheduledStart);
+    }
+
+    if (match.actualStartTime && typeof match.actualStartTime === 'string') {
+      match.actualStartTime = new Date(match.actualStartTime);
+    }
+
+    if (match.actualEndTime && typeof match.actualEndTime === 'string') {
+      match.actualEndTime = new Date(match.actualEndTime);
+    }
+
+    if (match.createdAt && typeof match.createdAt === 'string') {
+      match.createdAt = new Date(match.createdAt);
+    }
+
+    if (match.updatedAt && typeof match.updatedAt === 'string') {
+      match.updatedAt = new Date(match.updatedAt);
+    }
+
     return match;
   }
 
   /**
-   * Handle errors
+   * Manejo centralizado de errores
    */
   private handleError(message: string, error: any): Observable<never> {
     console.error(message, error);
-    return throwError(() => new Error(`${message}: ${error.message || error}`));
+    return throwError(() => new Error(`${message}: ${error?.message || error}`));
   }
 }
