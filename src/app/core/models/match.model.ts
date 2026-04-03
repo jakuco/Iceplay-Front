@@ -8,7 +8,7 @@ export type MatchStatus =
   | 'warmup'
   | 'live'
   | 'halftime'
-  | 'break'
+  | 'break' // Between quarters/sets
   | 'overtime'
   | 'penalties'
   | 'finished'
@@ -21,6 +21,7 @@ export type MatchStatus =
  */
 export interface Match {
   id: DbId;
+  /** Presente cuando el partido viene de `schedule-by-date` u otras rutas que lo incluyen. */
   championshipId?: DbId;
   groupTeamId: DbId;
   homeTeamId: DbId;
@@ -30,13 +31,13 @@ export interface Match {
   status: MatchStatus;
   round: number;
   matchDay?: number;
-  scheduledStart?: Date | string;
-  actualStartTime?: Date | string;
-  actualEndTime?: Date | string;
+  scheduledStart?: Date;
+  actualStartTime?: Date;
+  actualEndTime?: Date;
   venue?: string;
   city?: string;
-  createdAt?: Date | string;
-  updatedAt?: Date | string;
+  createdAt?: Date;
+  updatedAt?: Date;
   bracketSlotId?: number;
   legNumber?: number;
   isActive: boolean;
@@ -54,7 +55,7 @@ export interface PeriodScore {
 export interface CreateMatchDto {
   homeTeamId: DbId;
   awayTeamId: DbId;
-  scheduledDate: Date | string;
+  scheduledDate: Date;
   scheduledTime: string;
   round: number;
   matchday?: number;
@@ -68,7 +69,7 @@ export interface CreateMatchDto {
  * DTO for updating a match
  */
 export interface UpdateMatchDto {
-  scheduledDate?: Date | string;
+  scheduledDate?: Date;
   scheduledTime?: string;
   venue?: string;
   referee?: string;
@@ -111,7 +112,7 @@ export interface MatchListItem {
   homeScore: number;
   awayScore: number;
   status: MatchStatus;
-  scheduledDate: Date | string;
+  scheduledDate: Date;
   scheduledTime: string;
   round: number;
   venue?: string;
@@ -144,4 +145,62 @@ export function getMatchStatusLabel(status: MatchStatus): string {
  */
 export function isMatchPlayable(status: MatchStatus): boolean {
   return ['live', 'halftime', 'break', 'overtime', 'penalties', 'warmup'].includes(status);
+}
+
+/**
+ * Equipo embebido en filas de GET `matches/schedule-by-date`.
+ */
+export interface ScheduleByDateTeamSnippet {
+  id: string;
+  name: string;
+  shortname: string;
+  /** Ruta relativa al servidor de API o URL absoluta; puede ser `null`. */
+  logoUrl?: string | null;
+}
+
+/**
+ * Fila de partido dentro de GET `matches/schedule-by-date`.
+ */
+export interface ScheduleByDateApiMatch {
+  id: string;
+  championshipId: string;
+  homeTeamId: string;
+  awayTeamId: string;
+  scheduledDate: string;
+  scheduledTime: string;
+  venue?: string;
+  city?: string;
+  homeScore: number;
+  awayScore: number;
+  status: string;
+  elapsedSeconds?: number;
+  homeTeam?: ScheduleByDateTeamSnippet;
+  awayTeam?: ScheduleByDateTeamSnippet;
+}
+
+/**
+ * Metadatos de campeonato en la respuesta de agenda (pueden venir incompletos).
+ */
+export interface ScheduleByDateChampionshipMeta {
+  id?: string;
+  name?: string;
+  organization?: {
+    id?: string;
+    name?: string;
+    country?: string;
+    logo?: string | null;
+  };
+}
+
+export interface ScheduleByDateChampionshipBlock {
+  championship: ScheduleByDateChampionshipMeta;
+  matches: ScheduleByDateApiMatch[];
+}
+
+/**
+ * Respuesta de GET `matches/schedule-by-date?date=YYYY-MM-DD`.
+ */
+export interface ScheduleByDateResponse {
+  date: string;
+  championships: ScheduleByDateChampionshipBlock[];
 }
