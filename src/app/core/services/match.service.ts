@@ -1,9 +1,14 @@
 import { Injectable, inject } from '@angular/core';
 import { ApiService } from './api.service';
 import { Observable, map, catchError, throwError } from 'rxjs';
-import { Match, UpdateMatchDto, UpdateMatchScoreDto } from '../models/match.model';
-import { Team } from '../models/team.model';
-
+import {
+  Match,
+  MatchStatus,
+  ScheduleByDateApiMatch,
+  ScheduleByDateResponse,
+  UpdateMatchDto,
+  UpdateMatchScoreDto,
+} from '../models/match.model';
 @Injectable({
   providedIn: 'root',
 })
@@ -21,17 +26,47 @@ export class MatchService {
   }
 
   /**
-   * Get matches by date (format: YYYY-MM-DD)
+   * Respuesta cruda del calendario por fecha (`date`: YYYY-MM-DD).
    */
-  getMatchesByDate(date: string, championshipId?: string): Observable<Match[]> {
-    const params: any = { date };
-    if (championshipId) {
-      params.championshipId = championshipId;
-    }
-    return this.api.get<Match[]>('matches', params).pipe(
-      map((matches) => matches.map((m) => this.parseMatchDates(m))),
+  getScheduleByDate(date: string): Observable<ScheduleByDateResponse> {
+    return this.api.get<ScheduleByDateResponse>('matches/schedule-by-date', { date }).pipe(
       catchError((error) => this.handleError('Error fetching matches by date', error)),
     );
+  }
+
+  /**
+   * Partidos del calendario para una fecha, aplanados a `Match[]`.
+   */
+  getMatchesByDate(date: string): Observable<Match[]> {
+    return this.getScheduleByDate(date).pipe(map((res) => this.flattenScheduleByDate(res)));
+  }
+
+  private flattenScheduleByDate(res: ScheduleByDateResponse): Match[] {
+    const rows: Match[] = [];
+    for (const block of res.championships ?? []) {
+      for (const m of block.matches ?? []) {
+        rows.push(this.parseMatchDates(this.mapScheduleApiMatchToMatch(m)));
+      }
+    }
+    return rows;
+  }
+
+  private mapScheduleApiMatchToMatch(m: ScheduleByDateApiMatch): Match {
+    return {
+      id: m.id,
+      championshipId: m.championshipId,
+      groupTeamId: '',
+      homeTeamId: m.homeTeamId,
+      awayTeamId: m.awayTeamId,
+      homeScore: m.homeScore,
+      awayScore: m.awayScore,
+      status: m.status as MatchStatus,
+      round: 0,
+      scheduledStart: new Date(m.scheduledDate),
+      venue: m.venue,
+      city: m.city,
+      isActive: true,
+    };
   }
 
   /**
@@ -119,6 +154,7 @@ export class MatchService {
       }),
     );
   }
+
 
   /**
    * Parse date strings to Date objects
