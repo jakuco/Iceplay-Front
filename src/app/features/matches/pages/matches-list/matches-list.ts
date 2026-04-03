@@ -13,19 +13,19 @@ import { MatNativeDateModule } from '@angular/material/core';
 import { MatInputModule } from '@angular/material/input';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { RouterLink } from '@angular/router';
-import { forkJoin, of } from 'rxjs';
-import { map } from 'rxjs/operators';
 import { I18nService } from '../../../../core/services/i18n.service';
 import { TranslatePipe } from '../../../../core/pipes/translate.pipe';
 import { MatchService } from '../../../../core/services/match.service';
-import { ChampionshipService } from '../../../../core/services/championship.service';
-import { TeamService } from '../../../../core/services/team.service';
-import { Match as BackendMatch } from '../../../../core/models/match.model';
 import {
-  ChampionshipListItem,
-  ChampionshipStatus,
-} from '../../../../core/models/championship.model';
+  Match as BackendMatch,
+  MatchStatus,
+  ScheduleByDateApiMatch,
+  ScheduleByDateChampionshipMeta,
+  ScheduleByDateResponse,
+} from '../../../../core/models/match.model';
+import { ChampionshipListItem, ChampionshipStatus } from '../../../../core/models/championship.model';
 import { Team } from '../../../../core/models/team.model';
+import { environment } from '../../../../../environments/environment.development';
 
 /** Partido con campeonato (el API no incluye championshipId en `Match`). */
 interface MatchWithChampionship {
@@ -172,7 +172,7 @@ interface FilteredLeague {
                       [class.text-red-500]="match.status === 'live'"
                       >{{ match.homeTeam.name }}</span
                     >
-                    <img [src]="match.homeTeam.logo" [alt]="match.homeTeam.name" class="h-7 w-7" />
+                    <img [src]="match.homeTeam.logo" (error)="match.homeTeam.logo = defaultTeamLogoUrl" [alt]="match.homeTeam.name" class="h-7 w-7" />
                   </div>
 
                   <!-- Score/Time -->
@@ -208,7 +208,7 @@ interface FilteredLeague {
 
                   <!-- Away Team -->
                   <div class="flex w-2/5 items-center justify-start gap-3 text-left">
-                    <img [src]="match.awayTeam.logo" [alt]="match.awayTeam.name" class="h-7 w-7" />
+                    <img [src]="match.awayTeam.logo" (error)="match.awayTeam.logo = defaultTeamLogoUrl" [alt]="match.awayTeam.name" class="h-7 w-7" />
                     <span class="hidden text-sm font-medium sm:inline-block">{{
                       match.awayTeam.name
                     }}</span>
@@ -304,6 +304,13 @@ export default class MatchesList {
   private readonly TOTAL_DAYS = 7;
   private readonly VISIBLE_MOBILE = 3; // Days visible on mobile (centered)
 
+  /** Logo genérico cuando el API no envía `logoUrl` o viene vacío. */
+  readonly defaultTeamLogoUrl =
+    'data:image/svg+xml,' +
+    encodeURIComponent(
+      `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label=""><rect width="64" height="64" rx="10" fill="#e8eaed"/><circle cx="32" cy="24" r="10" fill="#9aa0a6"/><path fill="#9aa0a6" d="M16 52c4-12 12-18 16-18s12 6 16 18"/></svg>`,
+    );
+
   selectedDate = signal(this.getToday());
 
   // Generate days centered around selected date
@@ -346,9 +353,6 @@ export default class MatchesList {
   });
 
   private matchService = inject(MatchService);
-  private championshipService = inject(ChampionshipService);
-  private teamService = inject(TeamService);
-
   private allMatches = signal<MatchWithChampionship[]>([]);
   private allChampionships = signal<ChampionshipListItem[]>([]);
   private allTeams = signal<Team[]>([]);
@@ -357,7 +361,7 @@ export default class MatchesList {
   constructor() {
     // Load initial data
     effect(() => {
-      this.loadMatches();
+      this.loadMatchesByDate();
     });
   }
 
@@ -390,12 +394,12 @@ export default class MatchesList {
           homeTeam: {
             id: String(homeTeam.id),
             name: homeTeam.name,
-            logo: homeTeam.logoUrl || 'https://via.placeholder.com/50',
+            logo: homeTeam.logoUrl ?? this.defaultTeamLogoUrl,
           },
           awayTeam: {
             id: String(awayTeam.id),
             name: awayTeam.name,
-            logo: awayTeam.logoUrl || 'https://via.placeholder.com/50',
+            logo: awayTeam.logoUrl ?? this.defaultTeamLogoUrl,
           },
           status: this.mapMatchStatus(match.status),
           time: this.formatTimeFromDate(startDate),
@@ -419,11 +423,15 @@ export default class MatchesList {
       const championship = championships.find((c) => String(c.id) === championshipId);
       if (!championship) continue;
 
+      const org = championship.organization;
+      const countryLabel = championship.organization?.country?.trim() || 'Ecuador';
+      const flagCode = this.countryToFlagCode(countryLabel);
+
       filtered.push({
         id: championshipId,
         name: championship.name,
-        country: 'Ecuador', // Default, could be from organization
-        flagUrl: 'https://flagcdn.com/w40/ec.png',
+        country: countryLabel,
+        flagUrl: `https://flagcdn.com/w40/${flagCode}.png`,
         matches: championshipMatches.sort((a, b) => {
           // Sort by scheduled time
           const timeA = a.time || '00:00';
@@ -436,77 +444,216 @@ export default class MatchesList {
     return filtered;
   });
 
-  private loadMatches(): void {
+  private loadMatchesByDate(): void {
+    const date = this.formatDateToISO(this.selectedDate());
     this.isLoading.set(true);
-    this.championshipService
-      .getAll({ status: ChampionshipStatus.Active, limit: 500, page: 1 })
-      .subscribe({
-        next: (page) => {
-          const championships = page.data;
-          this.allChampionships.set(championships);
+    this.matchService.getScheduleByDate(date).subscribe({
+      next: (res) => {
+        this.applyScheduleResponse(res);
+        this.isLoading.set(false);
+      },
+      error: (err: unknown) => {
+        console.error('Error loading matches by date', err);
+        this.allMatches.set([]);
+        this.allChampionships.set([]);
+        this.allTeams.set([]);
+        this.isLoading.set(false);
+      },
+    });
+  }
 
-          if (championships.length === 0) {
-            this.allTeams.set([]);
-            this.allMatches.set([]);
-            this.isLoading.set(false);
-            return;
-          }
+  /**
+   * Rellena `allMatches`, `allChampionships` y `allTeams` como espera `filteredLeagues`,
+   * a partir del JSON del endpoint schedule-by-date.
+   */
+  private applyScheduleResponse(res: ScheduleByDateResponse): void {
+    const championshipById = new Map<string, ChampionshipListItem>();
+    const teamById = new Map<string, Team>();
+    const matchesWC: MatchWithChampionship[] = [];
 
-          const organizationIds = [
-            ...new Set(championships.map((c) => String(c.organization.id))),
-          ];
-          const teamObservables = organizationIds.map((orgId) =>
-            this.teamService.getTeamsByOrganization(orgId),
+    for (const block of res.championships ?? []) {
+      for (const m of block.matches ?? []) {
+        const rowChampId = m.championshipId != null && m.championshipId !== '' ? String(m.championshipId) : '';
+        if (!rowChampId) continue;
+
+        if (!championshipById.has(rowChampId)) {
+          championshipById.set(
+            rowChampId,
+            this.buildSyntheticChampionshipListItem(rowChampId, block.championship),
           );
+        }
 
-          const teams$ =
-            teamObservables.length > 0 ? forkJoin(teamObservables) : of<Team[][]>([]);
+        this.ingestScheduleTeams(m, rowChampId, teamById);
+        matchesWC.push({
+          championshipId: rowChampId,
+          match: this.scheduleApiRowToMatch(m),
+        });
+      }
+    }
 
-          teams$.subscribe({
-            next: (teamsArrays: Team[][]) => {
-              const allTeams = teamsArrays.flat();
-              this.allTeams.set(allTeams);
+    this.allChampionships.set([...championshipById.values()]);
+    this.allTeams.set([...teamById.values()]);
+    this.allMatches.set(matchesWC);
+  }
 
-              const matchObservables = championships.map((c) =>
-                this.matchService.getMatches(String(c.id)).pipe(
-                  map((matches) =>
-                    matches.map(
-                      (m): MatchWithChampionship => ({
-                        championshipId: String(c.id),
-                        match: m,
-                      }),
-                    ),
-                  ),
-                ),
-              );
+  private buildSyntheticChampionshipListItem(
+    id: string,
+    meta: ScheduleByDateChampionshipMeta,
+  ): ChampionshipListItem {
+    const name =
+      meta.name && String(meta.name).trim() !== '' ? meta.name : 'Competición';
+    const org = meta.organization;
+    const organization = {
+      id: org?.id ?? 'schedule',
+      name: org?.name ?? '',
+      logo: org?.logo ?? null,
+      ...(org?.country !== undefined ? { country: org.country } : {}),
+    } as ChampionshipListItem['organization'];
 
-              const matches$ =
-                matchObservables.length > 0
-                  ? forkJoin(matchObservables)
-                  : of<MatchWithChampionship[][]>([]);
+    return {
+      id,
+      name,
+      slug: id,
+      season: '',
+      logo: null,
+      status: ChampionshipStatus.Active,
+      startDate: null,
+      endDate: null,
+      maxTeams: 0,
+      teamCount: 0,
+      phaseCount: 0,
+      organization,
+      sport: { id: 0, name: '', icon: 'sports' },
+    };
+  }
 
-              matches$.subscribe({
-                next: (matchesArrays: MatchWithChampionship[][]) => {
-                  this.allMatches.set(matchesArrays.flat());
-                  this.isLoading.set(false);
-                },
-                error: (err: unknown) => {
-                  console.error('Error loading matches', err);
-                  this.isLoading.set(false);
-                },
-              });
-            },
-            error: (err: unknown) => {
-              console.error('Error loading teams', err);
-              this.isLoading.set(false);
-            },
-          });
-        },
-        error: (err: unknown) => {
-          console.error('Error loading championships', err);
-          this.isLoading.set(false);
-        },
-      });
+  private ingestScheduleTeams(
+    m: ScheduleByDateApiMatch,
+    championshipId: string,
+    teamById: Map<string, Team>,
+  ): void {
+    const ensure = (snippet: ScheduleByDateApiMatch['homeTeam'], fallbackId: string) => {
+      const id = snippet?.id ?? fallbackId;
+      if (teamById.has(id)) return;
+      teamById.set(
+        id,
+        snippet
+          ? this.scheduleSnippetToTeam(snippet, championshipId)
+          : this.placeholderScheduleTeam(fallbackId, championshipId),
+      );
+    };
+    ensure(m.homeTeam, String(m.homeTeamId));
+    ensure(m.awayTeam, String(m.awayTeamId));
+  }
+
+  private scheduleSnippetToTeam(
+    snippet: NonNullable<ScheduleByDateApiMatch['homeTeam']>,
+    championshipId: string,
+  ): Team {
+    const now = new Date();
+    const slug = snippet.shortname?.trim() || String(snippet.id);
+    return {
+      id: snippet.id,
+      championshipId,
+      name: snippet.name,
+      shortname: snippet.shortname,
+      slug: slug.toLowerCase().replace(/\s+/g, '-'),
+      logoUrl: snippet.logoUrl ?? this.defaultTeamLogoUrl,
+      documentUrl: null,
+      primaryColor: null,
+      secondaryColor: null,
+      foundedYear: null,
+      homeVenue: null,
+      location: null,
+      coachName: null,
+      coachPhone: null,
+      isActive: true,
+      hasActiveMatches: false,
+      createdAt: now,
+      updatedAt: now,
+    };
+  }
+
+  private placeholderScheduleTeam(id: string, championshipId: string): Team {
+    const now = new Date();
+    return {
+      id,
+      championshipId,
+      name: '—',
+      shortname: '—',
+      slug: String(id),
+      logoUrl: null,
+      documentUrl: null,
+      primaryColor: null,
+      secondaryColor: null,
+      foundedYear: null,
+      homeVenue: null,
+      location: null,
+      coachName: null,
+      coachPhone: null,
+      isActive: true,
+      hasActiveMatches: false,
+      createdAt: now,
+      updatedAt: now,
+    };
+  }
+
+  private scheduleApiRowToMatch(m: ScheduleByDateApiMatch): BackendMatch {
+    return {
+      id: m.id,
+      championshipId: m.championshipId,
+      groupTeamId: '',
+      homeTeamId: m.homeTeamId,
+      awayTeamId: m.awayTeamId,
+      homeScore: m.homeScore,
+      awayScore: m.awayScore,
+      status: m.status as MatchStatus,
+      round: 0,
+      scheduledStart: new Date(m.scheduledDate),
+      venue: m.venue,
+      city: m.city,
+      isActive: true,
+    };
+  }
+
+  // /**
+  //  * Convierte rutas relativas del API (`teams/foo.png`) en URL absoluta.
+  //  * Usa el origen de `environment.baseUrl` sin el sufijo `/api`.
+  //  */
+  // private resolveScheduleAssetUrl(path: string | null | undefined): string | null {
+  //   if (path == null) return null;
+  //   const raw = String(path).trim();
+  //   if (raw === '') return null;
+  //   if (/^https?:\/\//i.test(raw)) return raw;
+  //   const apiBase = environment.baseUrl.replace(/\/+$/, '');
+  //   const originBase = apiBase.replace(/\/api\/?$/i, '') || apiBase;
+  //   const segment = raw.startsWith('/') ? raw : `/${raw}`;
+  //   return `${originBase}${segment}`;
+  // }
+
+  // private displayTeamLogo(url: string | null | undefined): string {
+  //   if (url != null && String(url).trim() !== '') {
+  //     return String(url).trim();
+  //   }
+  //   return this.defaultTeamLogoUrl;
+  // }
+
+  /** ISO 3166-1 alpha-2 para flagcdn; fallback ec. */
+  private countryToFlagCode(country: string): string {
+    const c = country.trim().toLowerCase();
+    if (c.length === 2 && /^[a-z]{2}$/.test(c)) return c;
+    const map: Record<string, string> = {
+      ecuador: 'ec',
+      spain: 'es',
+      switzerland: 'ch',
+      england: 'gb-eng',
+      'united kingdom': 'gb',
+      portugal: 'pt',
+      france: 'fr',
+      germany: 'de',
+      italy: 'it',
+    };
+    return map[c] ?? 'ec';
   }
 
   private formatTimeFromDate(d: Date): string {
