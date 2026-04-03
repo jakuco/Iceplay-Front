@@ -1,24 +1,21 @@
 import { inject } from '@angular/core';
 import { Router, type CanActivateFn } from '@angular/router';
-import { from, map } from 'rxjs';
-
 import { AuthService } from '../services/auth.service';
 
 /**
- * Rutas solo para anónimos (p. ej. login): respeta sesión restaurada por cookie.
+ * Guard for public-only pages (like login)
+ * Redirects authenticated users to their dashboard
  */
 export const publicGuard: CanActivateFn = () => {
-  const auth = inject(AuthService);
+  const authService = inject(AuthService);
   const router = inject(Router);
 
-  console.log("publicGuard");
-  
-  return from(auth.ensureBootstrapped()).pipe(
-    map(() => {
-      if (!auth.isAuthenticated()) {
-        return true;
-      }
-      return router.createUrlTree([auth.getDefaultRoute()]);
-    }),
-  );
+  if (!authService.isAuthenticated()) {
+    return true;
+  }
+
+  // Redirect based on user role
+  const defaultRoute = authService.getDefaultRoute();
+  return router.createUrlTree([defaultRoute]);
 };
+

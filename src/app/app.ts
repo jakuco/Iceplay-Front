@@ -29,7 +29,7 @@ import { SportSidenavComponent } from './layouts/sport-sidenav/sport-sidenav.com
 export class App {
   private readonly router = inject(Router);
 
-  //* Track current URL reactively 
+  /** Track current URL reactively */
   private readonly currentUrl = toSignal(
     this.router.events.pipe(
       filter((event): event is NavigationEnd => event instanceof NavigationEnd),
@@ -38,7 +38,7 @@ export class App {
     { initialValue: this.router.url },
   );
 
-  //* Public routes show main header + sport sidenav layout 
+  /** Public routes show main header + sport sidenav layout */
   protected readonly isPublicRoute = computed(() => {
     const url = this.currentUrl();
     return !url.startsWith('/auth') && !url.startsWith('/admin') && !url.startsWith('/super-admin');

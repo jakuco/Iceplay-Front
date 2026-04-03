@@ -1,3 +1,3 @@
 export const environment = {
-  baseUrl: 'https://api.iceplay.cloud/api',
+  baseUrl: 'http://localhost:3001',
 };
