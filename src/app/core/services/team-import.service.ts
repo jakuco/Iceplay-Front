@@ -18,24 +18,24 @@ import { Injectable } from '@angular/core';
 
 /** Estado de validación de un campo individual */
 export interface FieldError {
-  row:     number;   // 0 = encabezado del equipo, >0 = fila de jugador
-  field:   string;
+  row: number;   // 0 = encabezado del equipo, >0 = fila de jugador
+  field: string;
   message: string;
 }
 
 /** Jugador tal como llega del Excel, con la foto adjuntada si existe */
 export interface ImportedPlayer {
-  number:       number;
-  firstName:    string;
-  lastName:     string;
-  nickName:     string | null;
-  position:     string;         // abbreviation normalizada: DEL, DEF, MED, POR…
-  birthDate:    string | null;  // YYYY-MM-DD
-  height:       number | null;
-  weight:       number | null;
+  number: number;
+  firstName: string;
+  lastName: string;
+  nickName: string | null;
+  position: string;         // abbreviation normalizada: DEL, DEF, MED, POR…
+  birthDate: string | null;  // YYYY-MM-DD
+  height: number | null;
+  weight: number | null;
 
   // Archivo local — el componente crea la preview con URL.createObjectURL()
-  photoFile:    File | null;
+  photoFile: File | null;
   photoFileName: string | null; // nombre del archivo de foto
 
   errors: FieldError[];
@@ -44,27 +44,27 @@ export interface ImportedPlayer {
 /** Resultado completo del parseo — listo para mostrar en preview */
 export interface ImportedTeamPayload {
   // Datos del equipo
-  name:           string;
-  shortname:      string;
-  coachName:      string;
-  coachPhone:     string | null;
-  location:       string | null;
-  primaryColor:   string;
+  name: string;
+  shortname: string;
+  coachName: string;
+  coachPhone: string | null;
+  location: string | null;
+  primaryColor: string;
   secondaryColor: string;
 
   // Archivos identificados — el componente crea las previews con URL.createObjectURL()
-  logoFile:      File | null;
-  logoFileName:  string | null; // nombre del archivo de logo
-  documentFile:  File | null;
+  logoFile: File | null;
+  logoFileName: string | null; // nombre del archivo de logo
+  documentFile: File | null;
   documentFileName: string | null; // nombre del archivo de documento
-  excelFile:     File | null;
+  excelFile: File | null;
 
   // Jugadores parseados
   players: ImportedPlayer[];
 
   // Diagnóstico
-  fileMap:  FileMap;
-  errors:   FieldError[];        // errores bloqueantes
+  fileMap: FileMap;
+  errors: FieldError[];        // errores bloqueantes
   warnings: string[];            // avisos no bloqueantes
 
   // false si hay errores obligatorios sin resolver
@@ -73,8 +73,8 @@ export interface ImportedTeamPayload {
 
 /** Mapa de archivos clasificados antes de parsear */
 interface FileMap {
-  excel:    File | null;
-  logo:     File | null;
+  excel: File | null;
+  logo: File | null;
   document: File | null;
   // clave: "{numero}_{apellido_lowercase}" → File
   playerPhotos: Map<string, File>;
@@ -85,9 +85,9 @@ interface FileMap {
 // CONSTANTS
 // ─────────────────────────────────────────────────────────────
 
-const EXCEL_EXTENSIONS  = new Set(['.xlsx', '.xls', '.csv']);
-const IMAGE_EXTENSIONS  = new Set(['.jpg', '.jpeg', '.png', '.webp', '.gif']);
-const DOC_EXTENSIONS    = new Set(['.pdf', '.doc', '.docx']);
+const EXCEL_EXTENSIONS = new Set(['.xlsx', '.xls', '.csv']);
+const IMAGE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.webp', '.gif']);
+const DOC_EXTENSIONS = new Set(['.pdf', '.doc', '.docx']);
 
 /** Mapeo case-insensitive de abreviaciones y labels completos → code canónico */
 const POSITION_MAP: Record<string, string> = {
@@ -105,8 +105,41 @@ const POSITION_MAP: Record<string, string> = {
   lib: 'LIB', libero: 'LIB', líbero: 'LIB',
 };
 
-const DEFAULT_PRIMARY_COLOR   = '#1a56db';
+const DEFAULT_PRIMARY_COLOR = '#1a56db';
 const DEFAULT_SECONDARY_COLOR = '#e74694';
+
+const TEAM_REQUIRED_COLUMN_GROUPS: Record<string, string[]> = {
+  nombre: ['nombre', 'nombre_equipo', 'equipo', 'team', 'team_name'],
+  nombre_corto: ['nombre_corto', 'shortname', 'short_name', 'sigla', 'abreviacion'],
+  entrenador: ['entrenador', 'director_tecnico', 'dt', 'coach', 'coach_name'],
+};
+
+const PLAYER_REQUIRED_COLUMN_GROUPS: Record<string, string[]> = {
+  numero: ['numero', 'nro', 'dorsal', 'camiseta', 'number'],
+  nombre: ['nombre', 'nombres', 'first_name', 'name'],
+  apellido: ['apellido', 'apellidos', 'last_name', 'lastname', 'surname'],
+  posicion: ['posicion', 'position', 'rol', 'puesto'],
+};
+
+const TEAM_NAME_ALIASES = TEAM_REQUIRED_COLUMN_GROUPS['nombre'];
+const TEAM_SHORTNAME_ALIASES = TEAM_REQUIRED_COLUMN_GROUPS['nombre_corto'];
+const TEAM_COACH_ALIASES = TEAM_REQUIRED_COLUMN_GROUPS['entrenador'];
+const TEAM_LOGO_ALIASES = ['logo', 'logo_equipo', 'logo_file'];
+const TEAM_DOCUMENT_ALIASES = ['documento', 'documento_equipo', 'document', 'documento_file'];
+const TEAM_COACH_PHONE_ALIASES = ['telefono_entrenador', 'telefono', 'telefono_dt', 'coach_phone'];
+const TEAM_CITY_ALIASES = ['ciudad', 'ubicacion', 'location'];
+const TEAM_PRIMARY_COLOR_ALIASES = ['color_primario', 'primary_color'];
+const TEAM_SECONDARY_COLOR_ALIASES = ['color_secundario', 'secondary_color'];
+
+const PLAYER_NUMBER_ALIASES = PLAYER_REQUIRED_COLUMN_GROUPS['numero'];
+const PLAYER_FIRST_NAME_ALIASES = PLAYER_REQUIRED_COLUMN_GROUPS['nombre'];
+const PLAYER_LAST_NAME_ALIASES = PLAYER_REQUIRED_COLUMN_GROUPS['apellido'];
+const PLAYER_POSITION_ALIASES = PLAYER_REQUIRED_COLUMN_GROUPS['posicion'];
+const PLAYER_BIRTHDATE_ALIASES = ['fecha_nacimiento', 'nacimiento', 'birthdate', 'birth_date'];
+const PLAYER_PHOTO_ALIASES = ['foto', 'foto_jugador', 'photo', 'photo_file'];
+const PLAYER_NICKNAME_ALIASES = ['apodo', 'alias', 'nick', 'nickname'];
+const PLAYER_HEIGHT_ALIASES = ['altura_cm', 'altura', 'height_cm', 'height'];
+const PLAYER_WEIGHT_ALIASES = ['peso_kg', 'peso', 'weight_kg', 'weight'];
 
 // ─────────────────────────────────────────────────────────────
 // SERVICE
@@ -122,8 +155,8 @@ export class TeamImportService {
    */
   async processFiles(files: File[]): Promise<ImportedTeamPayload> {
     const fileMap = this.classifyFiles(files);
-    const errors:   FieldError[] = [];
-    const warnings: string[]     = [];
+    const errors: FieldError[] = [];
+    const warnings: string[] = [];
 
     // ── Advertencias por archivos no reconocidos ──────────────
     for (const f of fileMap.unrecognized) {
@@ -137,32 +170,44 @@ export class TeamImportService {
     }
 
     // ── Parsear Excel ─────────────────────────────────────────
-    let teamRow:    Record<string, unknown>;
+    let teamRow: Record<string, unknown>;
     let playerRows: Record<string, unknown>[];
 
     try {
       ({ teamRow, playerRows } = await this.parseExcel(fileMap.excel));
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      errors.push({ row: 0, field: 'excel', message: `Error al leer el Excel: ${msg}` });
+      console.error('[TeamImportService] Error leyendo archivo de equipo', {
+        fileName: fileMap.excel.name,
+        fileType: fileMap.excel.type,
+        fileSize: fileMap.excel.size,
+        error: msg,
+        stack: err instanceof Error ? err.stack : undefined,
+      });
+      const isIncompatibleFile = msg.toLowerCase().includes('archivo incompatible');
+      errors.push({
+        row: 0,
+        field: 'excel',
+        message: isIncompatibleFile ? msg : `Error al leer el Excel: ${msg}`,
+      });
       return this.emptyPayload(fileMap, errors, warnings, fileMap.excel);
     }
 
     // ── Mapear equipo ─────────────────────────────────────────
     const teamErrors: FieldError[] = [];
 
-    const name = this.str(teamRow['nombre']);
+    const name = this.getStringByAliases(teamRow, TEAM_NAME_ALIASES);
     if (!name) teamErrors.push({ row: 0, field: 'nombre', message: 'El nombre del equipo es obligatorio' });
 
-    const shortname = this.str(teamRow['nombre_corto']);
+    const shortname = this.getStringByAliases(teamRow, TEAM_SHORTNAME_ALIASES);
     if (!shortname) teamErrors.push({ row: 0, field: 'nombre_corto', message: 'El nombre corto es obligatorio' });
 
-    const coachName = this.str(teamRow['entrenador']);
+    const coachName = this.getStringByAliases(teamRow, TEAM_COACH_ALIASES);
     if (!coachName) teamErrors.push({ row: 0, field: 'entrenador', message: 'El nombre del entrenador es obligatorio' });
 
     // Leer nombres de archivos desde el Excel
-    const logoName = this.str(teamRow['logo']);
-    const documentName = this.str(teamRow['documento']);
+    const logoName = this.getStringByAliases(teamRow, TEAM_LOGO_ALIASES);
+    const documentName = this.getStringByAliases(teamRow, TEAM_DOCUMENT_ALIASES);
     const filesByName = (fileMap as any).filesByName as Map<string, File>;
 
     // Buscar archivos por nombre del Excel
@@ -173,14 +218,14 @@ export class TeamImportService {
     const players: ImportedPlayer[] = [];
 
     for (let i = 0; i < playerRows.length; i++) {
-      const row    = playerRows[i];
+      const row = playerRows[i];
       const rowNum = i + 2; // fila 1 = headers, fila 2+ = jugadores
       const pErrors: FieldError[] = [];
 
-      const numRaw   = row['numero'];
-      const number   = numRaw !== undefined && numRaw !== '' ? Number(numRaw) : NaN;
-      const lastName = this.str(row['apellido']);
-      const firstName = this.str(row['nombre']);
+      const numRaw = this.getValueByAliases(row, PLAYER_NUMBER_ALIASES);
+      const number = numRaw !== undefined && numRaw !== '' ? Number(numRaw) : NaN;
+      const lastName = this.getStringByAliases(row, PLAYER_LAST_NAME_ALIASES);
+      const firstName = this.getStringByAliases(row, PLAYER_FIRST_NAME_ALIASES);
 
       if (isNaN(number) || number < 1 || number > 99) {
         pErrors.push({ row: rowNum, field: 'numero', message: `Número de camiseta inválido: "${numRaw}"` });
@@ -192,32 +237,32 @@ export class TeamImportService {
         pErrors.push({ row: rowNum, field: 'apellido', message: 'El apellido es obligatorio' });
       }
 
-      const posRaw  = this.str(row['posicion']);
+      const posRaw = this.getStringByAliases(row, PLAYER_POSITION_ALIASES);
       const position = posRaw ? (POSITION_MAP[posRaw.toLowerCase()] ?? posRaw.toUpperCase()) : '';
       if (!position) {
         pErrors.push({ row: rowNum, field: 'posicion', message: 'La posición es obligatoria' });
       }
 
       // Fecha: acepta YYYY-MM-DD, DD/MM/YYYY, número serial de Excel
-      const birthDate = this.parseDateCell(row['fecha_nacimiento']);
+      const birthDate = this.parseDateCell(this.getValueByAliases(row, PLAYER_BIRTHDATE_ALIASES));
 
       // Leer nombre de foto desde el Excel
-      const photoName = this.str(row['foto']);
+      const photoName = this.getStringByAliases(row, PLAYER_PHOTO_ALIASES);
       const photoFile = photoName ? filesByName.get(this.normalizeKey(photoName).toLowerCase()) ?? null : null;
-      const photoFileName = photoFile?.name ?? null;
+      const photoFileName = photoFile?.name ?? (photoName || null);
 
       players.push({
-        number:   isNaN(number) ? 0 : number,
+        number: isNaN(number) ? 0 : number,
         firstName,
         lastName,
-        nickName: this.str(row['apodo']) || null,
+        nickName: this.getStringByAliases(row, PLAYER_NICKNAME_ALIASES) || null,
         position,
         birthDate,
-        height:   this.num(row['altura_cm']),
-        weight:   this.num(row['peso_kg']),
+        height: this.num(this.getValueByAliases(row, PLAYER_HEIGHT_ALIASES)),
+        weight: this.num(this.getValueByAliases(row, PLAYER_WEIGHT_ALIASES)),
         photoFile,
         photoFileName,
-        errors:   pErrors,
+        errors: pErrors,
       });
     }
 
@@ -247,21 +292,21 @@ export class TeamImportService {
       players.every(p => p.errors.length === 0);
 
     return {
-      name:           name          || '',
-      shortname:      shortname     || '',
-      coachName:      coachName     || '',
-      coachPhone:     this.str(teamRow['telefono_entrenador']) || null,
-      location:       this.str(teamRow['ciudad'])             || null,
-      primaryColor:   this.str(teamRow['color_primario'])     || DEFAULT_PRIMARY_COLOR,
-      secondaryColor: this.str(teamRow['color_secundario'])   || DEFAULT_SECONDARY_COLOR,
-      logoFile:       logoFile,
-      logoFileName:   logoFile?.name ?? null,
-      documentFile:   documentFile,
-      documentFileName: documentFile?.name ?? null,
-      excelFile:      fileMap.excel,
+      name: name || '',
+      shortname: shortname || '',
+      coachName: coachName || '',
+      coachPhone: this.getStringByAliases(teamRow, TEAM_COACH_PHONE_ALIASES) || null,
+      location: this.getStringByAliases(teamRow, TEAM_CITY_ALIASES) || null,
+      primaryColor: this.getStringByAliases(teamRow, TEAM_PRIMARY_COLOR_ALIASES) || DEFAULT_PRIMARY_COLOR,
+      secondaryColor: this.getStringByAliases(teamRow, TEAM_SECONDARY_COLOR_ALIASES) || DEFAULT_SECONDARY_COLOR,
+      logoFile: logoFile,
+      logoFileName: logoFile?.name ?? (logoName || null),
+      documentFile: documentFile,
+      documentFileName: documentFile?.name ?? (documentName || null),
+      excelFile: fileMap.excel,
       players,
       fileMap,
-      errors:         allErrors,
+      errors: allErrors,
       warnings,
       isValid,
     };
@@ -273,9 +318,9 @@ export class TeamImportService {
 
   private classifyFiles(files: File[]): FileMap {
     const map: FileMap = {
-      excel:        null,
-      logo:         null,
-      document:     null,
+      excel: null,
+      logo: null,
+      document: null,
       playerPhotos: new Map(),
       unrecognized: [],
     };
@@ -285,12 +330,15 @@ export class TeamImportService {
 
     for (const file of files) {
       const name = file.name.toLowerCase();
-      const ext  = this.getExtension(name);
+      const ext = this.getExtension(name);
       const normalizedName = this.getFileNameWithoutExt(name).toLowerCase();
 
-      // equipo.xlsx / equipo.csv / equipo.xls
-      if (name.startsWith('equipo') && EXCEL_EXTENSIONS.has(ext)) {
-        map.excel = file;
+      // Aceptar cualquier Excel válido; si existe uno que empiece por "equipo",
+      // tiene prioridad sobre otros nombres.
+      if (EXCEL_EXTENSIONS.has(ext)) {
+        if (!map.excel || name.startsWith('equipo')) {
+          map.excel = file;
+        }
         continue;
       }
 
@@ -312,30 +360,58 @@ export class TeamImportService {
     file: File
   ): Promise<{ teamRow: Record<string, unknown>; playerRows: Record<string, unknown>[] }> {
 
+    console.log('[TeamImportService] Iniciando lectura de archivo', {
+      fileName: file.name,
+      fileType: file.type,
+      fileSize: file.size,
+    });
+
     // Import dinámico → SheetJS (~600 KB) solo se carga cuando se usa
     const XLSX = await import('xlsx');
 
-    const buffer    = await file.arrayBuffer();
-    const workbook  = XLSX.read(buffer, { type: 'array', cellDates: true });
+    const buffer = await file.arrayBuffer();
+    const workbook = XLSX.read(buffer, { type: 'array', cellDates: true });
 
     const isCsv = file.name.toLowerCase().endsWith('.csv');
+
+    console.log('[TeamImportService] Workbook cargado', {
+      isCsv,
+      sheetNames: workbook.SheetNames,
+    });
 
     if (isCsv) {
       return this.parseCsv(workbook, XLSX);
     }
 
     // ── Excel con 2 hojas ─────────────────────────────────────
-    const sheetTeam    = workbook.Sheets['Equipo']    ?? workbook.Sheets[workbook.SheetNames[0]];
-    const sheetPlayers = workbook.Sheets['Jugadores'] ?? workbook.Sheets[workbook.SheetNames[1]];
+    const sheetTeam = this.findSheetByNormalizedName(workbook, 'equipo');
+    const sheetPlayers = this.findSheetByNormalizedName(workbook, 'jugadores');
+
+    console.log('[TeamImportService] Hojas resueltas para parseo', {
+      hasSheetEquipo: !!sheetTeam,
+      hasSheetJugadores: !!sheetPlayers,
+      fallbackTeamSheet: workbook.SheetNames[0] ?? null,
+      fallbackPlayersSheet: workbook.SheetNames[1] ?? null,
+    });
 
     if (!sheetTeam) {
-      throw new Error('No se encontró la hoja "Equipo"');
+      throw new Error('Archivo incompatible: falta la hoja "Equipo"');
     }
+
+    if (!sheetPlayers) {
+      throw new Error('Archivo incompatible: falta la hoja "Jugadores"');
+    }
+
+    const teamHeaders = this.getSheetHeaders(sheetTeam, XLSX);
+    const playerHeaders = this.getSheetHeaders(sheetPlayers, XLSX);
+
+    this.assertRequiredColumnGroups('Equipo', teamHeaders, TEAM_REQUIRED_COLUMN_GROUPS);
+    this.assertRequiredColumnGroups('Jugadores', playerHeaders, PLAYER_REQUIRED_COLUMN_GROUPS);
 
     // Hoja Equipo: fila 1 = headers, fila 2 = datos → tomamos la primera fila de datos
     const teamRows = XLSX.utils.sheet_to_json(sheetTeam, {
       defval: '',
-      raw:    false,
+      raw: false,
     }) as Record<string, unknown>[];
 
     if (!teamRows.length) {
@@ -346,12 +422,17 @@ export class TeamImportService {
     const teamRow = this.normalizeRowKeys(teamRows[0]);
 
     // Hoja Jugadores
-    const playerRows = sheetPlayers
-      ? (XLSX.utils.sheet_to_json(sheetPlayers, {
-          defval: '',
-          raw:    false,
-        }) as Record<string, unknown>[]).map((r: Record<string, unknown>) => this.normalizeRowKeys(r))
-      : [];
+    const playerRows = (XLSX.utils.sheet_to_json(sheetPlayers, {
+      defval: '',
+      raw: false,
+    }) as Record<string, unknown>[]).map((r: Record<string, unknown>) => this.normalizeRowKeys(r));
+
+    console.log('[TeamImportService] Parseo de Excel completado', {
+      teamKeys: Object.keys(teamRow),
+      teamHeaders,
+      playerHeaders,
+      playersCount: playerRows.length,
+    });
 
     return { teamRow, playerRows };
   }
@@ -361,26 +442,26 @@ export class TeamImportService {
     workbook: import('xlsx').WorkBook,
     XLSX: typeof import('xlsx')
   ): { teamRow: Record<string, unknown>; playerRows: Record<string, unknown>[] } {
-    const sheet    = workbook.Sheets[workbook.SheetNames[0]];
-    const allRows  = XLSX.utils.sheet_to_csv(sheet).split('\n').map((r: string) => r.trim()).filter(Boolean);
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    const allRows = XLSX.utils.sheet_to_csv(sheet).split('\n').map((r: string) => r.trim()).filter(Boolean);
 
     let section: 'none' | 'equipo' | 'jugadores' = 'none';
-    let teamHeaders:    string[] = [];
-    let playerHeaders:  string[] = [];
-    let teamData:       string[] = [];
-    let playerData:     string[] = [];
+    let teamHeaders: string[] = [];
+    let playerHeaders: string[] = [];
+    let teamData: string[] = [];
+    let playerData: string[] = [];
 
     for (const line of allRows) {
-      if (line.toLowerCase().startsWith('#equipo'))    { section = 'equipo';    continue; }
+      if (line.toLowerCase().startsWith('#equipo')) { section = 'equipo'; continue; }
       if (line.toLowerCase().startsWith('#jugadores')) { section = 'jugadores'; continue; }
       if (!line) continue;
 
       if (section === 'equipo') {
         if (!teamHeaders.length) { teamHeaders = this.splitCsv(line); }
-        else                     { teamData.push(line); }
+        else { teamData.push(line); }
       } else if (section === 'jugadores') {
         if (!playerHeaders.length) { playerHeaders = this.splitCsv(line); }
-        else                       { playerData.push(line); }
+        else { playerData.push(line); }
       }
     }
 
@@ -391,11 +472,11 @@ export class TeamImportService {
 
     const teamRow = teamData.length
       ? Object.fromEntries(
-          teamHeaders.map((h, i) => [
-            this.normalizeKey(h),
-            this.splitCsv(teamData[0])[i] ?? '',
-          ])
-        )
+        teamHeaders.map((h, i) => [
+          this.normalizeKey(h),
+          this.splitCsv(teamData[0])[i] ?? '',
+        ])
+      )
       : {};
 
     const playerRows = playerData.map((line: string) => {
@@ -403,6 +484,12 @@ export class TeamImportService {
       return Object.fromEntries(
         playerHeaders.map((h, i) => [this.normalizeKey(h), cols[i] ?? ''])
       );
+    });
+
+    console.log('[TeamImportService] Parseo CSV completado', {
+      teamHeaders,
+      playerHeaders,
+      playerRowsCount: playerRows.length,
     });
 
     return { teamRow, playerRows };
@@ -439,6 +526,62 @@ export class TeamImportService {
     return idx >= 0 ? filename.slice(0, idx) : filename;
   }
 
+  private findSheetByNormalizedName(
+    workbook: import('xlsx').WorkBook,
+    expectedName: string
+  ): import('xlsx').WorkSheet | null {
+    const expected = this.normalizeKey(expectedName);
+    const match = workbook.SheetNames.find((name: string) => this.normalizeKey(name) === expected);
+    return match ? workbook.Sheets[match] : null;
+  }
+
+  private getSheetHeaders(
+    sheet: import('xlsx').WorkSheet,
+    XLSX: typeof import('xlsx')
+  ): string[] {
+    const rows = XLSX.utils.sheet_to_json(sheet, {
+      header: 1,
+      raw: false,
+      defval: '',
+      blankrows: false,
+    }) as unknown[][];
+
+    const firstRow = rows[0] ?? [];
+    return firstRow
+      .map((value: unknown) => this.normalizeKey(String(value ?? '')))
+      .filter((header: string) => header.length > 0);
+  }
+
+  private assertRequiredColumnGroups(
+    sheetName: string,
+    headers: string[],
+    requiredColumnGroups: Record<string, string[]>
+  ): void {
+    const missing = Object.entries(requiredColumnGroups)
+      .filter(([, aliases]) => !aliases.some((alias: string) => headers.includes(this.normalizeKey(alias))))
+      .map(([canonical]) => canonical);
+
+    if (missing.length > 0) {
+      throw new Error(
+        `Archivo incompatible: la hoja "${sheetName}" no tiene las columnas requeridas (${missing.join(', ')})`
+      );
+    }
+  }
+
+  private getValueByAliases(row: Record<string, unknown>, aliases: string[]): unknown {
+    for (const alias of aliases) {
+      const key = this.normalizeKey(alias);
+      if (Object.prototype.hasOwnProperty.call(row, key)) {
+        return row[key];
+      }
+    }
+    return undefined;
+  }
+
+  private getStringByAliases(row: Record<string, unknown>, aliases: string[]): string {
+    return this.str(this.getValueByAliases(row, aliases));
+  }
+
   /** Parsea una celda de fecha: Date nativo, YYYY-MM-DD, DD/MM/YYYY o serial Excel */
   private parseDateCell(raw: unknown): string | null {
     if (!raw || raw === '') return null;
@@ -455,7 +598,7 @@ export class TeamImportService {
 
     // DD/MM/YYYY
     const dmy = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-    if (dmy) return `${dmy[3]}-${dmy[2].padStart(2,'0')}-${dmy[1].padStart(2,'0')}`;
+    if (dmy) return `${dmy[3]}-${dmy[2].padStart(2, '0')}-${dmy[1].padStart(2, '0')}`;
 
     // Número serial de Excel (días desde 1900-01-01)
     const serial = Number(str);

@@ -24,7 +24,7 @@
 // ─────────────────────────────────────────────────────────────
 
 import {
-  ChangeDetectionStrategy, ChangeDetectorRef, Component, DestroyRef, HostListener,
+  ChangeDetectionStrategy, ChangeDetectorRef, Component, DestroyRef,
   computed, effect, inject, input, output, signal,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
@@ -40,7 +40,7 @@ import {
 } from './player-modal.component';
 import { FileUploadComponent } from '../../../../../shared/ui/file-upload/file-upload.component';
 import { PdfViewerComponent } from '../../../../../shared/ui/pdf-viewer/pdf-viewer.component';
-import { TeamImportService, ImportedTeamPayload, ImportedPlayer } from '../../../../../core/services/team-import.service';
+import { TeamImportService, ImportedTeamPayload, ImportedPlayer, FieldError } from '../../../../../core/services/team-import.service';
 
 // ─────────────────────────────────────────────────────────────
 // TYPES
@@ -49,63 +49,80 @@ import { TeamImportService, ImportedTeamPayload, ImportedPlayer } from '../../..
 export type PlayerStatus = 'active' | 'suspended' | 'injured' | 'inactive';
 
 export interface TeamPlayer {
-  id:         number;
-  teamId:     number;
+  id: number;
+  teamId: number;
   positionId: number;
-  firstName:  string;
-  lastName:   string;
-  nickName:   string | null;
-  number:     number;
-  birthDate:  string | null;
-  height:     number | null;
-  weight:     number | null;
-  status:     PlayerStatus;
-  photoUrl:   string | null;   // URL persistida
+  firstName: string;
+  lastName: string;
+  nickName: string | null;
+  number: number;
+  birthDate: string | null;
+  height: number | null;
+  weight: number | null;
+  status: PlayerStatus;
+  photoUrl: string | null;   // URL persistida
   photoFile?: File;             // transient — solo para preview/upload
 }
 
 export interface TeamItem {
-  id:              number;
-  championshipId:  number;
-  name:            string;
-  shortname:       string;
-  slug:            string;
-  logoUrl:         string | null;
-  documentUrl:     string | null;
-  primaryColor:    string;
-  secondaryColor:  string;
-  location:        string;
-  foundedYear:     number | null;
-  homeVenue:       string;
-  coachName:       string;
-  coachPhone:      string;
-  isActive:        boolean;
-  players:         TeamPlayer[];
+  id: number;
+  championshipId: number;
+  name: string;
+  shortname: string;
+  slug: string;
+  logoUrl: string | null;
+  documentUrl: string | null;
+  primaryColor: string;
+  secondaryColor: string;
+  location: string;
+  foundedYear: number | null;
+  homeVenue: string;
+  coachName: string;
+  coachPhone: string;
+  isActive: boolean;
+  players: TeamPlayer[];
 }
 
 /** Datos de conflicto cuando el CSV trae un equipo ya existente */
 interface ImportConflict {
   existingTeam: TeamItem;
   incomingName: string;
-  file:         File;
+  file: File;
 }
+
+interface ExpectedImageTarget {
+  teamIdx: number;
+  playerId?: number;
+  isLogo: boolean;
+}
+
+type ImportedTeamEditableField =
+  | 'name'
+  | 'shortname'
+  | 'coachName'
+  | 'coachPhone'
+  | 'location'
+  | 'primaryColor'
+  | 'secondaryColor';
+
+type ImportedPlayerEditableField = 'number' | 'firstName' | 'lastName' | 'position' | 'nickName';
 
 /** Datos del form para crear/editar un equipo */
 interface TeamFormData {
-  id?:            number;
-  name:           string;
-  shortname:      string;
-  coachName:      string;
-  coachPhone:     string;
-  location:       string;
-  foundedYear:    number | null;
-  homeVenue:      string;
-  primaryColor:   string;
+  id?: number;
+  name: string;
+  shortname: string;
+  coachName: string;
+  coachPhone: string;
+  location: string;
+  foundedYear: number | null;
+  homeVenue: string;
+  primaryColor: string;
   secondaryColor: string;
-  logoUrl:        string | null;
-  logoFile?:      File;
-  documentUrl:    string | null;
-  documentFile?:  File;
+  logoUrl: string | null;
+  logoFile?: File;
+  documentUrl: string | null;
+  documentFile?: File;
 }
 
 const DEFAULT_TEAM_FORM = (): TeamFormData => ({
@@ -115,14 +132,14 @@ const DEFAULT_TEAM_FORM = (): TeamFormData => ({
   logoUrl: null, documentUrl: null,
 });
 
-let _nextTeamId   = 100;
+let _nextTeamId = 100;
 let _nextPlayerId = 1000;
 
 const PLAYER_STATUS_META: Record<PlayerStatus, { label: string; classes: string }> = {
-  active:    { label: 'Activo',     classes: 'bg-green-50 text-green-700' },
+  active: { label: 'Activo', classes: 'bg-green-50 text-green-700' },
   suspended: { label: 'Suspendido', classes: 'bg-amber-50 text-amber-700' },
-  injured:   { label: 'Lesionado',  classes: 'bg-orange-50 text-orange-700' },
-  inactive:  { label: 'Inactivo',   classes: 'bg-gray-100 text-gray-500' },
+  injured: { label: 'Lesionado', classes: 'bg-orange-50 text-orange-700' },
+  inactive: { label: 'Inactivo', classes: 'bg-gray-100 text-gray-500' },
 };
 
 // CSV template headers (localized)
@@ -372,10 +389,20 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
                   </span>
                 }
               </div>
-              <mat-icon class="!size-5 !text-[20px] text-gray-600 transition-transform"
-                        [style.transform]="expandedTeams().has(idx) ? 'rotate(180deg)' : 'rotate(0)'">
-                expand_more
-              </mat-icon>
+              <div class="flex items-center gap-2">
+                <button
+                  class="inline-flex items-center gap-1 px-2 py-1 rounded border border-red-200 bg-red-50 text-red-700 text-[11px] font-medium hover:bg-red-100"
+                  type="button"
+                  (click)="$event.stopPropagation(); removeImportedTeam(idx)"
+                >
+                  <mat-icon class="!size-3 !text-[12px]">delete</mat-icon>
+                  Quitar
+                </button>
+                <mat-icon class="!size-5 !text-[20px] text-gray-600 transition-transform"
+                          [style.transform]="expandedTeams().has(idx) ? 'rotate(180deg)' : 'rotate(0)'">
+                  expand_more
+                </mat-icon>
+              </div>
             </div>
 
             <!-- Contenido del acordeón -->
@@ -393,21 +420,60 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
                     }
                   </div>
                   <div class="flex-1">
-                    <p class="text-[13px] font-semibold text-gray-900 m-0">{{ team.coachName }}</p>
-                    @if (team.coachPhone) {
-                      <p class="text-[12px] text-gray-500 m-0">{{ team.coachPhone }}</p>
-                    }
-                    @if (team.location) {
-                      <p class="text-[12px] text-gray-500 m-0">{{ team.location }}</p>
-                    }
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+                      <input
+                        class="px-2 py-1.5 text-[12px] border border-gray-300 rounded-md"
+                        [class.border-red-400]="hasImportedTeamFieldError(team, 'name')"
+                        [class.bg-red-50]="hasImportedTeamFieldError(team, 'name')"
+                        placeholder="Nombre equipo"
+                        [ngModel]="team.name"
+                        (ngModelChange)="onImportedTeamFieldChange(idx, 'name', $event)"
+                      />
+                      <input
+                        class="px-2 py-1.5 text-[12px] border border-gray-300 rounded-md"
+                        [class.border-red-400]="hasImportedTeamFieldError(team, 'shortname')"
+                        [class.bg-red-50]="hasImportedTeamFieldError(team, 'shortname')"
+                        placeholder="Nombre corto"
+                        [ngModel]="team.shortname"
+                        (ngModelChange)="onImportedTeamFieldChange(idx, 'shortname', $event)"
+                      />
+                      <input
+                        class="px-2 py-1.5 text-[12px] border border-gray-300 rounded-md"
+                        [class.border-red-400]="hasImportedTeamFieldError(team, 'coachName')"
+                        [class.bg-red-50]="hasImportedTeamFieldError(team, 'coachName')"
+                        placeholder="Entrenador"
+                        [ngModel]="team.coachName"
+                        (ngModelChange)="onImportedTeamFieldChange(idx, 'coachName', $event)"
+                      />
+                      <input
+                        class="px-2 py-1.5 text-[12px] border border-gray-300 rounded-md"
+                        placeholder="Teléfono"
+                        [ngModel]="team.coachPhone || ''"
+                        (ngModelChange)="onImportedTeamFieldChange(idx, 'coachPhone', $event)"
+                      />
+                    </div>
+                    <input
+                      class="mt-2 w-full px-2 py-1.5 text-[12px] border border-gray-300 rounded-md"
+                      placeholder="Ciudad / ubicación"
+                      [ngModel]="team.location || ''"
+                      (ngModelChange)="onImportedTeamFieldChange(idx, 'location', $event)"
+                    />
                     <div class="mt-2 flex gap-2">
                       <div class="flex items-center gap-1">
                         <div class="size-3 rounded" [style.background]="team.primaryColor"></div>
-                        <span class="text-[10px] text-gray-600">{{ team.primaryColor }}</span>
+                        <input
+                          class="w-24 px-1.5 py-1 text-[10px] border border-gray-300 rounded"
+                          [ngModel]="team.primaryColor"
+                          (ngModelChange)="onImportedTeamFieldChange(idx, 'primaryColor', $event)"
+                        />
                       </div>
                       <div class="flex items-center gap-1">
                         <div class="size-3 rounded" [style.background]="team.secondaryColor"></div>
-                        <span class="text-[10px] text-gray-600">{{ team.secondaryColor }}</span>
+                        <input
+                          class="w-24 px-1.5 py-1 text-[10px] border border-gray-300 rounded"
+                          [ngModel]="team.secondaryColor"
+                          (ngModelChange)="onImportedTeamFieldChange(idx, 'secondaryColor', $event)"
+                        />
                       </div>
                     </div>
                   </div>
@@ -416,26 +482,61 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
                 <!-- Tabla de jugadores + fotos -->
                 <div class="border-t border-gray-100 pt-3">
                   <p class="text-[12px] font-semibold text-gray-900 m-0 mb-2">Jugadores ({{ team.players.length }})</p>
-                  <table class="w-full text-[11px]">
-                    <tbody>
-                      @for (player of team.players; track player.number) {
-                        <tr class="border-b border-gray-100 last:border-b-0">
-                          <td class="px-2 py-1.5 font-medium">{{ player.number }}</td>
-                          <td class="px-2 py-1.5">{{ player.firstName }} {{ player.lastName }}</td>
-                          <td class="px-2 py-1.5">{{ player.position }}</td>
-                          <td class="px-2 py-1.5 text-right">
-                            @if (player.photoFile) {
-                              <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-green-50 text-green-700 text-[9px]">
-                                <mat-icon class="!size-3 !text-[12px]">check</mat-icon> Foto ✓
-                              </span>
-                            } @else {
-                              <span class="text-gray-400">—</span>
-                            }
-                          </td>
-                        </tr>
-                      }
-                    </tbody>
-                  </table>
+                  <div class="max-h-56 overflow-y-auto pr-1">
+                    <table class="w-full text-[11px]">
+                      <tbody>
+                        @for (player of team.players; track $index) {
+                          <tr class="border-b border-gray-100 last:border-b-0">
+                            <td class="px-2 py-1.5 font-medium w-16">
+                              <input
+                                class="w-full px-1 py-1 text-[11px] border border-gray-300 rounded"
+                                [class.border-red-400]="hasImportedPlayerFieldError(player, 'number')"
+                                [class.bg-red-50]="hasImportedPlayerFieldError(player, 'number')"
+                                [ngModel]="player.number"
+                                (ngModelChange)="onImportedPlayerFieldChange(idx, $index, 'number', $event)"
+                              />
+                            </td>
+                            <td class="px-2 py-1.5">
+                              <div class="grid grid-cols-2 gap-1">
+                                <input
+                                  class="w-full px-1 py-1 text-[11px] border border-gray-300 rounded"
+                                  [class.border-red-400]="hasImportedPlayerFieldError(player, 'firstName')"
+                                  [class.bg-red-50]="hasImportedPlayerFieldError(player, 'firstName')"
+                                  [ngModel]="player.firstName"
+                                  (ngModelChange)="onImportedPlayerFieldChange(idx, $index, 'firstName', $event)"
+                                />
+                                <input
+                                  class="w-full px-1 py-1 text-[11px] border border-gray-300 rounded"
+                                  [class.border-red-400]="hasImportedPlayerFieldError(player, 'lastName')"
+                                  [class.bg-red-50]="hasImportedPlayerFieldError(player, 'lastName')"
+                                  [ngModel]="player.lastName"
+                                  (ngModelChange)="onImportedPlayerFieldChange(idx, $index, 'lastName', $event)"
+                                />
+                              </div>
+                            </td>
+                            <td class="px-2 py-1.5 w-24">
+                              <input
+                                class="w-full px-1 py-1 text-[11px] border border-gray-300 rounded uppercase"
+                                [class.border-red-400]="hasImportedPlayerFieldError(player, 'position')"
+                                [class.bg-red-50]="hasImportedPlayerFieldError(player, 'position')"
+                                [ngModel]="player.position"
+                                (ngModelChange)="onImportedPlayerFieldChange(idx, $index, 'position', $event)"
+                              />
+                            </td>
+                            <td class="px-2 py-1.5 text-right">
+                              @if (player.photoFile) {
+                                <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-green-50 text-green-700 text-[9px]">
+                                  <mat-icon class="!size-3 !text-[12px]">check</mat-icon> Foto ✓
+                                </span>
+                              } @else {
+                                <span class="text-gray-400">—</span>
+                              }
+                            </td>
+                          </tr>
+                        }
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
 
                 <!-- Errores del equipo -->
@@ -478,6 +579,23 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
         </div>
       }
 
+      @if (importValidationErrors().length > 0) {
+        <div class="rounded-lg bg-red-50 border border-red-200 p-3">
+          <p class="text-[12px] font-semibold text-red-700 m-0 mb-2">
+            <mat-icon class="!size-4 !text-[16px] inline mr-1">error</mat-icon>
+            {{ importValidationErrors().length }} error(es) bloquean la importación
+          </p>
+          <ul class="list-none m-0 p-0 max-h-28 overflow-y-auto">
+            @for (error of importValidationErrors().slice(0, 8); track $index) {
+              <li class="text-[11px] text-red-700 m-0 mb-1 last:mb-0">• {{ error }}</li>
+            }
+            @if (importValidationErrors().length > 8) {
+              <li class="text-[11px] text-red-600 font-medium">+{{ importValidationErrors().length - 8 }} más...</li>
+            }
+          </ul>
+        </div>
+      }
+
       <!-- Botones de acción -->
       <div class="flex justify-end gap-3 pt-2 border-t border-gray-100">
         <button
@@ -495,7 +613,7 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
           [disabled]="!canConfirmImport()"
           (click)="confirmImportedTeam()"
           type="button"
-          [title]="!canConfirmImport() ? 'Hay equipos con errores' : 'Importar todos los equipos'"
+          [title]="canConfirmImport() ? 'Importar todos los equipos' : importBlockReason()"
         >
           <mat-icon class="!size-4 !text-[16px] inline mr-1.5">check_circle</mat-icon>
           Importar {{ importedTeams().length }} Equipo(s)
@@ -544,7 +662,11 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
                    text-white text-[13px] font-bold shadow-sm"
             [style.background]="team.primaryColor"
           >
-            {{ team.shortname.slice(0,2) }}
+            @if (team.logoUrl) {
+              <img [src]="team.logoUrl" class="w-full h-full object-cover rounded-lg" alt="Logo equipo" />
+            } @else {
+              {{ team.shortname.slice(0,2) }}
+            }
           </div>
 
           <!-- Info -->
@@ -990,22 +1112,22 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
 export class ChampionshipTeamsComponent {
 
   // ── Inputs / Outputs ──────────────────────────────────────────
-  readonly maxTeams          = input(16);
+  readonly maxTeams = input(16);
   readonly maxPlayersPerTeam = input(20);
-  readonly initialTeams      = input<TeamItem[]>([]);
-  readonly positions    = MOCK_POSITIONS;
+  readonly initialTeams = input<TeamItem[]>([]);
+  readonly positions = MOCK_POSITIONS;
 
-  readonly save   = output<TeamItem[]>();
+  readonly save = output<TeamItem[]>();
   /** Emite cuando hay cambios locales sin guardar (jugador/equipo añadido, editado o eliminado). */
-  readonly dirty  = output<void>();
+  readonly dirty = output<void>();
 
   // ── Services ──────────────────────────────────────────────────
   private snackBar = inject(MatSnackBar);
-  private cdr      = inject(ChangeDetectorRef);
+  private cdr = inject(ChangeDetectorRef);
   private teamImportService = inject(TeamImportService);
 
   // ── State ─────────────────────────────────────────────────────
-  teams        = signal<TeamItem[]>([]);
+  teams = signal<TeamItem[]>([]);
 
   constructor() {
     effect(() => {
@@ -1016,26 +1138,26 @@ export class ChampionshipTeamsComponent {
     });
   }
   expandedTeams = signal<Set<number>>(new Set());
-  showImport   = signal(true);   // visible por defecto — colapsable con el botón Importar
-  isDragOver   = signal(false);
-  importQueue  = signal<Array<{
+  showImport = signal(true);   // visible por defecto — colapsable con el botón Importar
+  isDragOver = signal(false);
+  importQueue = signal<Array<{
     fileName: string; status: 'uploading' | 'done' | 'error' | 'conflict';
     teamName?: string; error?: string;
   }>>([]);
   conflictDialog = signal<ImportConflict | null>(null);
   // ── Import masivo ──────────────────────────────────────────
-  importedTeams      = signal<ImportedTeamPayload[]>([]);  // Array de equipos parseados
-  importState        = signal<'uploading' | 'preview' | null>(null);
-  maxFileSize        = signal(5);  // MB — editable
-  importProgress     = signal<{excels: number; imagesProcessed: number; totalImages: number}>({excels: 0, imagesProcessed: 0, totalImages: 0});
-  importErrors       = signal<Array<{type: string; file: string; message: string}>>([]);
-  expectedImageFiles = signal<Map<string, {teamIdx: number; playerId?: number; isLogo: boolean}>>(new Map());  // Mapping: filename → {team, player}
-  matchedImages      = signal<Map<string, File>>(new Map());  // Tracking: matched images
+  importedTeams = signal<ImportedTeamPayload[]>([]);  // Array de equipos parseados
+  importState = signal<'uploading' | 'preview' | null>(null);
+  maxFileSize = signal(5);  // MB — editable
+  importProgress = signal<{ excels: number; imagesProcessed: number; totalImages: number }>({ excels: 0, imagesProcessed: 0, totalImages: 0 });
+  importErrors = signal<Array<{ type: string; file: string; message: string }>>([]);
+  expectedImageFiles = signal<Map<string, ExpectedImageTarget[]>>(new Map());  // Mapping: filename normalizado → posibles matches
+  matchedImages = signal<Map<string, File>>(new Map());  // Tracking: matched images
   // ─────────────────────────────────────────────────────────────
-  teamModal      = signal<TeamFormData | null>(null);
+  teamModal = signal<TeamFormData | null>(null);
   teamModalError = signal('');
-  playerModal    = signal<{ player: PlayerFormData | null; teamId: number } | null>(null);
-  pdfViewerData  = signal<{ url: string; title: string } | null>(null);
+  playerModal = signal<{ player: PlayerFormData | null; teamId: number } | null>(null);
+  pdfViewerData = signal<{ url: string; title: string } | null>(null);
 
   private destroyRef = inject(DestroyRef);
   private blobUrls: string[] = [];
@@ -1044,6 +1166,20 @@ export class ChampionshipTeamsComponent {
 
   private normalize(s: string): string {
     return s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  }
+
+  private normalizeImportFileKey(raw: string): string {
+    return this.normalize(raw)
+      .trim()
+      .replace(/\.[^.]+$/, '')
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '');
+  }
+
+  private normalizeTeamNameKey(name: string): string {
+    return this.normalize(name)
+      .trim()
+      .replace(/\s+/g, ' ');
   }
 
   // ── Computed ──────────────────────────────────────────────────
@@ -1088,12 +1224,12 @@ export class ChampionshipTeamsComponent {
     return ids;
   });
 
-  isFull       = computed(() => this.teams().length >= this.maxTeams());
-  progressPct  = computed(() => Math.min(100, (this.teams().length / this.maxTeams()) * 100));
+  isFull = computed(() => this.teams().length >= this.maxTeams());
+  progressPct = computed(() => Math.min(100, (this.teams().length / this.maxTeams()) * 100));
   progressColor = computed(() => {
     const p = this.progressPct();
     if (p >= 100) return '#ef4444';
-    if (p >= 75)  return '#f59e0b';
+    if (p >= 75) return '#f59e0b';
     return '#3b82f6';
   });
 
@@ -1104,9 +1240,26 @@ export class ChampionshipTeamsComponent {
     return `Procesando ${p.excels} excels + ${p.totalImages} imágenes... (${p.imagesProcessed}/${p.totalImages} completadas)`;
   });
   importHasErrors = computed(() => this.importErrors().length > 0);
-  canConfirmImport = computed(() => 
-    this.importedTeams().length > 0 && 
-    !this.importIsProcessing() && 
+  importValidationErrors = computed(() => {
+    const messages: string[] = [];
+    for (const team of this.importedTeams()) {
+      const teamLabel = team.name || team.shortname || 'Equipo sin nombre';
+      for (const err of team.errors) {
+        messages.push(`${teamLabel}: ${err.message}`);
+      }
+    }
+    return messages;
+  });
+  importBlockReason = computed(() => {
+    if (this.importedTeams().length === 0) return 'No hay equipos cargados';
+    if (this.importIsProcessing()) return 'El procesamiento aún no termina';
+    const validationCount = this.importValidationErrors().length;
+    if (validationCount > 0) return `Hay ${validationCount} error(es) de validación`;
+    return 'Hay equipos con errores';
+  });
+  canConfirmImport = computed(() =>
+    this.importedTeams().length > 0 &&
+    !this.importIsProcessing() &&
     this.importedTeams().every(team => team.isValid)
   );
 
@@ -1131,17 +1284,189 @@ export class ChampionshipTeamsComponent {
     return players.some(p => p.photoFile !== undefined);
   }
 
-  cancelImport(): void {
-    // Limpiar blob URLs
-    for (const url of this.blobUrls) {
-      URL.revokeObjectURL(url);
+  private buildImportedAssetUrl(file: File | null | undefined, fileName: string | null | undefined): string | null {
+    if (file) return URL.createObjectURL(file);
+    const trimmedName = String(fileName ?? '').trim();
+    if (!trimmedName) return null;
+    return `/uploads/${encodeURIComponent(trimmedName)}`;
+  }
+
+  private buildExpectedImageMap(payloads: ImportedTeamPayload[]): Map<string, ExpectedImageTarget[]> {
+    const expectedMap = new Map<string, ExpectedImageTarget[]>();
+
+    payloads.forEach((payload, teamIdx) => {
+      if (payload.logoFileName) {
+        const logoFileKey = this.normalizeImportFileKey(payload.logoFileName);
+        const logoFileTargets = expectedMap.get(logoFileKey) ?? [];
+        logoFileTargets.push({ teamIdx, isLogo: true });
+        expectedMap.set(logoFileKey, logoFileTargets);
+      }
+
+      const logoFallbackKey = this.normalizeImportFileKey(`${payload.name}_logo`);
+      const logoFallbackTargets = expectedMap.get(logoFallbackKey) ?? [];
+      logoFallbackTargets.push({ teamIdx, isLogo: true });
+      expectedMap.set(logoFallbackKey, logoFallbackTargets);
+
+      payload.players.forEach((player, playerId) => {
+        if (player.photoFileName) {
+          const photoFileKey = this.normalizeImportFileKey(player.photoFileName);
+          const photoFileTargets = expectedMap.get(photoFileKey) ?? [];
+          photoFileTargets.push({ teamIdx, playerId, isLogo: false });
+          expectedMap.set(photoFileKey, photoFileTargets);
+        }
+
+        const photoFallbackKey = this.normalizeImportFileKey(`${payload.name}_${player.number}_${player.lastName}`);
+        const playerFallbackTargets = expectedMap.get(photoFallbackKey) ?? [];
+        playerFallbackTargets.push({ teamIdx, playerId, isLogo: false });
+        expectedMap.set(photoFallbackKey, playerFallbackTargets);
+      });
+    });
+
+    return expectedMap;
+  }
+
+  private syncExpectedImageFiles(): void {
+    this.expectedImageFiles.set(this.buildExpectedImageMap(this.importedTeams()));
+  }
+
+  removeImportedTeam(teamIdx: number): void {
+    this.importedTeams.update(teams => teams.filter((_, idx) => idx !== teamIdx));
+    this.expandedTeams.set(new Set());
+    this.syncExpectedImageFiles();
+    this.importProgress.update(p => ({ ...p, excels: this.importedTeams().length }));
+
+    if (this.importedTeams().length === 0) {
+      this.importState.set(null);
     }
-    this.blobUrls = [];
-    
+  }
+
+  hasImportedTeamFieldError(team: ImportedTeamPayload, field: ImportedTeamEditableField): boolean {
+    const fieldsByInput: Record<ImportedTeamEditableField, string[]> = {
+      name: ['nombre'],
+      shortname: ['nombre_corto'],
+      coachName: ['entrenador'],
+      coachPhone: [],
+      location: [],
+      primaryColor: [],
+      secondaryColor: [],
+    };
+    const fields = fieldsByInput[field];
+    return fields.length > 0 && team.errors.some(err => err.row === 0 && fields.includes(err.field));
+  }
+
+  hasImportedPlayerFieldError(player: ImportedPlayer, field: ImportedPlayerEditableField): boolean {
+    const fieldsByInput: Record<ImportedPlayerEditableField, string[]> = {
+      number: ['numero'],
+      firstName: ['nombre'],
+      lastName: ['apellido'],
+      position: ['posicion'],
+      nickName: [],
+    };
+    const fields = fieldsByInput[field];
+    return fields.length > 0 && player.errors.some(err => fields.includes(err.field));
+  }
+
+  onImportedTeamFieldChange(teamIdx: number, field: ImportedTeamEditableField, value: string): void {
+    this.importedTeams.update(teams => teams.map((team, idx) => {
+      if (idx !== teamIdx) return team;
+      const nextTeam: ImportedTeamPayload = {
+        ...team,
+        [field]: ['coachPhone', 'location'].includes(field) && !String(value ?? '').trim() ? null : String(value ?? '').trim(),
+      };
+      return this.revalidateImportedTeam(nextTeam);
+    }));
+    this.syncExpectedImageFiles();
+  }
+
+  onImportedPlayerFieldChange(
+    teamIdx: number,
+    playerIdx: number,
+    field: ImportedPlayerEditableField,
+    value: string
+  ): void {
+    this.importedTeams.update(teams => teams.map((team, idx) => {
+      if (idx !== teamIdx) return team;
+
+      const nextPlayers = team.players.map((player, pIdx) => {
+        if (pIdx !== playerIdx) return player;
+
+        if (field === 'number') {
+          const raw = String(value ?? '').trim();
+          const parsed = raw === '' ? 0 : Number(raw);
+          return { ...player, number: Number.isNaN(parsed) ? 0 : parsed };
+        }
+
+        if (field === 'position') {
+          return { ...player, position: String(value ?? '').trim().toUpperCase() };
+        }
+
+        if (field === 'nickName') {
+          const nick = String(value ?? '').trim();
+          return { ...player, nickName: nick || null };
+        }
+
+        return { ...player, [field]: String(value ?? '').trim() };
+      });
+
+      return this.revalidateImportedTeam({ ...team, players: nextPlayers });
+    }));
+    this.syncExpectedImageFiles();
+  }
+
+  private revalidateImportedTeam(team: ImportedTeamPayload): ImportedTeamPayload {
+    const teamErrors: FieldError[] = [];
+    if (!team.name.trim()) {
+      teamErrors.push({ row: 0, field: 'nombre', message: 'El nombre del equipo es obligatorio' });
+    }
+    if (!team.shortname.trim()) {
+      teamErrors.push({ row: 0, field: 'nombre_corto', message: 'El nombre corto es obligatorio' });
+    }
+    if (!team.coachName.trim()) {
+      teamErrors.push({ row: 0, field: 'entrenador', message: 'El nombre del entrenador es obligatorio' });
+    }
+
+    const players = team.players.map((player, i) => {
+      const rowNum = i + 2;
+      const pErrors: FieldError[] = [];
+      if (!Number.isFinite(player.number) || player.number < 1 || player.number > 99) {
+        pErrors.push({ row: rowNum, field: 'numero', message: `Número de camiseta inválido: "${player.number}"` });
+      }
+      if (!player.firstName.trim()) {
+        pErrors.push({ row: rowNum, field: 'nombre', message: 'El nombre es obligatorio' });
+      }
+      if (!player.lastName.trim()) {
+        pErrors.push({ row: rowNum, field: 'apellido', message: 'El apellido es obligatorio' });
+      }
+      if (!player.position.trim()) {
+        pErrors.push({ row: rowNum, field: 'posicion', message: 'La posición es obligatoria' });
+      }
+      return { ...player, errors: pErrors };
+    });
+
+    const allErrors = [...teamErrors, ...players.flatMap(p => p.errors)];
+    return {
+      ...team,
+      players,
+      errors: allErrors,
+      isValid: allErrors.length === 0,
+    };
+  }
+
+  cancelImport(options?: { revokeObjectUrls?: boolean }): void {
+    const shouldRevokeObjectUrls = options?.revokeObjectUrls ?? true;
+
+    // Limpiar blob URLs solo cuando se cancela/reinicia explícitamente.
+    if (shouldRevokeObjectUrls) {
+      for (const url of this.blobUrls) {
+        URL.revokeObjectURL(url);
+      }
+      this.blobUrls = [];
+    }
+
     // Reset state
     this.importedTeams.set([]);
     this.importState.set(null);
-    this.importProgress.set({excels: 0, imagesProcessed: 0, totalImages: 0});
+    this.importProgress.set({ excels: 0, imagesProcessed: 0, totalImages: 0 });
     this.importErrors.set([]);
     this.expectedImageFiles.set(new Map());
     this.matchedImages.set(new Map());
@@ -1169,18 +1494,18 @@ export class ChampionshipTeamsComponent {
   openEditTeam(team: TeamItem, event: Event): void {
     event.stopPropagation();
     this.teamModal.set({
-      id:             team.id,
-      name:           team.name,
-      shortname:      team.shortname,
-      coachName:      team.coachName,
-      coachPhone:     team.coachPhone,
-      location:       team.location,
-      foundedYear:    team.foundedYear,
-      homeVenue:      team.homeVenue,
-      primaryColor:   team.primaryColor,
+      id: team.id,
+      name: team.name,
+      shortname: team.shortname,
+      coachName: team.coachName,
+      coachPhone: team.coachPhone,
+      location: team.location,
+      foundedYear: team.foundedYear,
+      homeVenue: team.homeVenue,
+      primaryColor: team.primaryColor,
       secondaryColor: team.secondaryColor,
-      logoUrl:        team.logoUrl,
-      documentUrl:    team.documentUrl,
+      logoUrl: team.logoUrl,
+      documentUrl: team.documentUrl,
     });
     this.teamModalError.set('');
   }
@@ -1325,7 +1650,7 @@ export class ChampionshipTeamsComponent {
         firstName: data.firstName, lastName: data.lastName, nickName: data.nickName || null,
         number: data.number!, birthDate: data.birthDate || null,
         height: data.height, weight: data.weight, status: data.status,
-        photoUrl:  data.photoUrl  ?? null,
+        photoUrl: data.photoUrl ?? null,
         photoFile: data.photoFile,
       };
       return {
@@ -1387,6 +1712,30 @@ export class ChampionshipTeamsComponent {
     const excelFiles = files.filter(f => /\.(xlsx|xls|csv)$/i.test(f.name));
     const imageFiles = files.filter(f => /\.(png|jpg|jpeg|gif|webp)$/i.test(f.name));
 
+    if (excelFiles.length === 0 && imageFiles.length === 0) {
+      this.snackBar.open('No se detectaron archivos compatibles', 'Cerrar', { duration: 3000 });
+      return;
+    }
+
+    // Permitir flujo incremental: imágenes después del Excel
+    if (excelFiles.length === 0 && imageFiles.length > 0) {
+      const expectedMap = this.expectedImageFiles();
+      if (this.importedTeams().length === 0 || expectedMap.size === 0) {
+        this.snackBar.open('Primero sube un Excel válido y luego las imágenes', 'Cerrar', { duration: 3500 });
+        return;
+      }
+
+      this.importState.set('uploading');
+      this.importProgress.set({
+        excels: this.importedTeams().length,
+        imagesProcessed: 0,
+        totalImages: imageFiles.length,
+      });
+
+      this._matchAndProcessImages(imageFiles, expectedMap);
+      return;
+    }
+
     // Validar que haya al menos 1 Excel
     if (excelFiles.length === 0) {
       this.snackBar.open('Debe incluir al menos 1 archivo Excel', 'Cerrar', { duration: 3000 });
@@ -1427,19 +1776,7 @@ export class ChampionshipTeamsComponent {
       this.importedTeams.set(payloads);
 
       // Extraer todos los expected filenames para matching
-      const expectedMap = new Map<string, {teamIdx: number; playerId?: number; isLogo: boolean}>();
-      
-      payloads.forEach((payload, teamIdx) => {
-        // Logo esperado: "{nombreEquipo}_logo.*"
-        const logoKey = `${payload.name}_logo`;
-        expectedMap.set(logoKey, {teamIdx, isLogo: true});
-
-        // Fotos de jugadores: "{nombreEquipo}_{numero}_{apellido}.*"
-        payload.players.forEach((player, playerId) => {
-          const photoKey = `${payload.name}_${player.number}_${player.lastName}`;
-          expectedMap.set(photoKey, {teamIdx, playerId, isLogo: false});
-        });
-      });
+      const expectedMap = this.buildExpectedImageMap(payloads);
 
       this.expectedImageFiles.set(expectedMap);
 
@@ -1463,18 +1800,19 @@ export class ChampionshipTeamsComponent {
   }
 
   private _matchAndProcessImages(
-    imageFiles: File[], 
-    expectedMap: Map<string, {teamIdx: number; playerId?: number; isLogo: boolean}>
+    imageFiles: File[],
+    expectedMap: Map<string, ExpectedImageTarget[]>
   ): void {
     let processedCount = 0;
-    const matchedImgs = new Map<string, File>();
+    const matchedImgs = new Map(this.matchedImages());
     const unmatchedErrors: Array<string> = [];
 
     // Procesar cada imagen
     imageFiles.forEach(file => {
       // Extraer nombre sin extensión
-      const nameWithoutExt = file.name.split('.').slice(0, -1).join('.');
-      const matched = expectedMap.get(nameWithoutExt);
+      const nameWithoutExt = this.normalizeImportFileKey(file.name);
+      const matchedCandidates = expectedMap.get(nameWithoutExt);
+      const matched = matchedCandidates?.[0];
 
       if (matched) {
         // Validar tamaño (5 MB)
@@ -1492,17 +1830,17 @@ export class ChampionshipTeamsComponent {
 
           // Asignar a payload según tipo
           if (matched.isLogo) {
-            this.importedTeams.update(teams => 
-              teams.map((t, idx) => idx === matched.teamIdx ? {...t, logoFile: file} : t)
+            this.importedTeams.update(teams =>
+              teams.map((t, idx) => idx === matched.teamIdx ? { ...t, logoFile: file, logoFileName: file.name } : t)
             );
           } else if (matched.playerId !== undefined) {
-            this.importedTeams.update(teams => 
+            this.importedTeams.update(teams =>
               teams.map((t, idx) => {
                 if (idx !== matched.teamIdx) return t;
                 return {
                   ...t,
-                  players: t.players.map((p, pIdx) => 
-                    pIdx === matched.playerId ? {...p, photoFile: file} : p
+                  players: t.players.map((p, pIdx) =>
+                    pIdx === matched.playerId ? { ...p, photoFile: file, photoFileName: file.name } : p
                   )
                 };
               })
@@ -1515,7 +1853,7 @@ export class ChampionshipTeamsComponent {
       }
 
       processedCount++;
-      this.importProgress.update(p => ({...p, imagesProcessed: processedCount}));
+      this.importProgress.update(p => ({ ...p, imagesProcessed: processedCount }));
     });
 
     // Registrar errores de imágenes sin match
@@ -1527,7 +1865,7 @@ export class ChampionshipTeamsComponent {
       }]);
     });
 
-    // Drop zone deshabilitado: no se acepta más
+    // Mantener preview para permitir cargas incrementales
     this.matchedImages.set(matchedImgs);
     this.importState.set('preview');
 
@@ -1552,6 +1890,41 @@ export class ChampionshipTeamsComponent {
       return;
     }
 
+    const existingNameKeys = new Set(this.teams().map(team => this.normalizeTeamNameKey(team.name)));
+    const seenImportedKeys = new Set<string>();
+    const duplicatedNames: string[] = [];
+
+    for (const payload of payloads) {
+      const key = this.normalizeTeamNameKey(payload.name);
+      if (existingNameKeys.has(key) || seenImportedKeys.has(key)) {
+        duplicatedNames.push(payload.name);
+        continue;
+      }
+      seenImportedKeys.add(key);
+    }
+
+    if (duplicatedNames.length > 0) {
+      const dedupedNames = Array.from(new Set(duplicatedNames));
+      this.importErrors.update(errors => {
+        const cleaned = errors.filter(err => err.type !== 'duplicate-team-name');
+        return [
+          ...cleaned,
+          ...dedupedNames.map((name) => ({
+            type: 'duplicate-team-name',
+            file: name,
+            message: 'Ya existe un equipo con ese nombre. No se puede actualizar por este medio.',
+          })),
+        ];
+      });
+
+      this.snackBar.open(
+        'Hay equipos duplicados por nombre. No se puede actualizar por este medio.',
+        'Cerrar',
+        { duration: 5000 }
+      );
+      return;
+    }
+
     // Procesar cada equipo
     const newTeams: TeamItem[] = [];
 
@@ -1573,12 +1946,12 @@ export class ChampionshipTeamsComponent {
         height: p.height,
         weight: p.weight,
         status: 'active' as PlayerStatus,
-        photoUrl: p.photoFile ? URL.createObjectURL(p.photoFile) : null,
+        photoUrl: this.buildImportedAssetUrl(p.photoFile, p.photoFileName),
         photoFile: p.photoFile || undefined,
       }));
 
-      const logoUrl = payload.logoFile ? URL.createObjectURL(payload.logoFile) : null;
-      const documentUrl = payload.documentFile ? URL.createObjectURL(payload.documentFile) : null;
+      const logoUrl = this.buildImportedAssetUrl(payload.logoFile, payload.logoFileName);
+      const documentUrl = this.buildImportedAssetUrl(payload.documentFile, payload.documentFileName);
 
       // Crear TeamItem
       const newTeam: TeamItem = {
@@ -1606,10 +1979,10 @@ export class ChampionshipTeamsComponent {
       }
 
       // Registrar blob URLs para limpieza posterior
-      if (logoUrl) this.blobUrls.push(logoUrl);
-      if (documentUrl) this.blobUrls.push(documentUrl);
+      if (logoUrl?.startsWith('blob:')) this.blobUrls.push(logoUrl);
+      if (documentUrl?.startsWith('blob:')) this.blobUrls.push(documentUrl);
       for (const player of newTeam.players) {
-        if (player.photoUrl) this.blobUrls.push(player.photoUrl);
+        if (player.photoUrl?.startsWith('blob:')) this.blobUrls.push(player.photoUrl);
       }
 
       newTeams.push(newTeam);
@@ -1619,7 +1992,7 @@ export class ChampionshipTeamsComponent {
     this.teams.update(t => [...t, ...newTeams]);
 
     // Limpiar estado
-    this.cancelImport();
+    this.cancelImport({ revokeObjectUrls: false });
     this.snackBar.open(`${newTeams.length} equipo(s) importado(s) exitosamente`, 'Cerrar', { duration: 3000 });
   }
 
@@ -1648,8 +2021,8 @@ export class ChampionshipTeamsComponent {
   downloadTemplate(): void {
     const rows = [CSV_HEADERS, 'Osos Polares,OSP,Carlos Mendez,+573001234567,Bogotá,#1a56db,#e74694'];
     const blob = new Blob([rows.join('\n')], { type: 'text/csv;charset=utf-8;' });
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
     a.href = url; a.download = 'plantilla_equipos.csv'; a.click();
     URL.revokeObjectURL(url);
   }
