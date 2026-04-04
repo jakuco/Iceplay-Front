@@ -4,6 +4,7 @@ import { Observable, throwError, from, of } from 'rxjs';
 import { map, catchError, mergeMap, toArray, tap, switchMap } from 'rxjs/operators';
 import {
   PlayerApiResponse,
+  PlayerApiPaginatedResponse,
   CreatePlayerApiDto,
   UpdatePlayerApiDto,
   // Legacy type kept only to avoid breaking old CSV-related frontend flows
@@ -11,15 +12,18 @@ import {
 } from '../models/player.model';
 
 // ─────────────────────────────────────────────────────────────
-// Backend confirmado (routes.ts):
-//   GET    /player            → getPlayers (page, limit)
-//   GET    /player/:id        → getPlayerById
-//   POST   /player            → createPlayer  (auth)
-//   PUT    /player/:id        → updatePlayer  (auth)
-//   DELETE /player/:id        → deletePlayer  (auth)
+// Backend confirmado (Iceplay-Fropen/src/presentation/routes.ts):
+//   router.use('/api/players', PlayerRoutes.routes)
 //
-// NO confirmados como query params en GET /player:
+//   GET    /players            → getPlayers (page, limit)
+//   GET    /players/:id        → getPlayerById
+//   POST   /players            → createPlayer  (auth)
+//   PUT    /players/:id        → updatePlayer  (auth)
+//   DELETE /players/:id        → deletePlayer  (auth)
+//
+// NO confirmados como query params en GET /players:
 //   teamId, championshipId, organizationId, document, name
+//   (el controller solo lee page y limit de req.query)
 // ─────────────────────────────────────────────────────────────
 
 export interface CsvImportResult {
@@ -35,113 +39,84 @@ export interface CsvImportResult {
 export class PlayerService {
   private api = inject(ApiService);
 
-  // ─── Métodos confirmados ──────────────────────────────────
-
   /**
-   * Get players (paginated). Uses GET /player?page=&limit=
-   *
-   * TODO:
-   * confirmar si el backend devuelve array plano o wrapper paginado.
-   * Se tipa como array porque así lo estás consumiendo en el front actual.
+   * GET /players?page=&limit=
+   * Confirmado: backend devuelve wrapper paginado { page, limit, total, next, prev, players[] }.
+   * NO devuelve array plano.
+   * Filtros soportados por HTTP: SÓLO page y limit.
+   * teamId, organizationId, championshipId → el controller los ignora (no los lee de req.query).
    */
-  getPlayers(page = 1, limit = 10): Observable<PlayerApiResponse[]> {
-    return this.api.get<PlayerApiResponse[]>('player', { page, limit }).pipe(
+  getPlayers(page = 1, limit = 10): Observable<PlayerApiPaginatedResponse> {
+    return this.api.get<PlayerApiPaginatedResponse>('players', { page, limit }).pipe(
       catchError((err) => this.handleError('Error fetching players', err)),
     );
   }
 
   /**
-   * Get a single player by ID (UUIDv7). Uses GET /player/:id
+   * Get a single player by ID (UUIDv7). Uses GET /players/:id
    */
   getPlayerById(id: string): Observable<PlayerApiResponse> {
-    return this.api.get<PlayerApiResponse>(`player/${id}`).pipe(
+    return this.api.get<PlayerApiResponse>(`players/${id}`).pipe(
       catchError((err) => this.handleError('Error fetching player', err)),
     );
   }
 
   /**
-   * Create a new player. Uses POST /player (requires auth).
-   *
-   * IMPORTANTE:
-   * usar CreatePlayerApiDto para respetar el contrato real del backend.
+   * Create a new player. Uses POST /players (requires auth).
    */
   createPlayer(player: CreatePlayerApiDto): Observable<PlayerApiResponse> {
-    return this.api.post<PlayerApiResponse>('player', player).pipe(
+    return this.api.post<PlayerApiResponse>('players', player).pipe(
       catchError((err) => this.handleError('Error creating player', err)),
     );
   }
 
   /**
-   * Update a player. Uses PUT /player/:id (requires auth).
+   * Update a player. Uses PUT /players/:id (requires auth).
    */
   updatePlayer(id: string, player: UpdatePlayerApiDto): Observable<PlayerApiResponse> {
-    return this.api.put<PlayerApiResponse>(`player/${id}`, player).pipe(
+    return this.api.put<PlayerApiResponse>(`players/${id}`, player).pipe(
       catchError((err) => this.handleError('Error updating player', err)),
     );
   }
 
   /**
-   * Delete a player. Uses DELETE /player/:id (requires auth).
+   * Delete a player. Uses DELETE /players/:id (requires auth).
    */
   deletePlayer(id: string): Observable<void> {
     return this.api
-      .delete<void>(`player/${id}`)
+      .delete<void>(`players/${id}`)
       .pipe(catchError((err) => this.handleError('Error deleting player', err)));
   }
 
-  // ─── Métodos no confirmados — wrappers de compatibilidad ──────────────────
-  //
-  // El controlador de GET /player solo acepta `page` y `limit`.
-  // Los filtros teamId, championshipId y organizationId NO están publicados
-  // como query params en el backend actual.
-  //
-  // Se mantienen como wrappers provisionales porque varias vistas del front
-  // todavía dependen de ellos. Si el backend ignora el filtro, puede devolver
-  // todos los jugadores.
-  // ───────────────────────────────────────────────────────────────────────────
-
   /**
-   * Get players by team.
-   * TODO: sin endpoint confirmado — GET /player no acepta teamId como query param documentado.
+   * @deprecated-behavior FILTRO NO FUNCIONAL.
+   * GET /players ignora ?teamId=
    */
-  getPlayersByTeam(teamId: string): Observable<PlayerApiResponse[]> {
-    return this.api.get<PlayerApiResponse[]>('player', { teamId }).pipe(
+  getPlayersByTeam(teamId: string): Observable<PlayerApiPaginatedResponse> {
+    return this.api.get<PlayerApiPaginatedResponse>('players', { teamId }).pipe(
       catchError((err) => this.handleError('Error fetching players by team', err)),
     );
   }
 
   /**
-   * Get players by championship.
-   * TODO: sin endpoint confirmado — championshipId no está documentado.
+   * @deprecated-behavior FILTRO NO FUNCIONAL.
+   * GET /players ignora ?championshipId=
    */
-  getPlayersByChampionship(championshipId: string): Observable<PlayerApiResponse[]> {
-    return this.api.get<PlayerApiResponse[]>('player', { championshipId }).pipe(
+  getPlayersByChampionship(championshipId: string): Observable<PlayerApiPaginatedResponse> {
+    return this.api.get<PlayerApiPaginatedResponse>('players', { championshipId }).pipe(
       catchError((err) => this.handleError('Error fetching championship players', err)),
     );
   }
 
   /**
-   * Get players by organization.
-   * TODO: sin endpoint confirmado — organizationId no está documentado.
+   * @deprecated-behavior FILTRO NO FUNCIONAL.
+   * GET /players ignora ?organizationId=
    */
-  getPlayersByOrganization(organizationId: string): Observable<PlayerApiResponse[]> {
-    return this.api.get<PlayerApiResponse[]>('player', { organizationId }).pipe(
+  getPlayersByOrganization(organizationId: string): Observable<PlayerApiPaginatedResponse> {
+    return this.api.get<PlayerApiPaginatedResponse>('players', { organizationId }).pipe(
       catchError((err) => this.handleError('Error fetching organization players', err)),
     );
   }
-
-  // ─── CSV Import ────────────────────────────────────────────
-  //
-  // Clasificación:
-  //   · createPlayer() → CONFIRMADA la ruta, pero el DTO real del backend
-  //     usa snake_case y campos distintos.
-  //   · búsqueda por `document` → NO confirmada
-  //   · teamId/championshipId/organizationId actuales del CSV NO coinciden con
-  //     el contrato real del backend
-  //
-  // Se mantiene provisional para no romper flujos existentes, pero está
-  // documentado como pendiente de reescritura.
-  // ───────────────────────────────────────────────────────────
 
   /**
    * Import players from CSV.
@@ -158,6 +133,7 @@ export class PlayerService {
     csvContent: string,
   ): Observable<CsvImportResult> {
     const lines = csvContent.split('\n').filter((line) => line.trim() !== '');
+
     if (lines.length < 2) {
       return throwError(
         () =>
@@ -204,9 +180,6 @@ export class PlayerService {
 
         return of(null).pipe(
           switchMap(() => {
-            // TODO Fase 3:
-            // Reemplazar por CreatePlayerApiDto real.
-            // El backend espera campos snake_case distintos.
             const legacyPayload = {
               teamId,
               championshipId,
@@ -220,7 +193,7 @@ export class PlayerService {
               weight,
             } as unknown as CreatePlayerDto;
 
-            return this.api.post<PlayerApiResponse>('player', legacyPayload).pipe(
+            return this.api.post<PlayerApiResponse>('players', legacyPayload).pipe(
               tap(() => result.playersImported++),
               catchError((error) => {
                 result.errors.push(
@@ -241,12 +214,6 @@ export class PlayerService {
     );
   }
 
-  // ─── Helpers ──────────────────────────────────────────────
-
-  /**
-   * Convierte fechas string a Date cuando un componente legacy lo necesita.
-   * Se mantiene por compatibilidad.
-   */
   parsePlayerDates<T extends {
     birthDate?: unknown;
     suspensionEndDate?: unknown;
@@ -268,10 +235,6 @@ export class PlayerService {
     return player;
   }
 
-  /**
-   * Parse date string to Date object.
-   * Supports: YYYY-MM-DD, DD/MM/YYYY, DD-MM-YYYY
-   */
   private parseDate(dateStr: string): Date | undefined {
     if (!dateStr) return undefined;
     if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) return new Date(dateStr);

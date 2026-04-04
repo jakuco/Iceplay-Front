@@ -1,3 +1,23 @@
+// ─────────────────────────────────────────────────────────────
+// user/page/team-detail.page.ts
+//
+// ESTADO: MOCK-ONLY — pendiente de integración real con backend.
+//
+// Este componente NO hace llamadas reales al backend.
+// Todos los datos (equipo, jugadores, partidos) son generados con mock data
+// en loadTeamDetail(), loadPlayers(), loadMatches().
+//
+// Clasificación (Fase 2E):
+//   · Categoría: mock-only / pendiente de integración
+//   · No bloquea el build ni el runtime
+//   · No mezclar con el flujo admin (admin/pages/teams/team-detail.page.ts)
+//   · Pendiente: conectar al backend cuando los endpoints de filtro sean funcionales
+//
+// Dependencias que NO están confirmadas en backend:
+//   · GET /player?teamId=    → controller ignora teamId
+//   · GET /team/:id/players  → no existe en routes.ts
+//   · GET /match?teamId=     → no confirmado
+// ─────────────────────────────────────────────────────────────
 import { ChangeDetectionStrategy, Component, input, inject, signal, effect } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { MatIconModule } from '@angular/material/icon';
@@ -586,7 +606,10 @@ export default class TeamDetailPage {
   }
 
   playerRowPosition(p: Player): string {
-    return p.position?.label ?? '—';
+    // TODO: Player.position (legacy) no existe en PlayerApiResponse.
+    // Actualmente funciona sólo con mock data que incluye position.label.
+    // Al migrar a PlayerApiResponse, reemplazar con: String(p.positionId ?? '—')
+    return (p as any).position?.label ?? String(p.positionId ?? '—');
   }
 
   getStatusLabel(status: string): string {

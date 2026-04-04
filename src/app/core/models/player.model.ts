@@ -43,6 +43,26 @@ export interface PlayerApiResponse {
 }
 
 /**
+ * Shape REAL de la respuesta paginada de GET /player.
+ * Confirmado en Iceplay-Fropen/src/presentation/services/player.service.ts:
+ *   return { page, limit, total, next, prev, players: rows }
+ *
+ * IMPORTANTE: el campo es `players`, NO `data`.
+ * El frontend NO debe tratar esta respuesta como array plano.
+ *
+ * Filtros reales soportados por HTTP: SÓLO page y limit.
+ * teamId, championshipId, organizationId → controller los IGNORA (no los lee de req.query).
+ */
+export interface PlayerApiPaginatedResponse {
+  page: number;
+  limit: number;
+  total: number;
+  next: string | null;
+  prev: string | null;
+  players: PlayerApiResponse[];
+}
+
+/**
  * DTO para crear un jugador vía POST /player (requiere auth).
  * Basado en CreatePlayerDto (create-player.dto.ts).
  *

@@ -1,16 +1,19 @@
 import { Injectable, inject } from '@angular/core';
 import { ApiService } from './api.service';
-import { Observable, forkJoin, of, throwError } from 'rxjs';
+import { Observable, of, throwError } from 'rxjs';
 import { map, catchError } from 'rxjs/operators';
 
 import {
-  Team,
   TeamApiResponse,
   UpdateTeamApiDto,
   TeamProfile,
 } from '../models/team.model';
 
-import { Player, CreatePlayerDto } from '../models/player.model';
+import {
+  Player,
+  CreatePlayerDto,
+  PlayerApiPaginatedResponse,
+} from '../models/player.model';
 
 export interface CsvImportResult {
   teamsImported: number;
@@ -27,9 +30,9 @@ export class TeamService {
   private api = inject(ApiService);
 
   // ─────────────────────────────────────────
-  // GET /team (PAGINADO + FILTROS)
+  // GET /teams (PAGINADO + FILTROS)
   // Backend confirmado:
-  //   GET /team?page=&limit=&organizationId=&championshipId=
+  //   GET /teams?page=&limit=&organizationId=&championshipId=
   // ─────────────────────────────────────────
   getTeams(
     page = 1,
@@ -41,40 +44,38 @@ export class TeamService {
     if (filters?.organizationId) params['organizationId'] = filters.organizationId;
     if (filters?.championshipId) params['championshipId'] = filters.championshipId;
 
-    return this.api.get<TeamApiResponse[]>('team', params).pipe(
+    return this.api.get<TeamApiResponse[]>('teams', params).pipe(
       catchError((error) => this.handleError('Error fetching teams', error))
     );
   }
 
   // ─────────────────────────────────────────
-  // GET /team/all
+  // GET /teams/all
   // Backend confirmado:
-  //   GET /team/all?organizationId=&championshipId=
+  //   GET /teams/all?organizationId=&championshipId=
   // ─────────────────────────────────────────
   getAllTeams(filters?: {
     organizationId?: string;
     championshipId?: string;
   }): Observable<TeamApiResponse[]> {
-    return this.api.get<TeamApiResponse[]>('team/all', filters).pipe(
+    return this.api.get<TeamApiResponse[]>('teams/all', filters).pipe(
       catchError((error) => this.handleError('Error fetching all teams', error))
     );
   }
 
   // ─────────────────────────────────────────
   // Wrapper de compatibilidad frontend
-  // Mantener mientras existan vistas antiguas que llamen este método.
-  // Internamente usa el endpoint REAL confirmado.
   // ─────────────────────────────────────────
   getTeamsByOrganization(organizationId: string): Observable<TeamApiResponse[]> {
     return this.getAllTeams({ organizationId });
   }
 
   // ─────────────────────────────────────────
-  // GET /team/:id
+  // GET /teams/:id
   // Backend confirmado
   // ─────────────────────────────────────────
   getTeamById(id: string): Observable<TeamApiResponse> {
-    return this.api.get<TeamApiResponse>(`team/${id}`).pipe(
+    return this.api.get<TeamApiResponse>(`teams/${id}`).pipe(
       catchError((error) => this.handleError('Error fetching team', error))
     );
   }
@@ -82,25 +83,21 @@ export class TeamService {
   // ─────────────────────────────────────────
   // COMPOSICIÓN FRONT (NO BACKEND)
   // El backend no retorna players embebidos en el team.
-  // Este método compone TeamProfile en frontend.
+  // ⚠️ GET /players?teamId= no filtra realmente en backend actual.
+  // Por seguridad, players se deja vacío.
   // ─────────────────────────────────────────
   getTeamWithPlayers(id: string): Observable<TeamProfile> {
-    return forkJoin({
-      team: this.getTeamById(id),
-      players: this.getPlayers(id),
-    }).pipe(
-      map(({ team, players }) => {
+    return this.getTeamById(id).pipe(
+      map((team) => {
         return {
           id: team.id,
           name: team.name,
           shortname: team.shortname,
 
-          // Campos que el backend no confirma en GET /team/:id
           championshipId: '',
           documentUrl: null,
           hasActiveMatches: false,
 
-          // Campos opcionales enriquecidos
           slug: team.slug ?? '',
           logoUrl: team.logoUrl ?? null,
           primaryColor: team.primaryColor ?? null,
@@ -112,15 +109,12 @@ export class TeamService {
           coachPhone: team.coachPhone ?? null,
           isActive: team.isActive ?? true,
 
-          // Fechas no confirmadas por backend en esta respuesta
           createdAt: new Date(),
           updatedAt: new Date(),
 
-          // Relaciones frontend
-          players,
+          players: [] as Player[],
           groups: [],
 
-          // Stats frontend
           stats: {
             teamId: team.id,
             played: 0,
@@ -141,53 +135,49 @@ export class TeamService {
   }
 
   // ─────────────────────────────────────────
-  // POST /team NO EXISTE
-  // Backend: la ruta está comentada en routes.ts
-  // Se mantiene el método para no romper llamadas antiguas.
+  // POST /teams NO DISPONIBLE
   // ─────────────────────────────────────────
   createTeam(): Observable<never> {
     return throwError(
-      () => new Error('POST /team no está disponible en el backend')
+      () => new Error('POST /teams no está disponible en el backend')
     );
   }
 
   // ─────────────────────────────────────────
-  // PUT /team/:id
+  // PUT /teams/:id
   // Backend confirmado
   // ─────────────────────────────────────────
   updateTeam(
     id: string,
     team: UpdateTeamApiDto
   ): Observable<TeamApiResponse> {
-    return this.api.put<TeamApiResponse>(`team/${id}`, team).pipe(
+    return this.api.put<TeamApiResponse>(`teams/${id}`, team).pipe(
       catchError((error) => this.handleError('Error updating team', error))
     );
   }
 
   // ─────────────────────────────────────────
-  // DELETE /team/:id
+  // DELETE /teams/:id
   // Backend confirmado
   // ─────────────────────────────────────────
   deleteTeam(id: string): Observable<void> {
-    return this.api.delete<void>(`team/${id}`).pipe(
+    return this.api.delete<void>(`teams/${id}`).pipe(
       catchError((error) => this.handleError('Error deleting team', error))
     );
   }
 
   // ─────────────────────────────────────────
-  // NO CONFIRMADO EN BACKEND
-  // Se mantiene por compatibilidad de UI.
-  // Si backend no soporta GET /player?teamId=, habrá que eliminarlo luego.
+  // NO CONFIRMADO EN BACKEND COMO FILTRO FUNCIONAL
+  // GET /players acepta la query teamId, pero el backend actual la ignora.
   // ─────────────────────────────────────────
-  getPlayers(teamId: string): Observable<Player[]> {
-    return this.api.get<Player[]>('player', { teamId }).pipe(
+  getPlayers(teamId: string): Observable<PlayerApiPaginatedResponse> {
+    return this.api.get<PlayerApiPaginatedResponse>('players', { teamId }).pipe(
       catchError((error) => this.handleError('Error fetching players', error))
     );
   }
 
   // ─────────────────────────────────────────
-  // NO CONFIRMADO EN BACKEND
-  // Se mantiene por compatibilidad hasta auditar /player create completo.
+  // Se mantiene por compatibilidad
   // ─────────────────────────────────────────
   createPlayer(
     player: CreatePlayerDto & {
@@ -196,37 +186,34 @@ export class TeamService {
       organizationId: string;
     }
   ): Observable<Player> {
-    return this.api.post<Player>('player', player).pipe(
+    return this.api.post<Player>('players', player).pipe(
       catchError((error) => this.handleError('Error creating player', error))
     );
   }
 
   // ─────────────────────────────────────────
-  // CSV IMPORT (NO ALINEADO)
-  // - POST /team no existe
-  // - búsqueda por name no está confirmada
-  // - validación de duplicados no está confirmada
-  // Se deja como simulación vacía para no romper compilación.
+  // CSV IMPORT (placeholder seguro)
   // ─────────────────────────────────────────
   importFromCsv(
     championshipId: string,
     organizationId: string,
     csvContent: string
   ): Observable<CsvImportResult> {
-    const result: CsvImportResult = {
+    void championshipId;
+    void organizationId;
+    void csvContent;
+
+    return of({
       teamsImported: 0,
       playersImported: 0,
       teamsSkipped: [],
       playersSkipped: [],
-      warnings: [],
-    };
-
-    return of(result);
+      warnings: [
+        'Importación CSV no alineada todavía con el backend actual.',
+      ],
+    });
   }
 
-  // ─────────────────────────────────────────
-  // ERROR HANDLER
-  // ─────────────────────────────────────────
   private handleError(message: string, error: unknown): Observable<never> {
     console.error(message, error);
     const errorMessage =

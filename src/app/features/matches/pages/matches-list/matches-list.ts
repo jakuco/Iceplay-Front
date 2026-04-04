@@ -20,17 +20,21 @@ import { TranslatePipe } from '../../../../core/pipes/translate.pipe';
 import { MatchService } from '../../../../core/services/match.service';
 import { ChampionshipService } from '../../../../core/services/championship.service';
 import { TeamService } from '../../../../core/services/team.service';
-import type { MatchApiResponse } from '../../../../core/models/match.model';
+import type { MatchDto } from '../../../../core/models/match.model';
 import {
   ChampionshipListItem,
   ChampionshipStatus,
 } from '../../../../core/models/championship.model';
 import type { TeamApiResponse } from '../../../../core/models/team.model';
 
-/** Partido con campeonato. */
+/**
+ * Partido con championshipId explícito.
+ * MatchDto ya incluye championshipId, pero lo duplicamos en el wrapper
+ * para mantener compatibilidad con la lógica de grouping existente.
+ */
 interface MatchWithChampionship {
   championshipId: string;
-  match: MatchApiResponse;
+  match: MatchDto;
 }
 
 interface DayOption {
@@ -463,29 +467,27 @@ export default class MatchesList {
               const allTeams = teamsArrays.flat();
               this.allTeams.set(allTeams);
 
-              const matchObservables: Observable<MatchWithChampionship[]>[] = championships.map((c) =>
-                this.matchService.searchMatches({
-                  championship_id: String(c.id),
-                  page: 1,
-                  limit: 500,
-                }).pipe(
-                  map((matches) =>
-                    matches.map(
-                      (m): MatchWithChampionship => ({
-                        championshipId: String(c.id),
-                        match: m,
-                      }),
-                    ),
-                  ),
-                ),
-              );
+              // ─── GET /matches/all → MatchDto[] ────────────────────────────────────
+              // Usamos getAllMatches() en lugar de searchMatches() por championship porque:
+              //   1. searchMatches devuelve MatchSearchResult (shape mínima sin homeTeamId, etc.)
+              //   2. getAllMatches devuelve MatchDto completo con todos los campos necesarios
+              //   3. MatchDto.championshipId permite el grouping client-side
+              //
+              // Limitación conocida: getAllMatches no filtra por championship_id en backend
+              // (el controller ignora ese parámetro). Se filtra client-side en filteredLeagues().
+              // ─────────────────────────────────────────────────────────────────────
+              const championshipIds = new Set(championships.map((c) => String(c.id)));
 
-              const matchesObservable: Observable<MatchWithChampionship[][]> =
-                matchObservables.length > 0 ? forkJoin(matchObservables) : of([]);
-
-              matchesObservable.subscribe({
-                next: (matchesArrays) => {
-                  this.allMatches.set(matchesArrays.flat());
+              this.matchService.getAllMatches().subscribe({
+                next: (allMatchDtos) => {
+                  // Solo incluir partidos de los campeonatos activos cargados
+                  const withChampionship: MatchWithChampionship[] = allMatchDtos
+                    .filter((m) => championshipIds.has(String(m.championshipId)))
+                    .map((m): MatchWithChampionship => ({
+                      championshipId: String(m.championshipId),
+                      match: m,
+                    }));
+                  this.allMatches.set(withChampionship);
                   this.isLoading.set(false);
                 },
                 error: (err: unknown) => {
@@ -515,7 +517,7 @@ export default class MatchesList {
     });
   }
 
-  private liveMinuteLabel(match: MatchApiResponse): string | undefined {
+  private liveMinuteLabel(match: MatchDto): string | undefined {
     if (match.status !== 'live' || !match.actualStartTime) {
       return undefined;
     }

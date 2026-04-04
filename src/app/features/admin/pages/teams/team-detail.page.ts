@@ -8,7 +8,7 @@ import { MatMenuModule } from '@angular/material/menu';
 import { MatTabsModule } from '@angular/material/tabs';
 import { TeamService } from '../../../../core/services/team.service';
 import { PlayerService } from '../../../../core/services/player.service';
-import { Team, TeamProfile } from '../../../../core/models/team.model';
+import { TeamProfile } from '../../../../core/models/team.model';
 import { Player } from '../../../../core/models/player.model';
 
 @Component({
@@ -179,18 +179,13 @@ import { Player } from '../../../../core/models/player.model';
                   <tr mat-row *matRowDef="let row; columns: displayedColumns"></tr>
                 </table>
               } @else {
+                <!-- TODO: la lista de jugadores por equipo no está disponible.
+                     El backend (GET /player) no expone teamId como filtro en el controller.
+                     Pendiente de habilitación en Iceplay-Fropen/src/presentation/player/controller.ts -->
                 <div class="empty-state">
                   <mat-icon>person_off</mat-icon>
-                  <h3>No hay jugadores</h3>
-                  <p>Agrega jugadores a este equipo</p>
-                  <button
-                    matButton="filled"
-                    [routerLink]="['/admin/players/new']"
-                    [queryParams]="{ teamId: id() }"
-                  >
-                    <mat-icon>add</mat-icon>
-                    Agregar Jugador
-                  </button>
+                  <h3>Jugadores no disponibles</h3>
+                  <p>La consulta de jugadores por equipo está pendiente de soporte en el backend.</p>
                 </div>
               }
             </div>
@@ -336,7 +331,13 @@ export default class TeamDetailPage {
   private teamService = inject(TeamService);
   private playerService = inject(PlayerService);
 
-  team = signal<Team | null>(null);
+  // TeamProfile = composición frontend de TeamApiResponse + players.
+  // Producido por teamService.getTeamWithPlayers(), no directamente por backend.
+  team = signal<TeamProfile | null>(null);
+  // ⚠️ SIEMPRE VACÍO hasta que backend exponga GET /player?teamId= en el controller.
+  // getTeamWithPlayers() retorna players: [] deliberadamente para evitar mostrar
+  // todos los jugadores del sistema como si fueran del equipo.
+  // TODO: reconectar cuando backend habilite el filtro.
   players = signal<Player[]>([]);
   isLoading = signal(false);
   displayedColumns = ['number', 'name', 'position', 'status', 'actions'];

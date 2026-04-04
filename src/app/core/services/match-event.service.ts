@@ -54,8 +54,9 @@ export class MatchEventService {
 
   /**
    * Connect to the match event stream via Server-Sent Events (SSE).
-   * Uses GET /match/:matchId/events/stream
+   * Uses GET /matches/:matchId/events/stream
    *
+   * Backend confirmado: Iceplay-Fropen/src/presentation/match/routes.ts
    * Eventos confirmados:
    *   - "add"    => FullEventDTO serializado como JSON
    *   - "remove" => eventId como string plano
@@ -66,7 +67,7 @@ export class MatchEventService {
     periodDuration: number
   ): Observable<SSEMatchEvent> {
     return new Observable<SSEMatchEvent>((observer) => {
-      const source = this.api.subscribe(`match/${matchId}/events/stream`);
+      const source = this.api.subscribe(`matches/${matchId}/events/stream`);
 
       source.addEventListener('add', (e: MessageEvent) => {
         this.ngZone.run(() => {
@@ -93,20 +94,26 @@ export class MatchEventService {
   }
 
   /**
-   * Create a match event. Uses POST /match/:matchId/events
+   * Create a match event. Uses POST /matches/:matchId/events
+   *
+   * Backend confirmado: POST /:match_id/events (montado en /api/matches)
+   * Response: 201 No Content (sin body — el backend hace res.status(201).end())
    */
   createEvent(matchId: string, dto: CreateMatchEventDto): Observable<void> {
     return this.api
-      .post<void>(`match/${matchId}/events`, dto)
+      .post<void>(`matches/${matchId}/events`, dto)
       .pipe(catchError((err) => this.handleError('Error creating event', err)));
   }
 
   /**
-   * Delete a match event. Uses DELETE /match/:matchId/events/:eventId
+   * Delete a match event. Uses DELETE /matches/:matchId/events/:eventId
+   *
+   * Backend confirmado: DELETE /:match_id/events/:event_id (montado en /api/matches)
+   * Response: 204 No Content (sin body)
    */
   deleteEvent(matchId: string, eventId: string): Observable<void> {
     return this.api
-      .delete<void>(`match/${matchId}/events/${eventId}`)
+      .delete<void>(`matches/${matchId}/events/${eventId}`)
       .pipe(catchError((err) => this.handleError('Error deleting event', err)));
   }
 

@@ -24,11 +24,18 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { forkJoin, Subscription } from 'rxjs';
 
 import { MatchService } from '../../../../core/services/match.service';
-import { MatchEventService, SSEMatchEvent } from '../../../../core/services/match-event.service';
+import {
+  MatchEventService,
+  SSEMatchEvent,
+} from '../../../../core/services/match-event.service';
 import { TeamService } from '../../../../core/services/team.service';
 import { PlayerService } from '../../../../core/services/player.service';
 
-import { MatchApiResponse, MatchStatus, UpdateMatchApiDto } from '../../../../core/models/match.model';
+import {
+  MatchByIdResponse,
+  MatchStatus,
+  UpdateMatchApiDto,
+} from '../../../../core/models/match.model';
 import {
   MatchEventViewModel,
   CreateMatchEventDto,
@@ -83,7 +90,6 @@ interface HistoryState {
   template: `
 <div class="flex min-h-full flex-col gap-6 p-4 md:p-6">
 
-  <!-- ── Header ─────────────────────────────────────────────── -->
   <div class="flex items-center justify-between gap-4 flex-wrap">
     <div class="flex items-center gap-3">
       <a matIconButton routerLink="/admin/matches">
@@ -104,7 +110,6 @@ interface HistoryState {
     </div>
   </div>
 
-  <!-- ── Loading ────────────────────────────────────────────── -->
   @if (isLoading()) {
     <div class="flex flex-1 items-center justify-center">
       <mat-spinner [diameter]="50" />
@@ -112,7 +117,6 @@ interface HistoryState {
 
   } @else if (matchData(); as m) {
 
-    <!-- ── Info banner ──────────────────────────────────────── -->
     <div class="card flex flex-wrap items-center justify-between gap-4 rounded-xl p-4">
       <div class="flex items-center gap-3">
         <mat-icon class="text-secondary">event</mat-icon>
@@ -120,7 +124,7 @@ interface HistoryState {
           <p class="text-secondary text-sm">
             {{ homeTeam().name }} vs {{ awayTeam().name }}
           </p>
-          <p class="font-medium text-sm">{{ m.venue || 'Sin cancha' }}</p>
+          <p class="font-medium text-sm">Sin cancha</p>
         </div>
       </div>
       <span class="status-chip" [class]="'status-' + m.status">
@@ -128,7 +132,6 @@ interface HistoryState {
       </span>
     </div>
 
-    <!-- ── Acciones rápidas (Admin) ─────────────────────────── -->
     @if (showAdminPanel) {
       <div class="flex flex-wrap gap-3">
         <button matButton="outlined" (click)="updateMatchStatus('live')">
@@ -146,10 +149,8 @@ interface HistoryState {
       </div>
     }
 
-    <!-- ── Marcador + Cronómetro ────────────────────────────── -->
     <div class="score-header">
 
-      <!-- Local -->
       <div class="card flex min-w-[140px] flex-1 flex-col items-center gap-3 rounded-xl p-4 sm:flex-row md:p-6">
         @if (homeTeam().logo) {
           <img class="h-14 w-14 sm:h-16 sm:w-16"
@@ -164,7 +165,6 @@ interface HistoryState {
         </div>
       </div>
 
-      <!-- Cronómetro -->
       <div class="timer-card rounded-xl p-4 flex flex-col items-center justify-center gap-2">
         @if (m.status === 'live') {
           <div class="flex items-center gap-2">
@@ -219,7 +219,6 @@ interface HistoryState {
         </div>
       </div>
 
-      <!-- Visitante -->
       <div class="card flex min-w-[140px] flex-1 flex-col-reverse items-center justify-end gap-3 rounded-xl p-4 sm:flex-row md:p-6">
         <div class="text-center sm:text-right">
           <p class="text-secondary text-sm">Visitante</p>
@@ -235,7 +234,6 @@ interface HistoryState {
       </div>
     </div>
 
-    <!-- ── Alineaciones + Acciones ──────────────────────────── -->
     @if (m.status === 'live' || m.status === 'warmup') {
       <section>
         <h2 class="mb-4 text-lg font-bold">Alineaciones y Acciones</h2>
@@ -283,7 +281,6 @@ interface HistoryState {
       </section>
     }
 
-    <!-- ── Registro de Eventos ──────────────────────────────── -->
     <section>
       <h2 class="mb-4 text-lg font-bold">Registro de Eventos</h2>
       <div class="card overflow-hidden rounded-xl border border-(--mat-sys-outline-variant)">
@@ -417,7 +414,6 @@ interface HistoryState {
   `,
 })
 export default class MatchControlPage implements OnInit, OnDestroy {
-
   matchId = input.required<string>();
 
   private matchService = inject(MatchService);
@@ -427,35 +423,32 @@ export default class MatchControlPage implements OnInit, OnDestroy {
   private snackBar = inject(MatSnackBar);
 
   isLoading = signal(true);
-  matchData = signal<MatchApiResponse | null>(null);
+  matchData = signal<MatchByIdResponse | null>(null);
   events = signal<MatchEventViewModel[]>([]);
-  eventTypes = signal<TypeMatchEvent[]>([]); // TODO: cargar desde campeonato
+  eventTypes = signal<TypeMatchEvent[]>([]);
 
-  /**
-   * ESTADO LOCAL DE UI — CRONÓMETRO
-   * ─────────────────────────────────────────────────────────────
-   * elapsedSeconds e isRunning son estado exclusivo de la interfaz.
-   * El backend NO persiste ni retorna el tiempo transcurrido del reloj.
-   * MatchApiResponse incluye `elapsedSeconds` como campo del servidor,
-   * pero actualmente no se sincroniza aquí (se arranca siempre en 0).
-   * TODO: decidir en Fase 3 si se lee match.elapsedSeconds como seed.
-   * ─────────────────────────────────────────────────────────────
-   */
   elapsedSeconds = signal(0);
   isRunning = signal(false);
 
-  /**
-   * Scores de referencia tomados del backend al cargar el partido.
-   * El score visual = baseline + scoring events recibidos vía SSE en esta sesión.
-   */
   private baselineHomeScore = 0;
   private baselineAwayScore = 0;
 
   homeTeam = signal<LocalTeam>({
-    side: 'home', id: '', name: '', score: 0, logo: '', players: [],
+    side: 'home',
+    id: '',
+    name: '',
+    score: 0,
+    logo: '',
+    players: [],
   });
+
   awayTeam = signal<LocalTeam>({
-    side: 'away', id: '', name: '', score: 0, logo: '', players: [],
+    side: 'away',
+    id: '',
+    name: '',
+    score: 0,
+    logo: '',
+    players: [],
   });
 
   showAdminPanel = false;
@@ -480,7 +473,9 @@ export default class MatchControlPage implements OnInit, OnDestroy {
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   });
 
-  ngOnInit(): void { this.loadMatch(); }
+  ngOnInit(): void {
+    this.loadMatch();
+  }
 
   ngOnDestroy(): void {
     this.stopTimer();
@@ -500,14 +495,14 @@ export default class MatchControlPage implements OnInit, OnDestroy {
           awayTeam: this.teamService.getTeamById(String(match.awayTeamId)),
         }).subscribe({
           next: ({ homeTeam, awayTeam }) => {
-            this.baselineHomeScore = match.homeScore ?? 0;
-            this.baselineAwayScore = match.awayScore ?? 0;
+            this.baselineHomeScore = 0;
+            this.baselineAwayScore = 0;
 
             this.homeTeam.set({
               side: 'home',
               id: String(homeTeam.id),
               name: homeTeam.name,
-              score: match.homeScore ?? 0,
+              score: 0,
               logo: homeTeam.logoUrl ?? '',
               players: [],
             });
@@ -516,7 +511,7 @@ export default class MatchControlPage implements OnInit, OnDestroy {
               side: 'away',
               id: String(awayTeam.id),
               name: awayTeam.name,
-              score: match.awayScore ?? 0,
+              score: 0,
               logo: awayTeam.logoUrl ?? '',
               players: [],
             });
@@ -547,13 +542,13 @@ export default class MatchControlPage implements OnInit, OnDestroy {
       away: this.playerService.getPlayersByTeam(awayId),
     }).subscribe({
       next: ({ home, away }) => {
-        this.homeTeam.update(t => ({
+        this.homeTeam.update((t) => ({
           ...t,
-          players: home.map(p => this.toLocalPlayer(p, 'home')),
+          players: home.players.map((p) => this.toLocalPlayer(p, 'home')),
         }));
-        this.awayTeam.update(t => ({
+        this.awayTeam.update((t) => ({
           ...t,
-          players: away.map(p => this.toLocalPlayer(p, 'away')),
+          players: away.players.map((p) => this.toLocalPlayer(p, 'away')),
         }));
       },
       error: (err) => console.error('Error loading players', err),
@@ -561,36 +556,33 @@ export default class MatchControlPage implements OnInit, OnDestroy {
   }
 
   private toLocalPlayer(p: PlayerApiResponse, side: 'home' | 'away'): LocalPlayer {
-  const positionCode = p.positionId ? String(p.positionId) : '—';
+    const positionCode = p.positionId ? String(p.positionId) : '—';
 
-  return {
-    id: crypto.randomUUID(),
-    number: p.number ?? 0,
-    name: `${p.firstName ?? ''} ${p.lastName ?? ''}`.trim(),
-    positionCode,
-    teamSide: side,
-    originalPlayerId: String(p.id),
-  };
-}
+    return {
+      id: crypto.randomUUID(),
+      number: p.number ?? 0,
+      name: `${p.firstName ?? ''} ${p.lastName ?? ''}`.trim(),
+      positionCode,
+      teamSide: side,
+      originalPlayerId: String(p.id),
+    };
+  }
 
   private loadEventsAndConnect(matchId: string, homeTeamId: string): void {
     const pd = DEFAULT_PERIOD_DURATION;
-
-    // TODO: GET /match/:id/events NO está publicado en routes.ts del backend.
-    // La hidratación inicial se delega al mecanismo de catch-up del SSE.
 
     this.sseSubscription = this.matchEventService
       .connectToMatchStream(matchId, homeTeamId, pd)
       .subscribe({
         next: (msg: SSEMatchEvent) => {
           if (msg.type === 'add') {
-            this.events.update(list => {
-              if (list.some(e => e.id === msg.event.id)) return list;
+            this.events.update((list) => {
+              if (list.some((e) => e.id === msg.event.id)) return list;
               return [...list, msg.event].sort((a, b) => a.timeRaw - b.timeRaw);
             });
             this.recomputeScoreFromEvents();
           } else {
-            this.events.update(list => list.filter(e => String(e.id) !== msg.eventId));
+            this.events.update((list) => list.filter((e) => String(e.id) !== msg.eventId));
             this.recomputeScoreFromEvents();
           }
         },
@@ -600,11 +592,11 @@ export default class MatchControlPage implements OnInit, OnDestroy {
 
   private recomputeScoreFromEvents(): void {
     const evts = this.events();
-    const homePoints = evts.filter(e => e.category === 'scoring' && e.isHomeTeam).length;
-    const awayPoints = evts.filter(e => e.category === 'scoring' && !e.isHomeTeam).length;
+    const homePoints = evts.filter((e) => e.category === 'scoring' && e.isHomeTeam).length;
+    const awayPoints = evts.filter((e) => e.category === 'scoring' && !e.isHomeTeam).length;
 
-    this.homeTeam.update(t => ({ ...t, score: this.baselineHomeScore + homePoints }));
-    this.awayTeam.update(t => ({ ...t, score: this.baselineAwayScore + awayPoints }));
+    this.homeTeam.update((t) => ({ ...t, score: this.baselineHomeScore + homePoints }));
+    this.awayTeam.update((t) => ({ ...t, score: this.baselineAwayScore + awayPoints }));
   }
 
   logEvent(eventType: TypeMatchEvent, player: LocalPlayer, side: 'home' | 'away'): void {
@@ -651,27 +643,26 @@ export default class MatchControlPage implements OnInit, OnDestroy {
 
     this.saveToHistory();
 
-    this.matchService.updateMatch(
-      String(match.id),
-      { status } as unknown as UpdateMatchApiDto
-    ).subscribe({
-      next: (updated) => {
-        this.matchData.set(updated);
-        if (updated.status === 'live') this.startTimer();
-        else this.pauseTimer();
-      },
-      error: (err) => {
-        console.error(err);
-        this.snackBar.open('Error actualizando estado', 'Cerrar', { duration: 3000 });
-      },
-    });
+    this.matchService
+      .updateMatch(String(match.id), { status } as unknown as UpdateMatchApiDto)
+      .subscribe({
+        next: (updated) => {
+          this.matchData.set(updated);
+          if (updated.status === 'live') this.startTimer();
+          else this.pauseTimer();
+        },
+        error: (err) => {
+          console.error(err);
+          this.snackBar.open('Error actualizando estado', 'Cerrar', { duration: 3000 });
+        },
+      });
   }
 
   startTimer(): void {
     if (this.timerInterval) return;
     this.isRunning.set(true);
     this.timerInterval = setInterval(() => {
-      this.elapsedSeconds.update(s => s + 1);
+      this.elapsedSeconds.update((s) => s + 1);
     }, 1000);
   }
 
@@ -696,8 +687,7 @@ export default class MatchControlPage implements OnInit, OnDestroy {
   saveTime(): void {
     this.saveToHistory();
     this.elapsedSeconds.set(
-      Math.max(0, this.editMinutes) * 60 +
-      Math.min(59, Math.max(0, this.editSeconds))
+      Math.max(0, this.editMinutes) * 60 + Math.min(59, Math.max(0, this.editSeconds))
     );
     this.isEditingTime = false;
   }
@@ -743,8 +733,8 @@ export default class MatchControlPage implements OnInit, OnDestroy {
   }
 
   private restoreState(s: HistoryState): void {
-    this.homeTeam.update(t => ({ ...t, score: s.homeScore }));
-    this.awayTeam.update(t => ({ ...t, score: s.awayScore }));
+    this.homeTeam.update((t) => ({ ...t, score: s.homeScore }));
+    this.awayTeam.update((t) => ({ ...t, score: s.awayScore }));
     this.elapsedSeconds.set(s.elapsedSeconds);
   }
 
@@ -771,12 +761,17 @@ export default class MatchControlPage implements OnInit, OnDestroy {
   }
 
   initials(name: string): string {
-    return name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+    return name
+      .split(' ')
+      .map((w) => w[0])
+      .join('')
+      .toUpperCase()
+      .slice(0, 2);
   }
 
   playerName(event: MatchEventViewModel): string {
     const team = event.isHomeTeam ? this.homeTeam() : this.awayTeam();
-    const p = team.players.find(pl => pl.originalPlayerId === String(event.playerId));
+    const p = team.players.find((pl) => pl.originalPlayerId === String(event.playerId));
     return p ? `#${p.number} ${p.name}` : '—';
   }
 }

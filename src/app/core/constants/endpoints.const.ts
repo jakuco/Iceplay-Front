@@ -1,6 +1,8 @@
 import { G } from "@angular/cdk/keycodes";
 
 const AUTH_BASE = "auth";
+// Backend confirmado: rutas montadas en plural (presentation/routes.ts)
+//   router.use('/api/players', ...), router.use('/api/teams', ...), router.use('/api/matches', ...)
 const PLAYERS_BASE = "players";
 const TEAMS_BASE = "teams";
 const ORGANIZATIONS_BASE = "organizations";

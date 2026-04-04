@@ -17,7 +17,7 @@ import { TeamService } from '../../../../core/services/team.service';
 import { MatchService } from '../../../../core/services/match.service';
 import { PlayerService } from '../../../../core/services/player.service';
 import { forkJoin, of, Subscription } from 'rxjs';
-import type { MatchApiResponse } from '../../../../core/models/match.model';
+import type { MatchDto } from '../../../../core/models/match.model';
 import type { TeamApiResponse } from '../../../../core/models/team.model';
 import type { ChampionshipListItem } from '../../../../core/models/championship.model';
 
@@ -564,7 +564,10 @@ export default class DashboardPage {
   >([]);
   allTeams = signal<TeamApiResponse[]>([]);
   allChampionships = signal<ChampionshipListItem[]>([]);
-  allMatches = signal<MatchApiResponse[]>([]);
+  // MatchDto es la shape real de GET /matches/all
+  // ⚠️ searchMatches devuelve MatchSearchResult (sin homeTeamId, scheduledDate, etc.)
+  //    — se usa getAllMatches() en su lugar para tener el MatchDto completo
+  allMatches = signal<MatchDto[]>([]);
 
   private reloadSub?: Subscription;
 
@@ -608,12 +611,13 @@ export default class DashboardPage {
         ]);
 
         if (championships.data.length > 0) {
-          const matchObservables = championships.data.map((champ) =>
-            this.matchService.searchMatches({ championship_id: String(champ.id) }),          );
-
-          const innerSub = forkJoin(matchObservables).subscribe({
-            next: (matchResults) => {
-              const allMatches = matchResults.flat();
+          // ─── getAllMatches (GET /matches/all) → MatchDto[] ─────────────────────
+          // Se usa getAllMatches() en lugar de searchMatches() por championship porque:
+          //   1. searchMatches devuelve MatchSearchResult (shape mínima sin homeTeamId, etc.)
+          //   2. getAllMatches devuelve MatchDto completo con todos los campos necesarios
+          // ─────────────────────────────────────────────────────────────────────
+          const innerSub = this.matchService.getAllMatches().subscribe({
+            next: (allMatches) => {
               this.allMatches.set(allMatches);
 
               this.stats.update((stats) => {

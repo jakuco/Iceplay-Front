@@ -22,13 +22,169 @@ export interface PeriodScore {
 }
 
 // ─────────────────────────────────────────────
-// Interfaces basadas en DTOs reales del backend
+// Tipos confirmados contra backend real
+// Fuente: Iceplay-Fropen/src/domain/dto/match/match.dto.ts
+//         Iceplay-Fropen/src/presentation/match/controller.ts
+//         Iceplay-Fropen/src/presentation/services/match.service.ts
 // ─────────────────────────────────────────────
 
 /**
- * Shape exacta que devuelve el backend en GET /match/:id y en listas.
- * Basada en MatchResponseDto (Iceplay-Fropen/src/domain/dto/match/match-response.dto.ts).
- * Las fechas llegan como strings ISO 8601 al ser serializadas vía JSON.
+ * Shape confirmada de GET /matches (paginado) y GET /matches/all (array).
+ * Fuente: match.dto.ts — campos exactos del mapper de la capa de presentación.
+ * NO coincide con MatchApiResponse (que tenía campos inventados como round,
+ * matchday, currentPeriod, isClockRunning, periodScores, etc.).
+ */
+export interface MatchDto {
+  id: string;
+  championshipId: string;
+  homeTeamId: string;
+  awayTeamId: string;
+  scheduledDate: string;       // ISO string (mapeado desde scheduledStart)
+  scheduledTime: string;       // "HH:mm"
+  actualStartTime?: string;
+  actualEndTime?: string;
+  venue?: string;
+  city?: string;
+  elapsedSeconds?: number;
+  homeScore: number;
+  awayScore: number;
+  status: string;              // 'scheduled' | 'live' | 'finished' | 'suspended' | 'postponed' | 'cancelled'
+}
+
+/**
+ * Shape confirmada de GET /matches/:id, POST /matches y PUT /matches/:id.
+ * El backend.service.getMatchById devuelve solo estos campos mínimos (no MatchDto completo).
+ * Fuente: Iceplay-Fropen/src/presentation/services/match.service.ts:getMatchById
+ *
+ * ⚠️ homeScore y awayScore NO están en esta respuesta.
+ * El score acumulado debe reconstruirse desde los eventos SSE.
+ */
+export interface MatchByIdResponse {
+  id: string;
+  homeTeamId: string;
+  awayTeamId: string;
+  scheduledStart: string;  // ISO 8601 string
+  status: string;
+}
+
+/**
+ * Wrapper paginado de GET /matches?page=&limit=
+ * Fuente: Iceplay-Fropen/src/presentation/services/match.service.ts:getMatches
+ */
+export interface MatchPagedResponse {
+  page: number;
+  limit: number;
+  total: number;
+  next: string | null;
+  prev: string | null;
+  matches: MatchDto[];
+}
+
+/**
+ * Ítem individual del resultado de GET /matches/search
+ * Fuente: Iceplay-Fropen/src/presentation/services/match.service.ts:searchMatches
+ * ⚠️ El campo `match` es un string concatenado (ej: "TeamA vs TeamB"), NO un MatchDto.
+ */
+export interface MatchSearchResult {
+  id: string;
+  match: string;    // concatenación de nombres: "HomeTeam vs AwayTeam"
+  date: string;
+  location: string;
+  status: string;
+}
+
+/**
+ * Wrapper paginado de GET /matches/search?...
+ * Fuente: Iceplay-Fropen/src/presentation/services/match.service.ts:searchMatches
+ */
+export interface MatchSearchPagedResponse {
+  page: number;
+  limit: number;
+  total: number;
+  next: string | null;
+  prev: string | null;
+  matches: MatchSearchResult[];
+}
+
+/**
+ * Resumen de equipo embebido en ScheduleMatchDto.
+ * Fuente: match.dto.ts — ScheduleTeamSummary
+ */
+export interface ScheduleTeamSummary {
+  id: string;
+  name: string;
+  shortname: string | null;
+  logoUrl: string | null;
+}
+
+/**
+ * Match enriquecido con resúmenes de equipo, usado en schedule-by-date.
+ * Extiende MatchDto con homeTeam y awayTeam ya resueltos.
+ * Fuente: match.dto.ts — ScheduleMatchDto
+ */
+export interface ScheduleMatchDto extends MatchDto {
+  homeTeam: ScheduleTeamSummary;
+  awayTeam: ScheduleTeamSummary;
+}
+
+/**
+ * Response de GET /matches/schedule-by-date?date=YYYY-MM-DD
+ * El backend devuelve UN ÚNICO OBJETO (no array) con los campeonatos del día.
+ * Fuente: Iceplay-Fropen/src/presentation/services/match.service.ts:getScheduleByDate
+ */
+export interface DayScheduleResponse {
+  date: string;
+  championships: Array<{
+    championship: unknown;        // shape interna del campeonato no confirmada en DTO
+    matches: ScheduleMatchDto[];
+  }>;
+}
+
+/**
+ * @deprecated Alias mantenido para no romper imports existentes.
+ * Usar DayScheduleResponse en código nuevo.
+ */
+export type ScheduleByDateResponse = DayScheduleResponse;
+
+/**
+ * DTO para crear un partido vía POST /matches (requiere auth).
+ * Basado en CreateMatchDto (Iceplay-Fropen/src/domain/dto/match/create-match.dto.ts).
+ */
+export interface CreateMatchApiDto {
+  groupTeamId: number;      // ID del grupo-equipo (por ahora numérico; puede cambiar a UUIDv7)
+  homeTeamId: string;       // UUIDv7
+  awayTeamId: string;       // UUIDv7
+  scheduledStart: string;   // ISO 8601 string (el backend valida como Date)
+  venue: string;
+  status?: string;          // default: 'scheduled'
+}
+
+/**
+ * DTO para actualizar un partido vía PUT /matches/:id (requiere auth).
+ * Basado en UpdateMatchDto (Iceplay-Fropen/src/domain/dto/match/update-match.dto.ts).
+ * Usa snake_case para coincidir exactamente con los campos del DTO del backend.
+ */
+export interface UpdateMatchApiDto {
+  championship_id?: number;
+  home_team_id?: number;
+  away_team_id?: number;
+  date?: string;            // ISO 8601 string (el backend convierte a Date)
+  state?: number;
+  match_events?: any;       // TODO: sin tipo confirmado para la estructura de eventos
+}
+
+// ─────────────────────────────────────────────
+// MatchApiResponse — MANTENIDA SOLO PARA NO ROMPER CALLERS
+// ⚠️ Esta interfaz NO coincide con ninguna respuesta real del backend.
+//    Contiene campos inventados: round, matchday, group, stage, currentPeriod,
+//    isClockRunning, periodScores, homeSets, awaySets, referee, organizationId, etc.
+//    El backend (match.dto.ts) NO expone estos campos.
+//    Migrar callers a MatchDto o MatchByIdResponse según corresponda.
+// ─────────────────────────────────────────────
+
+/**
+ * @deprecated No coincide con ninguna respuesta real del backend.
+ * Usar MatchDto (listas) o MatchByIdResponse (GET /:id, POST, PUT) en su lugar.
  */
 export interface MatchApiResponse {
   id: string;
@@ -43,10 +199,10 @@ export interface MatchApiResponse {
   matchday: number;
   group?: string;
   stage?: string;
-  scheduledDate: string;    // ISO 8601 string
+  scheduledDate: string;
   scheduledTime: string;
-  actualStartTime?: string; // ISO 8601 string
-  actualEndTime?: string;   // ISO 8601 string
+  actualStartTime?: string;
+  actualEndTime?: string;
   venue?: string;
   city?: string;
   referee?: string;
@@ -61,16 +217,12 @@ export interface MatchApiResponse {
   notes?: string;
   isHighlighted: boolean;
   streamUrl?: string;
-  createdAt: string;  // ISO 8601 string
-  updatedAt: string;  // ISO 8601 string
+  createdAt: string;
+  updatedAt: string;
 }
 
 /**
- * Ítem de match para listas paginadas (tablas, tarjetas de resultado).
- * Subset de MatchApiResponse con los campos relevantes para mostrar en UI.
- * Nota: el backend devuelve la estructura completa de MatchApiResponse en listas;
- * este tipo es un subconjunto para tipar vistas de lista sin arrastrar campos
- * de control (isClockRunning, periodScores, etc.) donde no son necesarios.
+ * @deprecated Migrar a MatchDto cuando los callers sean actualizados.
  */
 export interface MatchListItem {
   id: string;
@@ -82,7 +234,7 @@ export interface MatchListItem {
   status: MatchStatus;
   round: number;
   matchday: number;
-  scheduledDate: string; // ISO 8601 string
+  scheduledDate: string;
   scheduledTime: string;
   venue?: string;
   currentPeriod: number;
@@ -93,9 +245,8 @@ export interface MatchListItem {
 
 /**
  * View Model para el panel de control en vivo.
- * Agrupa los campos de MatchApiResponse relevantes para la vista de control/marcador.
- * TODO: sin endpoint confirmado para actualización de score en vivo.
- *       Ver método updateMatchScore (comentado) en match.service.ts.
+ * ⚠️ homeScore/awayScore/currentPeriod/elapsedSeconds/isClockRunning/periodScores
+ *    NO están en MatchByIdResponse. Son manejados localmente desde eventos SSE.
  */
 export interface MatchControlVm {
   id: string;
@@ -110,46 +261,6 @@ export interface MatchControlVm {
   periodScores: PeriodScore[];
   homeSets?: number;
   awaySets?: number;
-}
-
-/**
- * Response de GET /match/schedule-by-date?date=YYYY-MM-DD
- * El backend agrupa los partidos del día por campeonato.
- * TODO: confirmar la shape exacta del response con el equipo de backend.
- *       El controller dice: "Devuelve todos los campeonatos con partidos ese día
- *       y sus datos completos." La estructura interna (campos del campeonato,
- *       array de partidos anidados, etc.) no está confirmada en los DTOs revisados.
- */
-export interface ScheduleByDateResponse {
-  // TODO: completar cuando el equipo de backend documente el response de getScheduleByDate.
-  [key: string]: any;
-}
-
-/**
- * DTO para crear un partido vía POST /match (requiere auth).
- * Basado en CreateMatchDto (Iceplay-Fropen/src/domain/dto/match/create-match.dto.ts).
- */
-export interface CreateMatchApiDto {
-  groupTeamId: number;      // ID del grupo-equipo (por ahora numérico; puede cambiar a UUIDv7)
-  homeTeamId: string;       // UUIDv7
-  awayTeamId: string;       // UUIDv7
-  scheduledStart: string;   // ISO 8601 string (el backend valida como Date)
-  venue: string;
-  status?: string;          // default: 'scheduled'
-}
-
-/**
- * DTO para actualizar un partido vía PUT /match/:id (requiere auth).
- * Basado en UpdateMatchDto (Iceplay-Fropen/src/domain/dto/match/update-match.dto.ts).
- * Usa snake_case para coincidir exactamente con los campos del DTO del backend.
- */
-export interface UpdateMatchApiDto {
-  championship_id?: number;
-  home_team_id?: number;
-  away_team_id?: number;
-  date?: string;            // ISO 8601 string (el backend convierte a Date)
-  state?: number;
-  match_events?: any;       // TODO: sin tipo confirmado para la estructura de eventos
 }
 
 // ─────────────────────────────────────────────
