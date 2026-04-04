@@ -151,8 +151,8 @@ interface FilteredLeague {
                   [alt]="league.country + ' flag'"
                   class="h-auto w-6 rounded-sm"
                 />
-                <h2 class="text-lg font-bold">{{ league.name }}</h2>
-              </div>
+                <h2 class="text-lg font-bold" [routerLink]="['/championship', league.id]">{{ league.name }}</h2>
+              </div>  
               <button matIconButton aria-label="More options">
                 <mat-icon>more_vert</mat-icon>
               </button>
