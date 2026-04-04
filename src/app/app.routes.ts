@@ -29,11 +29,11 @@ export const routes: Routes = [
   //   pathMatch: 'full',
   //   loadComponent: () => import("./features/team/pages/details/team-details.page")
   // },
-  // {
-  //   path: 'match/:matchId',
-  //   loadComponent: () => import('./features/matches/pages/match-details/match-details'),
-  //   title: 'Match Details',
-  // },
+  {
+    path: 'match/:matchId',
+    loadComponent: () => import('./features/matches/pages/match-details/match-details'),
+    title: 'Match Details',
+  },
   {
     path: 'live-match',
     loadComponent: () => import('./features/matches/pages/live-match-logger/live-match-logger'),

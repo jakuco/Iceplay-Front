@@ -5,6 +5,7 @@ import {
   MatchEvent,
   MatchEventViewModel,
   CreateMatchEventDto,
+  UpdateMatchEventDto,
   mapEventToViewModel,
 } from '../models/event.model';
 
@@ -20,44 +21,30 @@ export interface SSEEventRemove {
 
 export type SSEMatchEvent = SSEEventAdd | SSEEventRemove;
 
-@Injectable({ providedIn: 'root' })
+@Injectable({
+  providedIn: 'root',
+})
 export class MatchEventService {
   private api = inject(ApiService);
   private ngZone = inject(NgZone);
 
   /**
-   * Fetch all events for a match.
+   * Backend actual:
+   * - NO expone GET /events
+   * - NO expone GET /matches/:id/events como ruta pública
+   * - SÍ expone SSE en /matches/:matchId/events/stream
    *
-   * TODO:
-   * GET /match/:id/events NO está publicado en routes.ts del backend.
-   * Existe lógica interna `getMatchEvents(matchId)` en el service backend,
-   * pero no hay ruta pública confirmada.
-   *
-   * Por eso este método NO se expone activo aquí.
-   *
-   * Alternativa recomendada:
-   * usar el mecanismo SSE + catch-up vía `Last-Event-ID`, ya soportado
-   * por el backend en el stream.
+   * Por eso la hidratación inicial y los cambios en vivo deben venir por SSE.
    */
-  // getMatchEvents(
-  //   matchId: string,
-  //   homeTeamId: string,
-  //   periodDuration: number
-  // ): Observable<MatchEventViewModel[]> {
-  //   return this.api
-  //     .get<MatchEvent[]>(`match/${matchId}/events`)
-  //     .pipe(
-  //       map((events) => mapEventsToViewModels(events, homeTeamId, periodDuration)),
-  //       catchError((err) => this.handleError('Error fetching events', err))
-  //     );
-  // }
 
   /**
    * Connect to the match event stream via Server-Sent Events (SSE).
    * Uses GET /matches/:matchId/events/stream
    *
-   * Backend confirmado: Iceplay-Fropen/src/presentation/match/routes.ts
-   * Eventos confirmados:
+   * Backend confirmado:
+   *   GET /api/matches/:matchId/events/stream
+   *
+   * Eventos emitidos:
    *   - "add"    => FullEventDTO serializado como JSON
    *   - "remove" => eventId como string plano
    */
@@ -87,17 +74,44 @@ export class MatchEventService {
         });
       });
 
-      source.onerror = (err) => console.error('SSE error:', err);
+      source.onerror = (err) => {
+        console.error('SSE error:', err);
+      };
 
       return () => source.close();
     });
   }
 
   /**
+   * Wrapper de compatibilidad con la rama avanzada.
+   * Permite usar callbacks sobre el SSE real del backend.
+   */
+  subscribeToEvents(
+    matchId: string,
+    homeTeamId: string,
+    periodDuration: number,
+    onAdd: (event: MatchEventViewModel) => void,
+    onDelete: (eventId: string) => void
+  ): () => void {
+    const sub = this.connectToMatchStream(matchId, homeTeamId, periodDuration).subscribe({
+      next: (msg) => {
+        if (msg.type === 'add') onAdd(msg.event);
+        else onDelete(msg.eventId);
+      },
+      error: (err) => console.error('SSE subscription error:', err),
+    });
+
+    return () => sub.unsubscribe();
+  }
+
+  /**
    * Create a match event. Uses POST /matches/:matchId/events
    *
-   * Backend confirmado: POST /:match_id/events (montado en /api/matches)
-   * Response: 201 No Content (sin body — el backend hace res.status(201).end())
+   * Backend confirmado:
+   *   POST /api/matches/:matchId/events
+   *
+   * Response:
+   *   201 No Content
    */
   createEvent(matchId: string, dto: CreateMatchEventDto): Observable<void> {
     return this.api
@@ -108,13 +122,70 @@ export class MatchEventService {
   /**
    * Delete a match event. Uses DELETE /matches/:matchId/events/:eventId
    *
-   * Backend confirmado: DELETE /:match_id/events/:event_id (montado en /api/matches)
-   * Response: 204 No Content (sin body)
+   * Backend confirmado:
+   *   DELETE /api/matches/:matchId/events/:eventId
+   *
+   * Response:
+   *   204 No Content
    */
   deleteEvent(matchId: string, eventId: string): Observable<void> {
     return this.api
       .delete<void>(`matches/${matchId}/events/${eventId}`)
       .pipe(catchError((err) => this.handleError('Error deleting event', err)));
+  }
+
+  // ─────────────────────────────────────────
+  // MÉTODOS DE COMPATIBILIDAD — NO SOPORTADOS POR BACKEND ACTUAL
+  // ─────────────────────────────────────────
+
+  /**
+   * NO existe endpoint público GET /matches/:id/events en el backend actual.
+   * Mantener este método solo evita romper imports de ramas más avanzadas.
+   */
+  getMatchEvents(_matchId: string): Observable<MatchEvent[]> {
+    return throwError(
+      () =>
+        new Error(
+          'GET de eventos no está publicado en el backend actual. Usar SSE en /matches/:matchId/events/stream.'
+        )
+    );
+  }
+
+  /**
+   * NO existe polling real de eventos por HTTP en el backend actual.
+   * Usar SSE.
+   */
+  getMatchEventsWithPolling(_matchId: string, _isLive: boolean): Observable<MatchEvent[]> {
+    return throwError(
+      () =>
+        new Error(
+          'Polling de eventos no soportado por el backend actual. Usar SSE en /matches/:matchId/events/stream.'
+        )
+    );
+  }
+
+  /**
+   * NO existe PATCH /events/:id en el backend actual.
+   */
+  updateEvent(_id: string, _event: UpdateMatchEventDto): Observable<MatchEvent> {
+    return throwError(
+      () =>
+        new Error(
+          'Actualización de eventos no soportada por el backend actual. Solo existen POST y DELETE.'
+        )
+    );
+  }
+
+  /**
+   * NO existe GET /events/:id en el backend actual.
+   */
+  getEventById(_id: string): Observable<MatchEvent> {
+    return throwError(
+      () =>
+        new Error(
+          'GET /events/:id no está publicado en el backend actual.'
+        )
+    );
   }
 
   private handleError(message: string, error: unknown): Observable<never> {

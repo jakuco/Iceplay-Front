@@ -43,7 +43,7 @@ import {
 import type { TypeMatchEvent } from '../../../../core/models/sport-config.model';
 import type { PlayerApiResponse } from '../../../../core/models/player.model';
 
-const DEFAULT_PERIOD_DURATION = 2700; // TODO: conectar a sport.periodDuration
+const DEFAULT_PERIOD_DURATION = 2700;
 
 interface LocalPlayer {
   id: string;
@@ -178,17 +178,27 @@ interface HistoryState {
 
         @if (isEditingTime) {
           <div class="flex items-center gap-1">
-            <input type="number" min="0" max="999" class="time-input"
+            <input
+              type="number"
+              min="0"
+              max="999"
+              class="time-input"
               [value]="editMinutes"
               (input)="editMinutes = +$any($event.target).value"
               (keydown.enter)="saveTime()"
-              (keydown.escape)="cancelTimeEdit()" />
+              (keydown.escape)="cancelTimeEdit()"
+            />
             <span class="text-2xl font-bold">:</span>
-            <input type="number" min="0" max="59" class="time-input"
+            <input
+              type="number"
+              min="0"
+              max="59"
+              class="time-input"
               [value]="editSeconds"
               (input)="editSeconds = +$any($event.target).value"
               (keydown.enter)="saveTime()"
-              (keydown.escape)="cancelTimeEdit()" />
+              (keydown.escape)="cancelTimeEdit()"
+            />
             <button matIconButton color="primary" (click)="saveTime()">
               <mat-icon>check</mat-icon>
             </button>
@@ -197,8 +207,11 @@ interface HistoryState {
             </button>
           </div>
         } @else {
-          <p class="time-display font-mono text-3xl font-bold cursor-pointer"
-             (click)="startTimeEdit()" title="Click para editar">
+          <p
+            class="time-display font-mono text-3xl font-bold cursor-pointer"
+            (click)="startTimeEdit()"
+            title="Click para editar"
+          >
             {{ formattedTime() }}
           </p>
         }
@@ -308,8 +321,10 @@ interface HistoryState {
                       {{ event.timeFormatted }}
                     </td>
                     <td class="px-4 py-3 whitespace-nowrap">
-                      <span class="inline-flex items-center gap-2 text-sm font-semibold"
-                            [style.color]="event.typeColor">
+                      <span
+                        class="inline-flex items-center gap-2 text-sm font-semibold"
+                        [style.color]="event.typeColor"
+                      >
                         <mat-icon class="text-base!">{{ event.typeIcon }}</mat-icon>
                         {{ event.typeLabel }}
                       </span>
@@ -321,8 +336,11 @@ interface HistoryState {
                       {{ event.isHomeTeam ? homeTeam().name : awayTeam().name }}
                     </td>
                     <td class="px-4 py-3 text-right whitespace-nowrap">
-                      <button matIconButton class="h-8! w-8!"
-                              (click)="removeEvent(String(event.id))">
+                      <button
+                        matIconButton
+                        class="h-8! w-8!"
+                        (click)="removeEvent(String(event.id))"
+                      >
                         <mat-icon class="text-lg! text-red-400">delete</mat-icon>
                       </button>
                     </td>
@@ -346,7 +364,9 @@ interface HistoryState {
     .card { background-color: var(--mat-sys-surface-container); }
 
     .score-header {
-      display: flex; flex-direction: column; gap: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
       @media (min-width: 768px) { flex-direction: row; }
     }
 
@@ -356,17 +376,25 @@ interface HistoryState {
     }
 
     .time-display {
-      padding: 4px 12px; border-radius: 8px; transition: background-color 0.2s;
+      padding: 4px 12px;
+      border-radius: 8px;
+      transition: background-color 0.2s;
       &:hover {
         background-color: color-mix(in srgb, var(--mat-sys-primary) 15%, transparent);
       }
     }
 
     .time-input {
-      width: 60px; padding: 8px; font-size: 24px; font-weight: bold;
-      font-family: monospace; text-align: center;
-      border: 2px solid var(--mat-sys-primary); border-radius: 8px;
-      background: var(--mat-sys-surface); color: var(--mat-sys-on-surface);
+      width: 60px;
+      padding: 8px;
+      font-size: 24px;
+      font-weight: bold;
+      font-family: monospace;
+      text-align: center;
+      border: 2px solid var(--mat-sys-primary);
+      border-radius: 8px;
+      background: var(--mat-sys-surface);
+      color: var(--mat-sys-on-surface);
       &:focus { outline: none; }
       &::-webkit-outer-spin-button,
       &::-webkit-inner-spin-button { -webkit-appearance: none; }
@@ -374,10 +402,15 @@ interface HistoryState {
     }
 
     .team-avatar {
-      width: 56px; height: 56px; border-radius: 50%;
-      display: flex; align-items: center; justify-content: center;
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
       background-color: var(--mat-sys-surface-container-high);
-      font-weight: bold; font-size: 1.25rem;
+      font-weight: bold;
+      font-size: 1.25rem;
     }
 
     .table-header {
@@ -390,8 +423,11 @@ interface HistoryState {
     }
 
     .status-chip {
-      padding: 4px 12px; border-radius: 20px;
-      font-size: 12px; font-weight: 600; text-transform: uppercase;
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
       &.status-scheduled { background: color-mix(in srgb,#3b82f6 20%,transparent); color:#60a5fa; }
       &.status-warmup    { background: color-mix(in srgb,#f59e0b 20%,transparent); color:#fbbf24; }
       &.status-live      { background: color-mix(in srgb,#22c55e 20%,transparent); color:#4ade80; }
@@ -402,10 +438,16 @@ interface HistoryState {
     }
 
     .action-btn {
-      padding: 4px 10px; font-size: 11px; font-weight: 600;
-      border-radius: 6px; border: none; cursor: pointer;
+      padding: 4px 10px;
+      font-size: 11px;
+      font-weight: 600;
+      border-radius: 6px;
+      border: none;
+      cursor: pointer;
       transition: all 0.15s ease;
-      display: inline-flex; align-items: center; gap: 4px;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
       &.action-scoring      { background: color-mix(in srgb,#22c55e 20%,transparent); }
       &.action-card         { background: color-mix(in srgb,#eab308 20%,transparent); }
       &.action-substitution { background: color-mix(in srgb,#3b82f6 20%,transparent); }
@@ -571,6 +613,7 @@ export default class MatchControlPage implements OnInit, OnDestroy {
   private loadEventsAndConnect(matchId: string, homeTeamId: string): void {
     const pd = DEFAULT_PERIOD_DURATION;
 
+    this.sseSubscription?.unsubscribe();
     this.sseSubscription = this.matchEventService
       .connectToMatchStream(matchId, homeTeamId, pd)
       .subscribe({
@@ -582,7 +625,9 @@ export default class MatchControlPage implements OnInit, OnDestroy {
             });
             this.recomputeScoreFromEvents();
           } else {
-            this.events.update((list) => list.filter((e) => String(e.id) !== msg.eventId));
+            this.events.update((list) =>
+              list.filter((e) => String(e.id) !== msg.eventId)
+            );
             this.recomputeScoreFromEvents();
           }
         },
@@ -592,8 +637,12 @@ export default class MatchControlPage implements OnInit, OnDestroy {
 
   private recomputeScoreFromEvents(): void {
     const evts = this.events();
-    const homePoints = evts.filter((e) => e.category === 'scoring' && e.isHomeTeam).length;
-    const awayPoints = evts.filter((e) => e.category === 'scoring' && !e.isHomeTeam).length;
+    const homePoints = evts.filter(
+      (e) => e.category === 'scoring' && e.isHomeTeam
+    ).length;
+    const awayPoints = evts.filter(
+      (e) => e.category === 'scoring' && !e.isHomeTeam
+    ).length;
 
     this.homeTeam.update((t) => ({ ...t, score: this.baselineHomeScore + homePoints }));
     this.awayTeam.update((t) => ({ ...t, score: this.baselineAwayScore + awayPoints }));
@@ -775,3 +824,13 @@ export default class MatchControlPage implements OnInit, OnDestroy {
     return p ? `#${p.number} ${p.name}` : '—';
   }
 }
+
+/*
+  Se eliminaron únicamente los merge conflict markers para que el archivo vuelva a ser válido:
+  <<<<<<<
+  =======
+  >>>>>>>
+
+  El bloque comentado legacy que venía después del conflicto estaba truncado en lo que compartiste,
+  así que no era posible reconstruirlo completo sin inventar contenido.
+*/

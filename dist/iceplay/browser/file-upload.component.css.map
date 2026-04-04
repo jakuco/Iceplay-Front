@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["src/app/shared/ui/file-upload/file-upload.component.ts", "file-upload.component.ts"],
+  "sourcesContent": [":host { display: block; }\n    .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); }", ":host {\n  display: block;\n}\n\n.sr-only {\n  position: absolute;\n  width: 1px;\n  height: 1px;\n  overflow: hidden;\n  clip: rect(0, 0, 0, 0);\n}\n/*# sourceMappingURL=data:application/json;charset=utf-8;base64,eyJ2ZXJzaW9uIjozLCJzb3VyY2VSb290IjoiIiwic291cmNlcyI6WyJmaWxlOi8vL0Q6L0Zyb3Blbi9JY2VwbGF5L0ljZXBsYXktRnJvbnQvc3JjL2FwcC9zaGFyZWQvdWkvZmlsZS11cGxvYWQvZmlsZS11cGxvYWQuY29tcG9uZW50LnRzIl0sIm5hbWVzIjpbXSwibWFwcGluZ3MiOiJBQUFBO0VBQVE7OztBQUNKO0VBQVc7RUFBb0I7RUFBWTtFQUFhO0VBQWtCIiwic291cmNlc0NvbnRlbnQiOlsiOmhvc3QgeyBkaXNwbGF5OiBibG9jazsgfVxuICAgIC5zci1vbmx5IHsgcG9zaXRpb246IGFic29sdXRlOyB3aWR0aDogMXB4OyBoZWlnaHQ6IDFweDsgb3ZlcmZsb3c6IGhpZGRlbjsgY2xpcDogcmVjdCgwLDAsMCwwKTsgfSJdfQ== */"],
+  "mappings": ";AAAA;AAAQ,WAAA;ACER;ADDI,CAAA;AAAW,YAAA;AAAoB,SAAA;AAAY,UAAA;AAAa,YAAA;AAAkB,QAAA,KAAA,CAAA,EAAA,CAAA,EAAA,CAAA,EAAA;ACS9E;",
+  "names": []
+}
