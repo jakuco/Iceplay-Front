@@ -4,6 +4,7 @@ import { Observable, forkJoin, of, from, throwError } from 'rxjs';
 import { map, switchMap, mergeMap, toArray, catchError, tap } from 'rxjs/operators';
 import { Team, CreateTeamDto, UpdateTeamDto, TeamProfile } from '../models/team.model';
 import { Player, CreatePlayerDto } from '../models/player.model';
+import { ApiEndpoints } from '@core/constants/endpoints.const';
 
 export interface CsvImportResult {
   teamsImported: number;
@@ -23,7 +24,7 @@ export class TeamService {
    * Get all teams for a championship
    */
   getTeams(championshipId: string): Observable<Team[]> {
-    return this.api.get<Team[]>('teams', { championshipId }).pipe(
+    return this.api.get<Team[]>(ApiEndpoints.TEAMS.BASE, { championshipId }).pipe(
       map((teams) => teams.map((t) => this.parseTeamDates(t))),
       catchError((error) => this.handleError('Error fetching teams', error)),
     );
@@ -33,7 +34,7 @@ export class TeamService {
    * Get teams by organization
    */
   getTeamsByOrganization(organizationId: string): Observable<Team[]> {
-    return this.api.get<Team[]>('teams', { organizationId }).pipe(
+    return this.api.get<Team[]>(ApiEndpoints.TEAMS.BASE, { organizationId }).pipe(
       map((teams) => teams.map((t) => this.parseTeamDates(t))),
       catchError((error) => this.handleError('Error fetching organization teams', error)),
     );
@@ -43,7 +44,7 @@ export class TeamService {
    * Get a single team by ID
    */
   getTeamById(id: string): Observable<Team> {
-    return this.api.get<Team>(`teams/${id}`).pipe(
+    return this.api.get<Team>(ApiEndpoints.TEAMS.BY_ID(id)).pipe(
       map((team) => this.parseTeamDates(team)),
       catchError((error) => this.handleError('Error fetching team', error)),
     );
@@ -83,7 +84,7 @@ export class TeamService {
   createTeam(
     team: CreateTeamDto & { championshipId: string; organizationId: string },
   ): Observable<Team> {
-    return this.api.post<Team>('teams', team).pipe(
+    return this.api.post<Team>(ApiEndpoints.TEAMS.BASE, team).pipe(
       map((t) => this.parseTeamDates(t)),
       catchError((error) => this.handleError('Error creating team', error)),
     );
@@ -93,7 +94,7 @@ export class TeamService {
    * Update a team
    */
   updateTeam(id: string, team: UpdateTeamDto): Observable<Team> {
-    return this.api.patch<Team>(`teams/${id}`, team).pipe(
+    return this.api.patch<Team>(ApiEndpoints.TEAMS.BY_ID(id), team).pipe(
       map((t) => this.parseTeamDates(t)),
       catchError((error) => this.handleError('Error updating team', error)),
     );
@@ -104,7 +105,7 @@ export class TeamService {
    */
   deleteTeam(id: string): Observable<void> {
     return this.api
-      .delete<void>(`teams/${id}`)
+      .delete<void>(ApiEndpoints.TEAMS.BY_ID(id))
       .pipe(catchError((error) => this.handleError('Error deleting team', error)));
   }
 
@@ -112,7 +113,7 @@ export class TeamService {
    * Get players for a team
    */
   getPlayers(teamId: string): Observable<Player[]> {
-    return this.api.get<Player[]>('players', { teamId }).pipe(
+    return this.api.get<Player[]>(ApiEndpoints.PLAYERS.BASE, { teamId }).pipe(
       map((players) => players.map((p) => this.parsePlayerDates(p))),
       catchError((error) => this.handleError('Error fetching players', error)),
     );
@@ -124,7 +125,7 @@ export class TeamService {
   createPlayer(
     player: CreatePlayerDto & { teamId: string; championshipId: string; organizationId: string },
   ): Observable<Player> {
-    return this.api.post<Player>('players', player).pipe(
+    return this.api.post<Player>(ApiEndpoints.PLAYERS.BASE, player).pipe(
       map((p) => this.parsePlayerDates(p)),
       catchError((error) => this.handleError('Error creating player', error)),
     );
@@ -200,7 +201,7 @@ export class TeamService {
         if (!teamName) return of(null);
 
         // Check if team exists
-        return this.api.get<Team[]>('teams', { name: teamName, championshipId }).pipe(
+        return this.api.get<Team[]>(ApiEndpoints.TEAMS.BASE, { name: teamName, championshipId }).pipe(
           switchMap((teams) => {
             let teamObs: Observable<Team>;
             if (teams.length > 0) {
@@ -230,7 +231,7 @@ export class TeamService {
                 if (!playerDoc) return of(null);
 
                 // Check for duplicate player by document
-                return this.api.get<Player[]>('players', { document: playerDoc }).pipe(
+                return this.api.get<Player[]>(ApiEndpoints.PLAYERS.BASE, { document: playerDoc }).pipe(
                   switchMap((existingPlayers) => {
                     if (existingPlayers.length > 0) {
                       result.warnings.push(`Documento duplicado: ${playerDoc}`);

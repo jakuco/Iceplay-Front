@@ -3,6 +3,7 @@ import { ApiService } from './api.service';
 import { Observable, throwError, from, forkJoin, of } from 'rxjs';
 import { map, catchError, mergeMap, toArray, tap, switchMap } from 'rxjs/operators';
 import { Player, CreatePlayerDto, UpdatePlayerDto } from '../models/player.model';
+import { ApiEndpoints } from '@core/constants/endpoints.const';
 
 export interface CsvImportResult {
   playersImported: number;
@@ -21,7 +22,7 @@ export class PlayerService {
    * Get all players for a team
    */
   getPlayersByTeam(teamId: string): Observable<Player[]> {
-    return this.api.get<Player[]>('players', { teamId }).pipe(
+    return this.api.get<Player[]>(ApiEndpoints.PLAYERS.BASE, { teamId }).pipe(
       map((players) => players.map((p) => this.parsePlayerDates(p))),
       catchError((error) => this.handleError('Error fetching players', error)),
     );
@@ -31,7 +32,7 @@ export class PlayerService {
    * Get players by championship
    */
   getPlayersByChampionship(championshipId: string): Observable<Player[]> {
-    return this.api.get<Player[]>('players', { championshipId }).pipe(
+    return this.api.get<Player[]>(ApiEndpoints.PLAYERS.BASE, { championshipId }).pipe(
       map((players) => players.map((p) => this.parsePlayerDates(p))),
       catchError((error) => this.handleError('Error fetching championship players', error)),
     );
@@ -41,7 +42,7 @@ export class PlayerService {
    * Get players by organization
    */
   getPlayersByOrganization(organizationId: string): Observable<Player[]> {
-    return this.api.get<Player[]>('players', { organizationId }).pipe(
+    return this.api.get<Player[]>(ApiEndpoints.PLAYERS.BASE, { organizationId }).pipe(
       map((players) => players.map((p) => this.parsePlayerDates(p))),
       catchError((error) => this.handleError('Error fetching organization players', error)),
     );
@@ -51,7 +52,7 @@ export class PlayerService {
    * Get a single player by ID
    */
   getPlayerById(id: string): Observable<Player> {
-    return this.api.get<Player>(`players/${id}`).pipe(
+    return this.api.get<Player>(ApiEndpoints.PLAYERS.BY_ID(id)).pipe(
       map((player) => this.parsePlayerDates(player)),
       catchError((error) => this.handleError('Error fetching player', error)),
     );
@@ -63,7 +64,7 @@ export class PlayerService {
   createPlayer(
     player: CreatePlayerDto & { teamId: string; championshipId: string; organizationId: string },
   ): Observable<Player> {
-    return this.api.post<Player>('players', player).pipe(
+    return this.api.post<Player>(ApiEndpoints.PLAYERS.BASE, player).pipe(
       map((p) => this.parsePlayerDates(p)),
       catchError((error) => this.handleError('Error creating player', error)),
     );
@@ -73,7 +74,7 @@ export class PlayerService {
    * Update a player
    */
   updatePlayer(id: string, player: UpdatePlayerDto): Observable<Player> {
-    return this.api.patch<Player>(`players/${id}`, player).pipe(
+    return this.api.patch<Player>(ApiEndpoints.PLAYERS.BY_ID(id), player).pipe(
       map((p) => this.parsePlayerDates(p)),
       catchError((error) => this.handleError('Error updating player', error)),
     );
@@ -84,7 +85,7 @@ export class PlayerService {
    */
   deletePlayer(id: string): Observable<void> {
     return this.api
-      .delete<void>(`players/${id}`)
+      .delete<void>(ApiEndpoints.PLAYERS.BY_ID(id))
       .pipe(catchError((error) => this.handleError('Error deleting player', error)));
   }
 

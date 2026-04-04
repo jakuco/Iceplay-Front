@@ -3,6 +3,7 @@ import { ApiService } from './api.service';
 import { Observable, map, catchError, throwError } from 'rxjs';
 import { Match, UpdateMatchDto, UpdateMatchScoreDto } from '../models/match.model';
 import { Team } from '../models/team.model';
+import { ApiEndpoints } from '@core/constants/endpoints.const';
 
 @Injectable({
   providedIn: 'root',
@@ -14,7 +15,7 @@ export class MatchService {
    * Get all matches for a championship
    */
   getMatches(championshipId: string): Observable<Match[]> {
-    return this.api.get<Match[]>('matches', { championshipId }).pipe(
+    return this.api.get<Match[]>(ApiEndpoints.MATCHES.BASE, { championshipId }).pipe(
       map((matches) => matches.map((m) => this.parseMatchDates(m))),
       catchError((error) => this.handleError('Error fetching matches', error)),
     );
@@ -28,7 +29,7 @@ export class MatchService {
     if (championshipId) {
       params.championshipId = championshipId;
     }
-    return this.api.get<Match[]>('matches', params).pipe(
+    return this.api.get<Match[]>(ApiEndpoints.MATCHES.BASE, params).pipe(
       map((matches) => matches.map((m) => this.parseMatchDates(m))),
       catchError((error) => this.handleError('Error fetching matches by date', error)),
     );
@@ -38,7 +39,7 @@ export class MatchService {
    * Get a single match by ID
    */
   getMatchById(id: string): Observable<Match> {
-    return this.api.get<Match>(`matches/${id}`).pipe(
+    return this.api.get<Match>(ApiEndpoints.MATCHES.BY_ID(id)).pipe(
       map((match) => this.parseMatchDates(match)),
       catchError((error) => this.handleError('Error fetching match', error)),
     );
@@ -48,7 +49,7 @@ export class MatchService {
    * Get matches for an organization
    */
   getMatchesByOrganization(organizationId: string): Observable<Match[]> {
-    return this.api.get<Match[]>('matches', { organizationId }).pipe(
+    return this.api.get<Match[]>(ApiEndpoints.MATCHES.BASE, { organizationId }).pipe(
       map((matches) => matches.map((m) => this.parseMatchDates(m))),
       catchError((error) => this.handleError('Error fetching organization matches', error)),
     );
@@ -62,7 +63,7 @@ export class MatchService {
     if (organizationId) {
       params.organizationId = organizationId;
     }
-    return this.api.get<Match[]>('matches', params).pipe(
+    return this.api.get<Match[]>(ApiEndpoints.MATCHES.BASE, params).pipe(
       map((matches) => matches.map((m) => this.parseMatchDates(m))),
       catchError((error) => this.handleError('Error fetching live matches', error)),
     );
@@ -72,7 +73,7 @@ export class MatchService {
    * Create a new match
    */
   createMatch(match: Partial<Match>): Observable<Match> {
-    return this.api.post<Match>('matches', match).pipe(
+    return this.api.post<Match>(ApiEndpoints.MATCHES.BASE, match).pipe(
       map((m) => this.parseMatchDates(m)),
       catchError((error) => this.handleError('Error creating match', error)),
     );
@@ -82,7 +83,7 @@ export class MatchService {
    * Update match details
    */
   updateMatch(id: string, match: UpdateMatchDto): Observable<Match> {
-    return this.api.patch<Match>(`matches/${id}`, match).pipe(
+    return this.api.patch<Match>(ApiEndpoints.MATCHES.BY_ID(id), match).pipe(
       map((m) => this.parseMatchDates(m)),
       catchError((error) => this.handleError('Error updating match', error)),
     );
@@ -92,7 +93,7 @@ export class MatchService {
    * Update match score (for live control)
    */
   updateMatchScore(id: string, score: UpdateMatchScoreDto): Observable<Match> {
-    return this.api.patch<Match>(`matches/${id}`, score).pipe(
+    return this.api.patch<Match>(ApiEndpoints.MATCHES.BY_ID(id), score).pipe(
       map((m) => this.parseMatchDates(m)),
       catchError((error) => this.handleError('Error updating match score', error)),
     );
@@ -103,7 +104,7 @@ export class MatchService {
    */
   deleteMatch(id: string): Observable<void> {
     return this.api
-      .delete<void>(`matches/${id}`)
+      .delete<void>(ApiEndpoints.MATCHES.BY_ID(id))
       .pipe(catchError((error) => this.handleError('Error deleting match', error)));
   }
 

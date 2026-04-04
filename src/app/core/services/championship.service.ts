@@ -24,6 +24,7 @@ import {
 } from '../models/championship.model';
 import { CreateTeamDto, TeamProfile } from '../models/team.model';
 import type { DbId } from '../models/db.types';
+import { ApiEndpoints } from '@core/constants/endpoints.const';
 
 // ─────────────────────────────────────────────────────────────
 // localStorage keys
@@ -94,7 +95,7 @@ export class ChampionshipService {
     return of({ data, total: list.length, page, limit, totalPages });
 
     // 🟢 BACKEND — descomentar cuando el endpoint exista
-    // return this.api.get<PaginatedChampionships>('championships', filters as Record<string, unknown>).pipe(
+    // return this.api.get<PaginatedChampionships>(ApiEndpoints.CHAMPIONSHIPS.BASE, filters as Record<string, unknown>).pipe(
     //   map(r => ({ ...r, data: r.data.map(c => this.parseChampionshipDates(c)) })),
     //   catchError(e => this.handleError('Error fetching championships', e)),
     // );
@@ -104,49 +105,49 @@ export class ChampionshipService {
 
   getChampionships(organizationId?: string): Observable<Championship[]> {
     const params = organizationId ? { organizationId } : {};
-    return this.api.get<Championship[]>('championships', params).pipe(
+    return this.api.get<Championship[]>(ApiEndpoints.CHAMPIONSHIPS.BASE, params).pipe(
       map((championships) => championships.map((c) => this.parseChampionshipDates(c))),
       catchError((error) => this.handleError('Error fetching championships', error)),
     );
   }
 
   getAllChampionships(): Observable<Championship[]> {
-    return this.api.get<Championship[]>('api/championships/all').pipe(
+    return this.api.get<Championship[]>(ApiEndpoints.CHAMPIONSHIPS.ALL).pipe(
       map((championships) => championships.map((c) => this.parseChampionshipDates(c))),
       catchError((error) => this.handleError('Error fetching championships', error)),
     );
   }
 
   getChampionshipDetail(id: number): Observable<Championship> {
-    return this.api.get<Championship>(`api/championships/${id}/detail`).pipe(
+    return this.api.get<Championship>(ApiEndpoints.CHAMPIONSHIPS.DETAIL(`${id}`)).pipe(
       map((championship) => this.parseChampionshipDates(championship)),
       catchError((error) => this.handleError('Error fetching championship details', error)),
     );
   }
 
   getActiveChampionships(): Observable<Championship[]> {
-    return this.api.get<Championship[]>('championships', { status: 'active' }).pipe(
+    return this.api.get<Championship[]>(ApiEndpoints.CHAMPIONSHIPS.BASE, { status: 'active' }).pipe(
       map((championships) => championships.map((c) => this.parseChampionshipDates(c))),
       catchError((error) => this.handleError('Error fetching active championships', error)),
     );
   }
 
   getChampionshipById(id: string): Observable<Championship> {
-    return this.api.get<Championship>(`championships/${id}`).pipe(
+    return this.api.get<Championship>(ApiEndpoints.CHAMPIONSHIPS.BY_ID(id)).pipe(
       map((championship) => this.parseChampionshipDates(championship)),
       catchError((error) => this.handleError('Error fetching championship', error)),
     );
   }
 
   createChampionship(championship: Partial<Championship>): Observable<Championship> {
-    return this.api.post<Championship>('championships', championship).pipe(
+    return this.api.post<Championship>(ApiEndpoints.CHAMPIONSHIPS.BASE, championship).pipe(
       map((c) => this.parseChampionshipDates(c)),
       catchError((error) => this.handleError('Error creating championship', error)),
     );
   }
 
   updateChampionship(id: string, championship: Partial<Championship>): Observable<Championship> {
-    return this.api.patch<Championship>(`championships/${id}`, championship).pipe(
+    return this.api.patch<Championship>(ApiEndpoints.CHAMPIONSHIPS.BY_ID(id), championship).pipe(
       map((c) => this.parseChampionshipDates(c)),
       catchError((error) => this.handleError('Error updating championship', error)),
     );
@@ -154,7 +155,7 @@ export class ChampionshipService {
 
   deleteChampionship(id: string): Observable<void> {
     return this.api
-      .delete<void>(`championships/${id}`)
+      .delete<void>(ApiEndpoints.CHAMPIONSHIPS.BY_ID(id))
       .pipe(catchError((error) => this.handleError('Error deleting championship', error)));
   }
 
@@ -176,7 +177,7 @@ export class ChampionshipService {
     return of(detail);
 
     // 🟢 BACKEND — descomentar cuando el endpoint exista
-    // return this.api.get<ChampionshipDetail>(`championships/${id}`).pipe(
+    // return this.api.get<ChampionshipDetail>(ApiEndpoints.CHAMPIONSHIPS.BY_ID(id)).pipe(
     //   map(c => ({ ...c, ...this.parseChampionshipDates(c) })),
     //   catchError(e => this.handleError('Error fetching championship', e)),
     // );
@@ -210,7 +211,7 @@ export class ChampionshipService {
     return of(champ);
 
     // 🟢 BACKEND — descomentar cuando el endpoint exista
-    // return this.api.post<Championship>('championships', dto).pipe(
+    // return this.api.post<Championship>(ApiEndpoints.CHAMPIONSHIPS.BASE, dto).pipe(
     //   map(c => this.parseChampionshipDates(c)),
     //   catchError(e => this.handleError('Error creating championship', e)),
     // );
@@ -227,7 +228,7 @@ export class ChampionshipService {
     return of(updated);
 
     // 🟢 BACKEND — descomentar cuando el endpoint exista
-    // return this.api.patch<Championship>(`championships/${id}`, dto).pipe(
+    // return this.api.patch<Championship>(ApiEndpoints.CHAMPIONSHIPS.BY_ID(id), dto).pipe(
     //   map(c => this.parseChampionshipDates(c)),
     //   catchError(e => this.handleError('Error updating championship', e)),
     // );
@@ -244,7 +245,7 @@ export class ChampionshipService {
     return of(updated);
 
     // 🟢 BACKEND — descomentar cuando el endpoint exista
-    // return this.api.patch<Championship>(`championships/${id}/status`, dto).pipe(
+    // return this.api.patch<Championship>(ApiEndpoints.CHAMPIONSHIPS.STATUS(id), dto).pipe(
     //   map(c => this.parseChampionshipDates(c)),
     //   catchError(e => this.handleError('Error updating championship status', e)),
     // );
@@ -256,7 +257,7 @@ export class ChampionshipService {
     return of(undefined);
 
     // 🟢 BACKEND — descomentar cuando el endpoint exista
-    // return this.api.delete<void>(`championships/${id}`).pipe(
+    // return this.api.delete<void>(ApiEndpoints.CHAMPIONSHIPS.BY_ID(id)).pipe(
     //   catchError(e => this.handleError('Error deleting championship', e)),
     // );
   }
@@ -269,7 +270,7 @@ export class ChampionshipService {
     return of(phases);
 
     // 🟢 BACKEND — descomentar cuando el endpoint exista
-    // return this.api.get<Phase[]>(`championships/${championshipId}/phases`).pipe(
+    // return this.api.get<Phase[]>(ApiEndpoints.CHAMPIONSHIPS.PHASES(championshipId)).pipe(
     //   catchError(e => this.handleError('Error fetching phases', e)),
     // );
   }
@@ -294,7 +295,7 @@ export class ChampionshipService {
     return of(saved);
 
     // 🟢 BACKEND — descomentar cuando el endpoint exista
-    // return this.api.put<Phase[]>(`championships/${championshipId}/phases`, phases).pipe(
+    // return this.api.put<Phase[]>(ApiEndpoints.CHAMPIONSHIPS.PHASES(championshipId), phases).pipe(
     //   catchError(e => this.handleError('Error saving phases', e)),
     // );
   }
@@ -307,7 +308,7 @@ export class ChampionshipService {
     return of({ championshipId: +championshipId, sportId: 1, rules: [] });
 
     // 🟢 BACKEND — descomentar cuando el endpoint exista
-    // return this.api.get<ChampionshipRulesResponse>(`championships/${championshipId}/rules`).pipe(
+    // return this.api.get<ChampionshipRulesResponse>(ApiEndpoints.CHAMPIONSHIPS.RULES(championshipId)).pipe(
     //   catchError(e => this.handleError('Error fetching rules', e)),
     // );
   }
@@ -343,7 +344,7 @@ export class ChampionshipService {
     return of(current);
 
     // 🟢 BACKEND — descomentar cuando el endpoint exista
-    // return this.api.patch<ChampionshipRulesResponse>(`championships/${championshipId}/rules`, patches).pipe(
+    // return this.api.patch<ChampionshipRulesResponse>(ApiEndpoints.CHAMPIONSHIPS.RULES(championshipId), patches).pipe(
     //   catchError(e => this.handleError('Error updating rules', e)),
     // );
   }
@@ -362,7 +363,7 @@ export class ChampionshipService {
     return of(response);
 
     // 🟢 BACKEND — descomentar cuando el endpoint exista
-    // return this.api.get<ChampionshipRulesResponse>(`sports/${sportId}/default-rules`).pipe(
+    // return this.api.get<ChampionshipRulesResponse>(ApiEndpoints.SPORTS.DEFAULT_RULES(sportId)).pipe(
     //   catchError(e => this.handleError('Error fetching default rules', e)),
     // );
   }
@@ -373,7 +374,7 @@ export class ChampionshipService {
     return of(teams);
 
     // 🟢 BACKEND — descomentar cuando el endpoint exista
-    // return this.api.get<TeamProfile[]>(`championships/${championshipId}/teams`).pipe(
+    // return this.api.get<TeamProfile[]>(ApiEndpoints.CHAMPIONSHIPS.TEAMS(championshipId)).pipe(
     //   catchError(e => this.handleError('Error fetching teams', e)),
     // );
   }
@@ -383,7 +384,7 @@ export class ChampionshipService {
     return of(this.getStoredSocialLinks(championshipId));
 
     // 🟢 BACKEND — descomentar cuando el endpoint exista
-    // return this.api.get<SocialLink[]>(`championships/${championshipId}/social-links`).pipe(
+    // return this.api.get<SocialLink[]>(ApiEndpoints.CHAMPIONSHIPS.SOCIAL_LINKS(championshipId)).pipe(
     //   catchError(e => this.handleError('Error fetching social links', e)),
     // );
   }
@@ -415,7 +416,7 @@ export class ChampionshipService {
     return of(saved);
 
     // 🟢 BACKEND — descomentar cuando el endpoint exista
-    // return this.api.put<SocialLink[]>(`championships/${championshipId}/social-links`, links).pipe(
+    // return this.api.put<SocialLink[]>(ApiEndpoints.CHAMPIONSHIPS.SOCIAL_LINKS(championshipId), links).pipe(
     //   catchError(e => this.handleError('Error saving social links', e)),
     // );
   }
@@ -462,7 +463,7 @@ export class ChampionshipService {
     return of(saved);
 
     // 🟢 BACKEND — descomentar cuando el endpoint exista
-    // return this.api.put<TeamProfile[]>(`championships/${championshipId}/teams`, teams).pipe(
+    // return this.api.put<TeamProfile[]>(ApiEndpoints.CHAMPIONSHIPS.TEAMS(championshipId), teams).pipe(
     //   catchError(e => this.handleError('Error saving teams', e)),
     // );
   }

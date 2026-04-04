@@ -3,6 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { ApiService } from './api.service';
 import { Observable, throwError, from, forkJoin, of } from 'rxjs';
 import { map, catchError, mergeMap, toArray, tap, switchMap } from 'rxjs/operators';
+import { ApiEndpoints } from '@core/constants/endpoints.const';
 
 export interface StatisticsTeamGeneral {
   team_id: number;
@@ -51,7 +52,7 @@ export class StatisticService {
     };
 
     return this.api
-      .get<StatisticsTeamGeneral[]>('api/statistics/teams/general', params)
+      .get<StatisticsTeamGeneral[]>(ApiEndpoints.STATISTICS.TEAMS.GENERAL, params)
       .pipe(catchError((error) => this.handleError('Error fetching teams', error)));
   }
 
@@ -60,7 +61,7 @@ export class StatisticService {
    */
   getTeamsHistoryStatistics(teamsIds: number[]): Observable<StatisticsTeamsHistory[]> {
     const requests: Observable<StatisticsTeamsHistory>[] = teamsIds.map((id) => {
-      return this.api.get<StatisticsTeamsHistory>(`api/statistics/teams/history/${id}`).pipe(
+      return this.api.get<StatisticsTeamsHistory>(ApiEndpoints.STATISTICS.TEAMS.HISTORY(`${id}`)).pipe(
         catchError((error) => {
           return of(null as any); // evitamos romper forkJoin
         }),
@@ -85,7 +86,7 @@ export class StatisticService {
     };
 
     return this.api
-      .get<StatisticsPlayer[]>('api/statistics/players/scorers', params)
+      .get<StatisticsPlayer[]>(ApiEndpoints.STATISTICS.PLAYERS.SCORERS, params)
       .pipe(catchError((error) => this.handleError('Error fetching players scorers', error)));
   }
 
@@ -102,7 +103,7 @@ export class StatisticService {
     };
 
     return this.api
-      .get<StatisticsPlayer[]>('api/statistics/players/goalkeepers', params)
+      .get<StatisticsPlayer[]>(ApiEndpoints.STATISTICS.PLAYERS.GOALKEEPERS, params)
       .pipe(catchError((error) => this.handleError('Error fetching players goalkeepers', error)));
   }
 
@@ -119,7 +120,7 @@ export class StatisticService {
     };
 
     return this.api
-      .get<StatisticsPlayer[]>('api/statistics/players/yellow-cards', params)
+      .get<StatisticsPlayer[]>(ApiEndpoints.STATISTICS.PLAYERS.YELLOW_CARDS, params)
       .pipe(catchError((error) => this.handleError('Error fetching players yellow cards', error)));
   }
 
@@ -136,7 +137,7 @@ export class StatisticService {
     };
 
     return this.api
-      .get<StatisticsPlayer[]>('api/statistics/players/red-cards', params)
+      .get<StatisticsPlayer[]>(ApiEndpoints.STATISTICS.PLAYERS.RED_CARDS, params)
       .pipe(catchError((error) => this.handleError('Error fetching players red cards', error)));
   }
 

@@ -8,6 +8,7 @@ import {
   mapEventToViewModel,
   mapEventsToViewModels,
 } from '../models/event.model';
+import { ApiEndpoints } from '@core/constants/endpoints.const';
 
 export interface SSEEventAdd    { type: 'add';    event: MatchEventViewModel; }
 export interface SSEEventRemove { type: 'remove'; eventId: string; }
@@ -24,7 +25,7 @@ export class MatchEventService {
     periodDuration: number
   ): Observable<MatchEventViewModel[]> {
     return this.api
-      .get<MatchEvent[]>(`matches/${matchId}/events`)
+      .get<MatchEvent[]>(ApiEndpoints.MATCHES.EVENTS(matchId))
       .pipe(
         map((events) => mapEventsToViewModels(events, homeTeamId, periodDuration)),
         catchError((err) => this.handleError('Error fetching events', err))
@@ -65,13 +66,13 @@ export class MatchEventService {
 
   createEvent(matchId: string, dto: CreateMatchEventDto): Observable<void> {
     return this.api
-      .post<void>(`matches/${matchId}/events`, dto)
+      .post<void>(ApiEndpoints.MATCHES.EVENTS(matchId), dto)
       .pipe(catchError((err) => this.handleError('Error creating event', err)));
   }
 
   deleteEvent(matchId: string, eventId: string): Observable<void> {
     return this.api
-      .delete<void>(`matches/${matchId}/events/${eventId}`)
+      .delete<void>(ApiEndpoints.MATCHES.EVENT_BY_ID(matchId, eventId))
       .pipe(catchError((err) => this.handleError('Error deleting event', err)));
   }
 
