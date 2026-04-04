@@ -88,11 +88,11 @@ const routes: Routes = [
       //   loadComponent: () => import('./pages/matches/matches-list.page'),
       //   title: 'Partidos - Admin',
       // },
-      // {
-      //   path: 'match/:matchId/control',
-      //   loadComponent: () => import('./pages/match-control/match-control.page'),
-      //   title: 'Control de Partido - Admin',
-      // },
+      {
+        path: 'match/:matchId/control',
+        loadComponent: () => import('./pages/match-control/match-control.page'),
+        title: 'Control de Partido - Admin',
+      },
       // {
       //   path: 'standings',
       //   loadComponent: () => import('./pages/standings/standings.page'),

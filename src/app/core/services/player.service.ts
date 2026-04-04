@@ -6,7 +6,7 @@ import {
   PlayerApiResponse,
   CreatePlayerApiDto,
   UpdatePlayerApiDto,
-  // Los tipos legacy se importan solo para no romper el CSV import existente
+  // Legacy type kept only to avoid breaking old CSV-related frontend flows
   CreatePlayerDto,
 } from '../models/player.model';
 
@@ -39,10 +39,12 @@ export class PlayerService {
 
   /**
    * Get players (paginated). Uses GET /player?page=&limit=
-   * El backend solo acepta page y limit como query params.
+   *
+   * TODO:
+   * confirmar si el backend devuelve array plano o wrapper paginado.
+   * Se tipa como array porque así lo estás consumiendo en el front actual.
    */
   getPlayers(page = 1, limit = 10): Observable<PlayerApiResponse[]> {
-    // TODO: confirmar si el backend devuelve array plano o wrapper paginado.
     return this.api.get<PlayerApiResponse[]>('player', { page, limit }).pipe(
       catchError((err) => this.handleError('Error fetching players', err)),
     );
@@ -60,10 +62,8 @@ export class PlayerService {
   /**
    * Create a new player. Uses POST /player (requires auth).
    *
-   * ATENCIÓN: el backend CreatePlayerDto usa campos snake_case distintos al frontend:
-   *   · `name`     (no firstName)    · `lastname` (no lastName)
-   *   · `team_id`  (número)          · `primary_position` (no positionId)
-   * Usar CreatePlayerApiDto para garantizar el contrato correcto.
+   * IMPORTANTE:
+   * usar CreatePlayerApiDto para respetar el contrato real del backend.
    */
   createPlayer(player: CreatePlayerApiDto): Observable<PlayerApiResponse> {
     return this.api.post<PlayerApiResponse>('player', player).pipe(
@@ -73,8 +73,6 @@ export class PlayerService {
 
   /**
    * Update a player. Uses PUT /player/:id (requires auth).
-   *
-   * Antes: api.patch — cambiado a api.put según routes.ts del backend.
    */
   updatePlayer(id: string, player: UpdatePlayerApiDto): Observable<PlayerApiResponse> {
     return this.api.put<PlayerApiResponse>(`player/${id}`, player).pipe(
@@ -91,26 +89,22 @@ export class PlayerService {
       .pipe(catchError((err) => this.handleError('Error deleting player', err)));
   }
 
-  // ─── Métodos no confirmados — TODO ───────────────────────────────────────────
+  // ─── Métodos no confirmados — wrappers de compatibilidad ──────────────────
   //
   // El controlador de GET /player solo acepta `page` y `limit`.
   // Los filtros teamId, championshipId y organizationId NO están publicados
-  // como query params en el backend actual. Se dejan comentados hasta confirmar.
+  // como query params en el backend actual.
   //
-  // Alternativa recomendada mientras no hay endpoint:
-  //   · Obtener jugadores vía lista paginada y filtrar en cliente (solo viable
-  //     si el conjunto es pequeño) o esperar endpoint dedicado.
-  // ─────────────────────────────────────────────────────────────────────────────
+  // Se mantienen como wrappers provisionales porque varias vistas del front
+  // todavía dependen de ellos. Si el backend ignora el filtro, puede devolver
+  // todos los jugadores.
+  // ───────────────────────────────────────────────────────────────────────────
 
   /**
    * Get players by team.
-   * TODO: sin endpoint confirmado — GET /player no acepta teamId como query param.
-   *       Verificar si el backend planea añadir este filtro.
+   * TODO: sin endpoint confirmado — GET /player no acepta teamId como query param documentado.
    */
   getPlayersByTeam(teamId: string): Observable<PlayerApiResponse[]> {
-    // PROVISIONAL: se envía teamId como query param aunque no está documentado.
-    // Si el backend lo ignora, devolverá todos los jugadores paginados.
-    // Sustituir por endpoint real cuando sea confirmado.
     return this.api.get<PlayerApiResponse[]>('player', { teamId }).pipe(
       catchError((err) => this.handleError('Error fetching players by team', err)),
     );
@@ -118,50 +112,44 @@ export class PlayerService {
 
   /**
    * Get players by championship.
-   * TODO: sin endpoint confirmado — championshipId no es un query param
-   *       documentado en GET /player.
+   * TODO: sin endpoint confirmado — championshipId no está documentado.
    */
-  // getPlayersByChampionship(championshipId: string): Observable<PlayerApiResponse[]> {
-  //   return this.api.get<PlayerApiResponse[]>('player', { championshipId }).pipe(
-  //     catchError((err) => this.handleError('Error fetching championship players', err)),
-  //   );
-  // }
+  getPlayersByChampionship(championshipId: string): Observable<PlayerApiResponse[]> {
+    return this.api.get<PlayerApiResponse[]>('player', { championshipId }).pipe(
+      catchError((err) => this.handleError('Error fetching championship players', err)),
+    );
+  }
 
   /**
    * Get players by organization.
-   * TODO: sin endpoint confirmado — organizationId no es un query param
-   *       documentado en GET /player.
+   * TODO: sin endpoint confirmado — organizationId no está documentado.
    */
-  // getPlayersByOrganization(organizationId: string): Observable<PlayerApiResponse[]> {
-  //   return this.api.get<PlayerApiResponse[]>('player', { organizationId }).pipe(
-  //     catchError((err) => this.handleError('Error fetching organization players', err)),
-  //   );
-  // }
+  getPlayersByOrganization(organizationId: string): Observable<PlayerApiResponse[]> {
+    return this.api.get<PlayerApiResponse[]>('player', { organizationId }).pipe(
+      catchError((err) => this.handleError('Error fetching organization players', err)),
+    );
+  }
 
-  // ─── CSV Import ───────────────────────────────────────────────────────────────
+  // ─── CSV Import ────────────────────────────────────────────
   //
-  // Clasificación de operaciones internas:
-  //   · createPlayer() → CONFIRMADA la ruta, pero el DTO de entrada difiere mucho
-  //     del frontend. El CSV usa campos camelCase (firstName, lastName) que NO
-  //     coinciden con el backend (name, lastname, team_id numérico, player_id).
-  //     La creación vía CSV está ROTA hasta que se mapeen los campos correctamente.
-  //   · Búsqueda por `document` → NO confirmada (no existe query param document).
-  //   · teamId en createPlayer → el backend espera team_id: number, no string.
+  // Clasificación:
+  //   · createPlayer() → CONFIRMADA la ruta, pero el DTO real del backend
+  //     usa snake_case y campos distintos.
+  //   · búsqueda por `document` → NO confirmada
+  //   · teamId/championshipId/organizationId actuales del CSV NO coinciden con
+  //     el contrato real del backend
   //
-  // TODO Fase 3: reescribir importPlayersFromCsv con CreatePlayerApiDto real.
-  // ─────────────────────────────────────────────────────────────────────────────
+  // Se mantiene provisional para no romper flujos existentes, pero está
+  // documentado como pendiente de reescritura.
+  // ───────────────────────────────────────────────────────────
 
   /**
    * Import players from CSV.
    * CSV format: nombre,apellido,numero,posicionId,fecha_nacimiento,altura,peso
    *
-   * AVISO: Este método está PARCIALMENTE ROTO hasta que se actualice el DTO:
-   *   · El DTO que se construye usa camelCase (firstName, lastName, etc.)
-   *     pero el backend espera snake_case (name, lastname, team_id numérico).
-   *   · El campo teamId se envía como string pero el backend espera team_id: number.
-   *   · No se valida duplicados por documento (no hay query param `document`).
-   *
-   * TODO Fase 3: reemplazar el DTO interno por CreatePlayerApiDto.
+   * AVISO:
+   * Este método sigue siendo provisional hasta que se reescriba con
+   * CreatePlayerApiDto real.
    */
   importPlayersFromCsv(
     teamId: string,
@@ -172,7 +160,10 @@ export class PlayerService {
     const lines = csvContent.split('\n').filter((line) => line.trim() !== '');
     if (lines.length < 2) {
       return throwError(
-        () => new Error('El archivo CSV debe tener al menos una fila de encabezado y una fila de datos'),
+        () =>
+          new Error(
+            'El archivo CSV debe tener al menos una fila de encabezado y una fila de datos',
+          ),
       );
     }
 
@@ -189,7 +180,9 @@ export class PlayerService {
         const cols = line.split(',').map((col) => col.trim());
 
         if (cols.length < 4) {
-          result.errors.push(`Línea ${index + 2}: Formato inválido. Se requieren al menos 4 columnas`);
+          result.errors.push(
+            `Línea ${index + 2}: Formato inválido. Se requieren al menos 4 columnas`,
+          );
           return of(null);
         }
 
@@ -199,7 +192,9 @@ export class PlayerService {
         const positionId = parseInt(cols[3] || '1', 10);
 
         if (!firstName || !lastName || !number || number < 1 || number > 99) {
-          result.errors.push(`Línea ${index + 2}: Datos inválidos (nombre, apellido o número)`);
+          result.errors.push(
+            `Línea ${index + 2}: Datos inválidos (nombre, apellido o número)`,
+          );
           return of(null);
         }
 
@@ -209,9 +204,9 @@ export class PlayerService {
 
         return of(null).pipe(
           switchMap(() => {
-            // TODO Fase 3: migrar a CreatePlayerApiDto real.
-            // El backend espera: name, lastname, team_id (number), player_id (number), etc.
-            // Este payload actual NO es compatible con el backend y fallará.
+            // TODO Fase 3:
+            // Reemplazar por CreatePlayerApiDto real.
+            // El backend espera campos snake_case distintos.
             const legacyPayload = {
               teamId,
               championshipId,
@@ -223,12 +218,14 @@ export class PlayerService {
               birthDate: birthDate ?? new Date('2000-01-01'),
               height,
               weight,
-            } as any; // PROVISIONAL — no compatible con CreatePlayerApiDto
+            } as unknown as CreatePlayerDto;
 
             return this.api.post<PlayerApiResponse>('player', legacyPayload).pipe(
               tap(() => result.playersImported++),
               catchError((error) => {
-                result.errors.push(`Error al crear jugador ${firstName} ${lastName}: ${error.message}`);
+                result.errors.push(
+                  `Error al crear jugador ${firstName} ${lastName}: ${error.message}`,
+                );
                 return of(null);
               }),
             );
@@ -247,15 +244,14 @@ export class PlayerService {
   // ─── Helpers ──────────────────────────────────────────────
 
   /**
-   * Convierte las fechas string del PlayerApiResponse a objetos Date.
-   * Útil cuando se necesita un Player (con Date) en lugar de PlayerApiResponse (con string).
-   * Se mantiene para compatibilidad con componentes que usan el tipo Player.
+   * Convierte fechas string a Date cuando un componente legacy lo necesita.
+   * Se mantiene por compatibilidad.
    */
   parsePlayerDates<T extends {
-    birthDate?: any;
-    suspensionEndDate?: any;
-    createdAt?: any;
-    updatedAt?: any;
+    birthDate?: unknown;
+    suspensionEndDate?: unknown;
+    createdAt?: unknown;
+    updatedAt?: unknown;
   }>(player: T): T {
     if (player.birthDate && typeof player.birthDate === 'string') {
       player.birthDate = new Date(player.birthDate);
@@ -279,6 +275,7 @@ export class PlayerService {
   private parseDate(dateStr: string): Date | undefined {
     if (!dateStr) return undefined;
     if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) return new Date(dateStr);
+
     const parts = dateStr.split(/[-\/]/);
     if (parts.length === 3) {
       const day = parseInt(parts[0], 10);
@@ -286,12 +283,15 @@ export class PlayerService {
       const year = parseInt(parts[2], 10);
       return new Date(year, month, day);
     }
+
     const parsed = new Date(dateStr);
     return isNaN(parsed.getTime()) ? undefined : parsed;
   }
 
-  private handleError(message: string, error: any): Observable<never> {
+  private handleError(message: string, error: unknown): Observable<never> {
     console.error(message, error);
-    return throwError(() => new Error(`${message}: ${error.message || error}`));
+    const errorMessage =
+      error instanceof Error ? error.message : String(error ?? 'Unknown error');
+    return throwError(() => new Error(`${message}: ${errorMessage}`));
   }
 }

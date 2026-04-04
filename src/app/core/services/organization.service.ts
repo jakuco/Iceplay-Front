@@ -1,6 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { ApiService } from './api.service';
 import { Observable } from 'rxjs';
+import { ApiEndpoints } from '@core/constants/endpoints.const';
 
 export interface Organization {
   id: string;
@@ -27,18 +28,18 @@ export class OrganizationService {
   private api = inject(ApiService);
 
   getOrganizations(): Observable<Organization[]> {
-    return this.api.get<Organization[]>('organizations');
+    return this.api.get<Organization[]>(ApiEndpoints.ORGANIZATIONS.BASE);
   }
 
   getOrganizationById(id: string): Observable<Organization> {
-    return this.api.get<Organization>(`organizations/${id}`);
+    return this.api.get<Organization>(ApiEndpoints.ORGANIZATIONS.BY_ID(id));
   }
 
   createOrganization(org: Omit<Organization, 'id'>): Observable<Organization> {
-    return this.api.post<Organization>('organizations', org);
+    return this.api.post<Organization>(ApiEndpoints.ORGANIZATIONS.BASE, org);
   }
 
   updateOrganization(id: string, org: Partial<Organization>): Observable<Organization> {
-    return this.api.patch<Organization>(`organizations/${id}`, org);
+    return this.api.patch<Organization>(ApiEndpoints.ORGANIZATIONS.BY_ID(id), org);
   }
 }

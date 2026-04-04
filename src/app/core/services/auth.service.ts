@@ -3,6 +3,7 @@ import { ApiService } from './api.service';
 import { firstValueFrom } from 'rxjs';
 import { Router } from '@angular/router';
 import { User } from '../models/user.model';
+import { ApiEndpoints } from '@core/constants/endpoints.const';
 
 @Injectable({
   providedIn: 'root',
@@ -94,11 +95,9 @@ export class AuthService {
     this.isLoading.set(true);
     this.error.set(null);
 
-    //TODO: Implement login and remove mock
-
     try {
       const response = await firstValueFrom(
-        this.api.post<{ user: any; token: string }>('auth/login', {
+        this.api.post<{ user: any; token: string }>(ApiEndpoints.AUTH.LOGIN, {
           email: credentials.email,
           password: credentials.password,
         })

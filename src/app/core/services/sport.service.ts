@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import { Observable, of } from 'rxjs';
 import { SportOption } from '../models/sport-config.model';
+import { ApiEndpoints } from '@core/constants/endpoints.const';
 
 // ─────────────────────────────────────────────────────────────
 // localStorage key
@@ -37,7 +38,7 @@ export class SportService {
     }
 
     // 🟢 BACKEND — descomentar cuando el endpoint exista
-    // return this.api.get<SportOption[]>('sports');
+    // return this.api.get<SportOption[]>(ApiEndpoints.SPORTS.BASE);
   }
 
   getById(id: number): Observable<SportOption | null> {
@@ -47,6 +48,6 @@ export class SportService {
     return of(list.find(s => s.id === id) ?? null);
 
     // 🟢 BACKEND — descomentar cuando el endpoint exista
-    // return this.api.get<SportOption>(`sports/${id}`);
+    // return this.api.get<SportOption>(ApiEndpoints.SPORTS.BY_ID(id));
   }
 }
