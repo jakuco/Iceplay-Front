@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["src/app/features/user/page/championship-detail.page.ts"],
+  "sourcesContent": ["import { ChangeDetectionStrategy, Component } from '@angular/core';\r\n\r\n@Component({\r\n  selector: 'app-championship-detail',\r\n  changeDetection: ChangeDetectionStrategy.OnPush,\r\n  imports: [],\r\n  template: `\r\n    <div class=\"page-container\">\r\n      <h1>Championship Detail</h1>\r\n    </div>\r\n  `,\r\n  styles: `\r\n    .page-container {\r\n      padding: 1.5rem;\r\n      max-width: 1200px;\r\n      margin: 0 auto;\r\n    }\r\n  `,\r\n})\r\nexport default class ChampionshipDetailPage {}\r\n"],
+  "mappings": ";;;;;;;;;;;;;AAmBA,IAAqB,yBAArB,MAAqB,wBAAsB;;qCAAtB,yBAAsB;EAAA;yEAAtB,yBAAsB,WAAA,CAAA,CAAA,yBAAA,CAAA,GAAA,OAAA,GAAA,MAAA,GAAA,QAAA,CAAA,CAAA,GAAA,gBAAA,CAAA,GAAA,UAAA,SAAA,gCAAA,IAAA,KAAA;AAAA,QAAA,KAAA,GAAA;AAZvC,MAAA,4BAAA,GAAA,OAAA,CAAA,EAA4B,GAAA,IAAA;AACtB,MAAA,iBAAA,GAAA,qBAAA;AAAmB,MAAA,0BAAA,EAAK;;;;;sEAWb,wBAAsB,CAAA;UAjB1C;uBACW,2BAAyB,iBAClB,wBAAwB,QAAM,SACtC,CAAA,GAAE,UACD;;;;KAIT,QAAA,CAAA,4UAAA,EAAA,CAAA;;;;6EASkB,wBAAsB,EAAA,WAAA,0BAAA,UAAA,0DAAA,YAAA,GAAA,CAAA;AAAA,GAAA;",
+  "names": []
+}

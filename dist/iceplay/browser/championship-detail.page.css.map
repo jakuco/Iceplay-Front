@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["src/app/features/user/page/championship-detail.page.ts", "championship-detail.page.ts"],
+  "sourcesContent": ["\n    .page-container {\n      padding: 1.5rem;\n      max-width: 1200px;\n      margin: 0 auto;\n    }\n  ", ".page-container {\n  padding: 1.5rem;\n  max-width: 1200px;\n  margin: 0 auto;\n}\n/*# sourceMappingURL=data:application/json;charset=utf-8;base64,eyJ2ZXJzaW9uIjozLCJzb3VyY2VSb290IjoiIiwic291cmNlcyI6WyJmaWxlOi8vL0Q6L0Zyb3Blbi9JY2VwbGF5L0ljZXBsYXktRnJvbnQvc3JjL2FwcC9mZWF0dXJlcy91c2VyL3BhZ2UvY2hhbXBpb25zaGlwLWRldGFpbC5wYWdlLnRzIl0sIm5hbWVzIjpbXSwibWFwcGluZ3MiOiJBQUNJO0VBQ0U7RUFDQTtFQUNBIiwic291cmNlc0NvbnRlbnQiOlsiXG4gICAgLnBhZ2UtY29udGFpbmVyIHtcbiAgICAgIHBhZGRpbmc6IDEuNXJlbTtcbiAgICAgIG1heC13aWR0aDogMTIwMHB4O1xuICAgICAgbWFyZ2luOiAwIGF1dG87XG4gICAgfVxuICAiXX0= */"],
+  "mappings": ";AACI,CAAA;AACE,WAAA;AACA,aAAA;AACA,UAAA,EAAA;ACAN;",
+  "names": []
+}
