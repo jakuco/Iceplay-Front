@@ -13,24 +13,24 @@ import { MatNativeDateModule } from '@angular/material/core';
 import { MatInputModule } from '@angular/material/input';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { RouterLink } from '@angular/router';
-import { forkJoin, of } from 'rxjs';
+import { forkJoin, of, type Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { I18nService } from '../../../../core/services/i18n.service';
 import { TranslatePipe } from '../../../../core/pipes/translate.pipe';
 import { MatchService } from '../../../../core/services/match.service';
 import { ChampionshipService } from '../../../../core/services/championship.service';
 import { TeamService } from '../../../../core/services/team.service';
-import { Match as BackendMatch } from '../../../../core/models/match.model';
+import type { MatchApiResponse } from '../../../../core/models/match.model';
 import {
   ChampionshipListItem,
   ChampionshipStatus,
 } from '../../../../core/models/championship.model';
-import { Team } from '../../../../core/models/team.model';
+import type { TeamApiResponse } from '../../../../core/models/team.model';
 
-/** Partido con campeonato (el API no incluye championshipId en `Match`). */
+/** Partido con campeonato. */
 interface MatchWithChampionship {
   championshipId: string;
-  match: BackendMatch;
+  match: MatchApiResponse;
 }
 
 interface DayOption {
@@ -316,7 +316,6 @@ export default class MatchesList {
     startDate.setDate(selected.getDate() - daysBeforeCenter);
 
     const days: DayOption[] = [];
-    // Use locale-aware day names based on current language
     const locale = this.i18nService.getLocale();
     const dayNames = this.getDayNames(locale);
     const monthNames = this.getMonthNames(locale);
@@ -337,9 +336,6 @@ export default class MatchesList {
     return days;
   });
 
-  /**
-   * Formatted month and year for header, automatically translated based on current language
-   */
   formattedMonthYear = computed(() => {
     const date = this.selectedDate();
     return this.i18nService.formatDate(date, { month: 'long', year: 'numeric' });
@@ -351,69 +347,68 @@ export default class MatchesList {
 
   private allMatches = signal<MatchWithChampionship[]>([]);
   private allChampionships = signal<ChampionshipListItem[]>([]);
-  private allTeams = signal<Team[]>([]);
+  private allTeams = signal<TeamApiResponse[]>([]);
   isLoading = signal(false);
 
   constructor() {
-    // Load initial data
     effect(() => {
       this.loadMatches();
     });
   }
 
-  // Filter leagues and matches by selected date
   filteredLeagues = computed<FilteredLeague[]>(() => {
     const selectedDateStr = this.formatDateToISO(this.selectedDate());
     const matches = this.allMatches();
     const championships = this.allChampionships();
     const teams = this.allTeams();
 
-    // Group matches by championship
     const matchesByChampionship = new Map<string, DisplayMatch[]>();
 
     for (const { championshipId, match } of matches) {
-      const start = match.scheduledStart;
-      if (!start) continue;
-      const startDate = start instanceof Date ? start : new Date(start);
+      const matchDateSource = match.scheduledDate;
+      if (!matchDateSource) continue;
+
+      const startDate = new Date(matchDateSource as string);
+
+      if (isNaN(startDate.getTime())) continue;
+
       const matchDate = this.formatDateToISO(startDate);
-      if (matchDate === selectedDateStr) {
-        const homeTeam = teams.find((t) => String(t.id) === String(match.homeTeamId));
-        const awayTeam = teams.find((t) => String(t.id) === String(match.awayTeamId));
+      if (matchDate !== selectedDateStr) continue;
 
-        if (!homeTeam || !awayTeam) continue;
+      const homeTeam = teams.find((t) => String(t.id) === String(match.homeTeamId));
+      const awayTeam = teams.find((t) => String(t.id) === String(match.awayTeamId));
+      if (!homeTeam || !awayTeam) continue;
 
-        const championship = championships.find((c) => String(c.id) === championshipId);
-        if (!championship) continue;
+      const championship = championships.find((c) => String(c.id) === championshipId);
+      if (!championship) continue;
 
-        const displayMatch: DisplayMatch = {
-          id: String(match.id),
-          homeTeam: {
-            id: String(homeTeam.id),
-            name: homeTeam.name,
-            logo: homeTeam.logoUrl || 'https://via.placeholder.com/50',
-          },
-          awayTeam: {
-            id: String(awayTeam.id),
-            name: awayTeam.name,
-            logo: awayTeam.logoUrl || 'https://via.placeholder.com/50',
-          },
-          status: this.mapMatchStatus(match.status),
-          time: this.formatTimeFromDate(startDate),
-          homeScore: match.homeScore,
-          awayScore: match.awayScore,
-          minute: this.liveMinuteLabel(match),
-          date: matchDate,
-          league: championship.name,
-        };
+      const displayMatch: DisplayMatch = {
+        id: String(match.id),
+        homeTeam: {
+          id: String(homeTeam.id),
+          name: homeTeam.name,
+          logo: homeTeam.logoUrl || 'https://via.placeholder.com/50',
+        },
+        awayTeam: {
+          id: String(awayTeam.id),
+          name: awayTeam.name,
+          logo: awayTeam.logoUrl || 'https://via.placeholder.com/50',
+        },
+        status: this.mapMatchStatus(match.status),
+        time: match.scheduledTime || this.formatTimeFromDate(startDate),
+        homeScore: match.homeScore,
+        awayScore: match.awayScore,
+        minute: this.liveMinuteLabel(match),
+        date: matchDate,
+        league: championship.name,
+      };
 
-        if (!matchesByChampionship.has(championshipId)) {
-          matchesByChampionship.set(championshipId, []);
-        }
-        matchesByChampionship.get(championshipId)!.push(displayMatch);
+      if (!matchesByChampionship.has(championshipId)) {
+        matchesByChampionship.set(championshipId, []);
       }
+      matchesByChampionship.get(championshipId)!.push(displayMatch);
     }
 
-    // Convert to FilteredLeague format
     const filtered: FilteredLeague[] = [];
     for (const [championshipId, championshipMatches] of matchesByChampionship) {
       const championship = championships.find((c) => String(c.id) === championshipId);
@@ -422,10 +417,9 @@ export default class MatchesList {
       filtered.push({
         id: championshipId,
         name: championship.name,
-        country: 'Ecuador', // Default, could be from organization
+        country: 'Ecuador',
         flagUrl: 'https://flagcdn.com/w40/ec.png',
         matches: championshipMatches.sort((a, b) => {
-          // Sort by scheduled time
           const timeA = a.time || '00:00';
           const timeB = b.time || '00:00';
           return timeA.localeCompare(timeB);
@@ -438,6 +432,7 @@ export default class MatchesList {
 
   private loadMatches(): void {
     this.isLoading.set(true);
+
     this.championshipService
       .getAll({ status: ChampionshipStatus.Active, limit: 500, page: 1 })
       .subscribe({
@@ -455,20 +450,25 @@ export default class MatchesList {
           const organizationIds = [
             ...new Set(championships.map((c) => String(c.organization.id))),
           ];
-          const teamObservables = organizationIds.map((orgId) =>
-            this.teamService.getTeamsByOrganization(orgId),
+
+          const teamObservables: Observable<TeamApiResponse[]>[] = organizationIds.map((orgId) =>
+            this.teamService.getAllTeams({ organizationId: orgId }),
           );
 
-          const teams$ =
-            teamObservables.length > 0 ? forkJoin(teamObservables) : of<Team[][]>([]);
+          const teamsObservable: Observable<TeamApiResponse[][]> =
+            teamObservables.length > 0 ? forkJoin(teamObservables) : of([]);
 
-          teams$.subscribe({
-            next: (teamsArrays: Team[][]) => {
+          teamsObservable.subscribe({
+            next: (teamsArrays) => {
               const allTeams = teamsArrays.flat();
               this.allTeams.set(allTeams);
 
-              const matchObservables = championships.map((c) =>
-                this.matchService.getMatches(String(c.id)).pipe(
+              const matchObservables: Observable<MatchWithChampionship[]>[] = championships.map((c) =>
+                this.matchService.searchMatches({
+                  championship_id: String(c.id),
+                  page: 1,
+                  limit: 500,
+                }).pipe(
                   map((matches) =>
                     matches.map(
                       (m): MatchWithChampionship => ({
@@ -480,13 +480,11 @@ export default class MatchesList {
                 ),
               );
 
-              const matches$ =
-                matchObservables.length > 0
-                  ? forkJoin(matchObservables)
-                  : of<MatchWithChampionship[][]>([]);
+              const matchesObservable: Observable<MatchWithChampionship[][]> =
+                matchObservables.length > 0 ? forkJoin(matchObservables) : of([]);
 
-              matches$.subscribe({
-                next: (matchesArrays: MatchWithChampionship[][]) => {
+              matchesObservable.subscribe({
+                next: (matchesArrays) => {
                   this.allMatches.set(matchesArrays.flat());
                   this.isLoading.set(false);
                 },
@@ -517,15 +515,15 @@ export default class MatchesList {
     });
   }
 
-  /** Minuto aproximado en vivo si hay `actualStartTime`; si no, sin etiqueta. */
-  private liveMinuteLabel(match: BackendMatch): string | undefined {
+  private liveMinuteLabel(match: MatchApiResponse): string | undefined {
     if (match.status !== 'live' || !match.actualStartTime) {
       return undefined;
     }
-    const start =
-      match.actualStartTime instanceof Date
-        ? match.actualStartTime
-        : new Date(match.actualStartTime);
+
+    const start = new Date(match.actualStartTime as string);
+
+    if (isNaN(start.getTime())) return undefined;
+
     return Math.max(0, Math.floor((Date.now() - start.getTime()) / 60_000)).toString();
   }
 
@@ -564,7 +562,6 @@ export default class MatchesList {
     return date.toISOString().split('T')[0];
   }
 
-  // Determine if day should be hidden on mobile (only show center 3)
   shouldHideDay(index: number): boolean {
     const centerIndex = Math.floor(this.TOTAL_DAYS / 2);
     const range = Math.floor(this.VISIBLE_MOBILE / 2);
@@ -599,11 +596,8 @@ export default class MatchesList {
     this.selectedDate.set(newDate);
   }
 
-  /**
-   * Gets abbreviated day names based on locale
-   */
   private getDayNames(locale: string): string[] {
-    const baseDate = new Date(2024, 0, 7); // Sunday, January 7, 2024
+    const baseDate = new Date(2024, 0, 7);
     const days: string[] = [];
     for (let i = 0; i < 7; i++) {
       const date = new Date(baseDate);
@@ -614,9 +608,6 @@ export default class MatchesList {
     return days;
   }
 
-  /**
-   * Gets abbreviated month names based on locale
-   */
   private getMonthNames(locale: string): string[] {
     const months: string[] = [];
     for (let i = 0; i < 12; i++) {

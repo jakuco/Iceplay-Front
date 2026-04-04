@@ -13,6 +13,84 @@ import type { DbId } from './db.types';
 
 
 // ─────────────────────────────────────────────────────────────
+// Interfaces basadas en DTOs reales del backend (Fase 2D)
+// Fuente: Iceplay-Fropen/src/domain/dto/player/
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Shape exacta devuelta por el backend en GET /player/:id y listas.
+ * Basada en PlayerResponseDto (player-response.dto.ts).
+ * Las fechas llegan como strings ISO 8601 o null — NO como objetos Date.
+ */
+export interface PlayerApiResponse {
+  id: string;
+  teamId: string;
+  championshipId: string | null;
+  organizationId: string | null;
+  positionId: string | null;
+  firstName: string;
+  lastName: string;
+  nickName: string | null;
+  number: number | null;
+  birthDate: string | null;         // ISO 8601 string
+  height: number | null;
+  weight: number | null;
+  status: string;                   // 'active' | 'suspended' | 'injured' | 'inactive'
+  suspensionEndDate: string | null; // ISO 8601 string
+  suspensionReason: string | null;
+  createdAt: string;                // ISO 8601 string
+  updatedAt: string;                // ISO 8601 string
+}
+
+/**
+ * DTO para crear un jugador vía POST /player (requiere auth).
+ * Basado en CreatePlayerDto (create-player.dto.ts).
+ *
+ * NOTA CRÍTICA DE NOMBRES: el backend usa snake_case y nombres distintos al frontend.
+ *   · `name`             → equivale a firstName
+ *   · `lastname`         → equivale a lastName
+ *   · `team_id`          → numérico (no string)
+ *   · `primary_position` → equivale a positionId
+ *
+ * NO confundir con el CreatePlayerDto del frontend (player.model.ts), que usa camelCase.
+ */
+export interface CreatePlayerApiDto {
+  player_id: number;           // ID externo del jugador; requerido
+  number: number;              // número de camiseta; requerido
+  name: string;                // firstName — requerido
+  lastname: string;            // lastName — requerido
+  team_id: number;             // ID numérico del equipo; requerido
+  weight?: number;
+  height?: number;
+  primary_position?: number;   // positionId
+  secondary_position?: number;
+  home_country?: string;
+  state_id?: number;
+  type?: number;
+  player_statics?: any;        // TODO: sin tipo confirmado en el backend
+}
+
+/**
+ * DTO para actualizar un jugador vía PUT /player/:id (requiere auth).
+ * Basado en UpdatePlayerDto (update-player.dto.ts).
+ * Usa camelCase — distinto del CreatePlayerApiDto que usa snake_case.
+ */
+export interface UpdatePlayerApiDto {
+  firstName?: string;
+  lastName?: string;
+  nickName?: string;
+  number?: number;
+  birthDate?: string;          // ISO 8601 string (el backend convierte a Date internamente)
+  height?: number;
+  weight?: number;
+  positionId?: number;
+  status?: string;             // 'active' | 'suspended' | 'injured' | 'inactive'
+  suspensionEndDate?: string;  // ISO 8601 string
+  suspensionReason?: string;
+}
+
+
+// ─────────────────────────────────────────────────────────────
 // ENUMS
 // ─────────────────────────────────────────────────────────────
 
@@ -50,9 +128,14 @@ export interface TeamSummary {
 
 
 // ─────────────────────────────────────────────────────────────
-// ENTIDAD PRINCIPAL
+// ENTIDAD PRINCIPAL (tipo frontend — fechas como Date)
 // ─────────────────────────────────────────────────────────────
 
+/**
+ * Modelo de jugador para uso en la UI (fechas como Date, no string).
+ * Se obtiene parseando PlayerApiResponse en el service.
+ * Para el contrato HTTP real, usar PlayerApiResponse.
+ */
 export interface Player {
   id: DbId;
   teamId: DbId;
@@ -79,7 +162,7 @@ export interface Player {
   createdAt: Date;
   updatedAt: Date;
 
-  // Relaciones opcionales
+  // Relaciones opcionales (populadas por joins; NO vienen en GET /player por defecto)
   position?: Position;
   team?: TeamSummary;
 }
@@ -103,13 +186,14 @@ export interface MatchPlayer {
 
 
 // ─────────────────────────────────────────────────────────────
-// DTOs — CREATE
+// DTOs — CREATE (frontend — NO usar directamente con el backend)
 // ─────────────────────────────────────────────────────────────
 
 /**
- * UC: Inscribir jugador en equipo.
- * positionId debe validarse contra SportPosition del deporte del campeonato.
- * number debe ser único dentro del equipo.
+ * @deprecated Para llamadas HTTP al backend usar CreatePlayerApiDto.
+ * Este DTO usa camelCase y no coincide con los campos reales del backend
+ * (el backend espera name/lastname/team_id en snake_case).
+ * Se mantiene para no romper componentes existentes.
  */
 export interface CreatePlayerDto {
   positionId: DbId;
@@ -129,10 +213,15 @@ export interface CreateMatchPlayerDto {
 
 
 // ─────────────────────────────────────────────────────────────
-// DTOs — UPDATE
+// DTOs — UPDATE (frontend — NO usar directamente con el backend)
 // ─────────────────────────────────────────────────────────────
 
-/** UC: Editar datos básicos del jugador (sin implicaciones de negocio) */
+/**
+ * @deprecated Para llamadas HTTP al backend usar UpdatePlayerApiDto.
+ * Este DTO de frontend omite campos que el backend sí acepta
+ * (status, suspensionEndDate, suspensionReason, positionId, birthDate).
+ * Se mantiene para no romper componentes existentes.
+ */
 export interface UpdatePlayerDto {
   firstName?: string;
   lastName?: string;
@@ -144,8 +233,7 @@ export interface UpdatePlayerDto {
 
 /**
  * UC: Cambiar equipo del jugador (transferencia).
- * El nuevo teamId debe pertenecer al mismo campeonato.
- * El historial de MatchEvent permanece intacto — referencia playerId, no teamId.
+ * TODO: sin endpoint confirmado en el backend para transferencia.
  */
 export interface TransferPlayerDto {
   teamId: DbId;
@@ -153,9 +241,8 @@ export interface TransferPlayerDto {
 
 /**
  * UC: Sancionar jugador.
- * Separado de UpdatePlayerDto para que el service pueda
- * auditar y disparar notificaciones específicas de sanción.
- * Normalmente disparado por acumulación de tarjetas desde MatchEvent.
+ * TODO: sin endpoint dedicado confirmado. Los campos de suspensión
+ *       se pueden enviar via UpdatePlayerApiDto (PUT /player/:id).
  */
 export interface SuspendPlayerDto {
   suspensionEndDate: Date;
@@ -164,7 +251,7 @@ export interface SuspendPlayerDto {
 
 /**
  * UC: Levantar sanción manualmente (apelación).
- * Sin payload — el service resetea status=active y nullea los campos de suspensión.
+ * TODO: sin endpoint confirmado.
  */
 export type LiftSuspensionDto = Record<never, never>;
 
@@ -173,7 +260,11 @@ export type LiftSuspensionDto = Record<never, never>;
 // DTOs — QUERY
 // ─────────────────────────────────────────────────────────────
 
-/** UC: Listar jugadores de un equipo con filtros */
+/**
+ * UC: Listar jugadores de un equipo con filtros.
+ * TODO: el backend solo acepta page/limit en GET /player.
+ *       Ninguno de estos filtros está confirmado como query param.
+ */
 export interface PlayerFiltersDto {
   status?: PlayerStatus;
   positionId?: DbId;
@@ -189,6 +280,7 @@ export interface PlayerFiltersDto {
 
 /**
  * UC: Perfil de jugador con estadísticas del campeonato.
+ * TODO: sin endpoint confirmado para stats de jugador.
  */
 export interface PlayerProfile extends Player {
   stats: PlayerStats;
@@ -196,13 +288,11 @@ export interface PlayerProfile extends Player {
 
 /**
  * UC: Estadísticas del jugador calculadas desde MatchEvent.
- * matchesPlayed viene de MatchPlayer.
- * eventStats agrupa conteos por TypeMatchEvent (goles, tarjetas, etc.).
  */
 export interface PlayerStats {
   playerId: DbId;
   matchesPlayed: number;
-  minutesPlayed: number | null;   // solo si el deporte registra tiempo exacto
+  minutesPlayed: number | null;
   eventStats: Array<{
     typeMatchEvent: Pick<TypeMatchEvent, 'id' | 'label' | 'icon' | 'color' | 'category'>;
     count: number;
@@ -211,7 +301,6 @@ export interface PlayerStats {
 
 /**
  * UC: Jugadores disponibles para convocatoria.
- * Subset mínimo para poblar el selector de convocatoria.
  */
 export type PlayerConvocationItem = Pick<
   Player,

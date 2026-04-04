@@ -2,7 +2,14 @@ import { Injectable, inject } from '@angular/core';
 import { ApiService } from './api.service';
 import { Observable, forkJoin, of, from, throwError } from 'rxjs';
 import { map, switchMap, mergeMap, toArray, catchError, tap } from 'rxjs/operators';
-import { Team, CreateTeamDto, UpdateTeamDto, TeamProfile } from '../models/team.model';
+
+import {
+  Team,
+  TeamApiResponse,
+  UpdateTeamApiDto,
+  TeamProfile,
+} from '../models/team.model';
+
 import { Player, CreatePlayerDto } from '../models/player.model';
 
 export interface CsvImportResult {
@@ -19,48 +26,86 @@ export interface CsvImportResult {
 export class TeamService {
   private api = inject(ApiService);
 
-  /**
-   * Get all teams for a championship
-   */
-  getTeams(championshipId: string): Observable<Team[]> {
-    return this.api.get<Team[]>('teams', { championshipId }).pipe(
-      map((teams) => teams.map((t) => this.parseTeamDates(t))),
-      catchError((error) => this.handleError('Error fetching teams', error)),
+  // ─────────────────────────────────────────
+  // ✅ GET /team (PAGINADO + FILTROS)
+  // ─────────────────────────────────────────
+  getTeams(
+    page = 1,
+    limit = 10,
+    filters?: { organizationId?: string; championshipId?: string }
+  ): Observable<TeamApiResponse[]> {
+    const params: any = { page, limit };
+
+    if (filters?.organizationId) params.organizationId = filters.organizationId;
+    if (filters?.championshipId) params.championshipId = filters.championshipId;
+
+    return this.api.get<TeamApiResponse[]>('team', params).pipe(
+      catchError((error) => this.handleError('Error fetching teams', error))
     );
   }
 
-  /**
-   * Get teams by organization
-   */
-  getTeamsByOrganization(organizationId: string): Observable<Team[]> {
-    return this.api.get<Team[]>('teams', { organizationId }).pipe(
-      map((teams) => teams.map((t) => this.parseTeamDates(t))),
-      catchError((error) => this.handleError('Error fetching organization teams', error)),
+  // ─────────────────────────────────────────
+  // ✅ GET /team/all
+  // ─────────────────────────────────────────
+  getAllTeams(filters?: {
+    organizationId?: string;
+    championshipId?: string;
+  }): Observable<TeamApiResponse[]> {
+    return this.api.get<TeamApiResponse[]>('team/all', filters).pipe(
+      catchError((error) => this.handleError('Error fetching all teams', error))
     );
   }
 
-  /**
-   * Get a single team by ID
-   */
-  getTeamById(id: string): Observable<Team> {
-    return this.api.get<Team>(`teams/${id}`).pipe(
-      map((team) => this.parseTeamDates(team)),
-      catchError((error) => this.handleError('Error fetching team', error)),
+  // ─────────────────────────────────────────
+  // ✅ GET /team/:id
+  // ─────────────────────────────────────────
+  getTeamById(id: string): Observable<TeamApiResponse> {
+    return this.api.get<TeamApiResponse>(`team/${id}`).pipe(
+      catchError((error) => this.handleError('Error fetching team', error))
     );
   }
 
-  /**
-   * Get team with players
-   */
+  // ─────────────────────────────────────────
+  // ⚠️ COMPOSICIÓN FRONT (NO BACKEND)
+  // ─────────────────────────────────────────
   getTeamWithPlayers(id: string): Observable<TeamProfile> {
-    return forkJoin({
-      team: this.getTeamById(id),
-      players: this.getPlayers(id),
-    }).pipe(
-      map(({ team, players }) => ({
-        ...team,
+  return forkJoin({
+    team: this.getTeamById(id),
+    players: this.getPlayers(id),
+  }).pipe(
+    map(({ team, players }) => {
+      return {
+        // 🔥 MAPEO CONTROLADO (NO SPREAD)
+        id: team.id,
+        name: team.name,
+        shortname: team.shortname,
+
+        // ⚠️ CAMPOS QUE EL BACKEND NO TIENE
+        championshipId: '', // TODO: backend no lo devuelve
+        documentUrl: null,
+        hasActiveMatches: false,
+
+        // ⚠️ OPCIONALES
+        slug: team.slug ?? '',
+        logoUrl: team.logoUrl ?? null,
+        primaryColor: team.primaryColor ?? null,
+        secondaryColor: team.secondaryColor ?? null,
+        foundedYear: team.foundedYear ?? null,
+        homeVenue: team.homeVenue ? String(team.homeVenue) : null,
+        location: team.location ?? null,
+        coachName: team.coachName ?? null,
+        coachPhone: team.coachPhone ?? null,
+        isActive: team.isActive ?? true,
+
+        // ⚠️ FECHAS (no vienen del backend)
+        createdAt: new Date(),
+        updatedAt: new Date(),
+
+        // RELACIONES
         players,
-        groups: team.groups ?? [],
+        groups: [],
+
+        // STATS (frontend only)
         stats: {
           teamId: team.id,
           played: 0,
@@ -72,114 +117,95 @@ export class TeamService {
           goalDifference: 0,
           points: 0,
         },
-      })),
-      catchError((error) => this.handleError('Error fetching team with players', error)),
+      };
+    }),
+    catchError((error) =>
+      this.handleError('Error fetching team with players', error)
+    )
+  );
+}
+
+  // ─────────────────────────────────────────
+  // ❌ POST /team NO EXISTE
+  // ─────────────────────────────────────────
+  /**
+   * TODO:
+   * POST /team está comentado en el backend (routes.ts)
+   * NO usar hasta que el endpoint sea habilitado.
+   */
+  createTeam(): Observable<never> {
+    return throwError(
+      () => new Error('POST /team no está disponible en el backend')
     );
   }
 
-  /**
-   * Create a new team
-   */
-  createTeam(
-    team: CreateTeamDto & { championshipId: string; organizationId: string },
-  ): Observable<Team> {
-    return this.api.post<Team>('teams', team).pipe(
-      map((t) => this.parseTeamDates(t)),
-      catchError((error) => this.handleError('Error creating team', error)),
+  // ─────────────────────────────────────────
+  // ✅ PUT /team/:id
+  // ─────────────────────────────────────────
+  updateTeam(
+    id: string,
+    team: UpdateTeamApiDto
+  ): Observable<TeamApiResponse> {
+    return this.api.put<TeamApiResponse>(`team/${id}`, team).pipe(
+      catchError((error) => this.handleError('Error updating team', error))
     );
   }
 
-  /**
-   * Update a team
-   */
-  updateTeam(id: string, team: UpdateTeamDto): Observable<Team> {
-    return this.api.patch<Team>(`teams/${id}`, team).pipe(
-      map((t) => this.parseTeamDates(t)),
-      catchError((error) => this.handleError('Error updating team', error)),
-    );
-  }
-
-  /**
-   * Delete a team
-   */
+  // ─────────────────────────────────────────
+  // ✅ DELETE /team/:id
+  // ─────────────────────────────────────────
   deleteTeam(id: string): Observable<void> {
-    return this.api
-      .delete<void>(`teams/${id}`)
-      .pipe(catchError((error) => this.handleError('Error deleting team', error)));
+    return this.api.delete<void>(`team/${id}`).pipe(
+      catchError((error) => this.handleError('Error deleting team', error))
+    );
   }
 
+  // ─────────────────────────────────────────
+  // ⚠️ NO CONFIRMADO EN BACKEND
+  // ─────────────────────────────────────────
   /**
-   * Get players for a team
+   * TODO:
+   * No existe endpoint confirmado:
+   * GET /player?teamId=
    */
   getPlayers(teamId: string): Observable<Player[]> {
-    return this.api.get<Player[]>('players', { teamId }).pipe(
-      map((players) => players.map((p) => this.parsePlayerDates(p))),
-      catchError((error) => this.handleError('Error fetching players', error)),
+    return this.api.get<Player[]>('player', { teamId }).pipe(
+      catchError((error) => this.handleError('Error fetching players', error))
     );
   }
 
   /**
-   * Create a player
+   * TODO:
+   * Endpoint de creación de player debe validarse contra backend real
    */
   createPlayer(
-    player: CreatePlayerDto & { teamId: string; championshipId: string; organizationId: string },
+    player: CreatePlayerDto & {
+      teamId: string;
+      championshipId: string;
+      organizationId: string;
+    }
   ): Observable<Player> {
-    return this.api.post<Player>('players', player).pipe(
-      map((p) => this.parsePlayerDates(p)),
-      catchError((error) => this.handleError('Error creating player', error)),
+    return this.api.post<Player>('player', player).pipe(
+      catchError((error) => this.handleError('Error creating player', error))
     );
   }
 
+  // ─────────────────────────────────────────
+  // ❌ CSV IMPORT (NO ALINEADO)
+  // ─────────────────────────────────────────
   /**
-   * Parse date strings to Date objects for Team
+   * ⚠️ NO ALINEADO CON BACKEND:
+   * - POST /team no existe
+   * - búsqueda por name no existe
+   * - validación de duplicados no soportada
+   *
+   * Se mantiene solo como simulación local
    */
-  private parseTeamDates(team: Team): Team {
-    if (team.createdAt && typeof team.createdAt === 'string') {
-      team.createdAt = new Date(team.createdAt);
-    }
-    if (team.updatedAt && typeof team.updatedAt === 'string') {
-      team.updatedAt = new Date(team.updatedAt);
-    }
-    return team;
-  }
-
-  /**
-   * Parse date strings to Date objects for Player
-   */
-  private parsePlayerDates(player: Player): Player {
-    if (player.birthDate && typeof player.birthDate === 'string') {
-      player.birthDate = new Date(player.birthDate);
-    }
-    if (player.suspensionEndDate && typeof player.suspensionEndDate === 'string') {
-      player.suspensionEndDate = new Date(player.suspensionEndDate);
-    }
-    if (player.createdAt && typeof player.createdAt === 'string') {
-      player.createdAt = new Date(player.createdAt);
-    }
-    if (player.updatedAt && typeof player.updatedAt === 'string') {
-      player.updatedAt = new Date(player.updatedAt);
-    }
-    return player;
-  }
-
-  /**
-   * Handle errors
-   */
-  private handleError(message: string, error: any): Observable<never> {
-    console.error(message, error);
-    return throwError(() => new Error(`${message}: ${error.message || error}`));
-  }
-
-  // Simulated CSV Import
   importFromCsv(
     championshipId: string,
     organizationId: string,
-    csvContent: string,
+    csvContent: string
   ): Observable<CsvImportResult> {
-    const lines = csvContent.split('\n');
-    const headers = lines[0].split(',');
-    const data = lines.slice(1).filter((line) => line.trim() !== '');
-
     const result: CsvImportResult = {
       teamsImported: 0,
       playersImported: 0,
@@ -188,80 +214,14 @@ export class TeamService {
       warnings: [],
     };
 
-    // This is a simplified simulation. In a real app, we'd need robust parsing.
-    // We'll assume the CSV columns match the requirement:
-    // team_name, short_name, coach, category, group, player_firstname, player_lastname, player_document, player_number, player_position
+    return of(result);
+  }
 
-    return from(data).pipe(
-      mergeMap((line) => {
-        const cols = line.split(',');
-        const teamName = cols[0]?.trim();
-
-        if (!teamName) return of(null);
-
-        // Check if team exists
-        return this.api.get<Team[]>('teams', { name: teamName, championshipId }).pipe(
-          switchMap((teams) => {
-            let teamObs: Observable<Team>;
-            if (teams.length > 0) {
-              teamObs = of(teams[0]);
-            } else {
-              // Create new team
-              const slug = teamName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
-              const newTeam: CreateTeamDto & { championshipId: string; organizationId: string } = {
-                championshipId,
-                organizationId,
-                name: teamName,
-                slug,
-                shortname: cols[1]?.trim() || teamName.substring(0, 3).toUpperCase(),
-                primaryColor: '#1e40af',
-                secondaryColor: '#ffffff',
-                logoUrl: 'https://via.placeholder.com/50',
-                coachName: cols[2]?.trim() || '',
-                location: cols[3]?.trim() || '',
-              };
-              teamObs = this.createTeam(newTeam).pipe(tap(() => result.teamsImported++));
-            }
-
-            return teamObs.pipe(
-              switchMap((team) => {
-                // Create player
-                const playerDoc = cols[7]?.trim();
-                if (!playerDoc) return of(null);
-
-                // Check for duplicate player by document
-                return this.api.get<Player[]>('players', { document: playerDoc }).pipe(
-                  switchMap((existingPlayers) => {
-                    if (existingPlayers.length > 0) {
-                      result.warnings.push(`Documento duplicado: ${playerDoc}`);
-                      result.playersSkipped.push(playerDoc);
-                      return of(null);
-                    }
-
-                    const newPlayer: CreatePlayerDto & {
-                      teamId: string;
-                      championshipId: string;
-                      organizationId: string;
-                    } = {
-                      teamId: String(team.id),
-                      championshipId,
-                      organizationId,
-                      firstName: cols[5]?.trim() || '',
-                      lastName: cols[6]?.trim() || '',
-                      number: parseInt(cols[8]?.trim() || '0', 10),
-                      positionId: parseInt(cols[9]?.trim() || '1', 10),
-                      birthDate: new Date('2000-01-01'),
-                    };
-                    return this.createPlayer(newPlayer).pipe(tap(() => result.playersImported++));
-                  }),
-                );
-              }),
-            );
-          }),
-        );
-      }),
-      toArray(),
-      map(() => result),
-    );
+  // ─────────────────────────────────────────
+  // ERROR HANDLER
+  // ─────────────────────────────────────────
+  private handleError(message: string, error: any): Observable<never> {
+    console.error(message, error);
+    return throwError(() => new Error(`${message}: ${error.message || error}`));
   }
 }

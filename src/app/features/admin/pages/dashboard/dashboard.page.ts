@@ -3,7 +3,6 @@ import {
   Component,
   inject,
   signal,
-  computed,
   effect,
 } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
@@ -17,9 +16,9 @@ import { ChampionshipService } from '../../../../core/services/championship.serv
 import { TeamService } from '../../../../core/services/team.service';
 import { MatchService } from '../../../../core/services/match.service';
 import { PlayerService } from '../../../../core/services/player.service';
-import { forkJoin, map, Subscription } from 'rxjs';
-import type { Match } from '../../../../core/models/match.model';
-import type { Team } from '../../../../core/models/team.model';
+import { forkJoin, of, Subscription } from 'rxjs';
+import type { MatchApiResponse } from '../../../../core/models/match.model';
+import type { TeamApiResponse } from '../../../../core/models/team.model';
 import type { ChampionshipListItem } from '../../../../core/models/championship.model';
 
 interface StatCard {
@@ -563,9 +562,10 @@ export default class DashboardPage {
   recentActivity = signal<
     Array<{ id: string; icon: string; text: string; time: string; color: string }>
   >([]);
-  allTeams = signal<Team[]>([]);
+  allTeams = signal<TeamApiResponse[]>([]);
   allChampionships = signal<ChampionshipListItem[]>([]);
-  allMatches = signal<Match[]>([]);
+  allMatches = signal<MatchApiResponse[]>([]);
+
   private reloadSub?: Subscription;
 
   constructor() {
@@ -586,17 +586,15 @@ export default class DashboardPage {
     const composite = new Subscription();
     const orgId = Number(organizationId);
 
-    // Load championships, teams, and players in parallel
     const outerSub = forkJoin({
       championships: this.championshipService.getAll({ organizationId: orgId }),
-      teams: this.teamService.getTeamsByOrganization(organizationId),
-      players: this.playerService.getPlayersByOrganization(organizationId),
+      teams: this.teamService.getAllTeams({ organizationId }),
+      players: of([] as unknown[]),
     }).subscribe({
       next: ({ championships, teams, players }) => {
         this.allChampionships.set(championships.data);
         this.allTeams.set(teams);
 
-        // Update stats
         this.stats.set([
           {
             icon: 'emoji_events',
@@ -609,49 +607,48 @@ export default class DashboardPage {
           { icon: 'sports', label: 'Partidos', value: 0, route: '/admin/matches' },
         ]);
 
-        // Load matches for all championships
         if (championships.data.length > 0) {
           const matchObservables = championships.data.map((champ) =>
-            this.matchService.getMatches(champ.id.toString()),
-          );
+            this.matchService.searchMatches({ championship_id: String(champ.id) }),          );
+
           const innerSub = forkJoin(matchObservables).subscribe({
             next: (matchResults) => {
               const allMatches = matchResults.flat();
               this.allMatches.set(allMatches);
 
-              // Update match count
               this.stats.update((stats) => {
                 const newStats = [...stats];
                 newStats[3].value = allMatches.length;
                 return newStats;
               });
 
-              // Get upcoming matches with team names
               const upcoming = allMatches
                 .filter((m) => m.status === 'scheduled')
                 .slice(0, 5)
                 .map((m) => {
-                  const homeTeam = teams.find((t) => t.id.toString() === m.homeTeamId);
-                  const awayTeam = teams.find((t) => t.id.toString() === m.awayTeamId);
+                  const homeTeam = teams.find((t: TeamApiResponse) => t.id.toString() === m.homeTeamId);
+                  const awayTeam = teams.find((t: TeamApiResponse) => t.id.toString() === m.awayTeamId);
+
                   return {
                     id: String(m.id),
                     homeTeam: homeTeam?.name || 'Equipo Desconocido',
                     awayTeam: awayTeam?.name || 'Equipo Desconocido',
-                    date: this.formatDate(m.scheduledStart!),
-                    time: m.scheduledStart?.toLocaleTimeString("es-EC") || '00:00',
+                    date: this.formatDate(m.scheduledDate),
+                    time: this.formatTime(m.scheduledDate, m.scheduledTime),
                     venue: m.venue || '',
                     status: m.status,
                   };
                 });
+
               this.upcomingMatches.set(upcoming);
 
-              // Load recent activity from finished matches
               const recent = allMatches
                 .filter((m) => m.status === 'finished')
                 .slice(0, 5)
                 .map((m, index) => {
-                  const homeTeam = teams.find((t) => t.id.toString() === m.homeTeamId);
-                  const awayTeam = teams.find((t) => t.id.toString() === m.awayTeamId);
+                  const homeTeam = teams.find((t: TeamApiResponse) => t.id.toString() === m.homeTeamId);
+                  const awayTeam = teams.find((t: TeamApiResponse) => t.id.toString() === m.awayTeamId);
+
                   return {
                     id: String(m.id),
                     icon: 'sports_soccer',
@@ -665,12 +662,14 @@ export default class DashboardPage {
                     color: '#22c55e',
                   };
                 });
+
               this.recentActivity.set(recent);
             },
             error: (error) => {
               console.error('Error loading matches', error);
             },
           });
+
           composite.add(innerSub);
         }
       },
@@ -678,6 +677,7 @@ export default class DashboardPage {
         console.error('Error loading dashboard data', error);
       },
     });
+
     composite.add(outerSub);
     return composite;
   }
@@ -700,10 +700,25 @@ export default class DashboardPage {
     }
   }
 
-  private formatDate(date: Date | string): string {
+  private formatDate(date?: string | Date): string {
     if (!date) return '';
     const d = typeof date === 'string' ? new Date(date) : date;
+    if (isNaN(d.getTime())) return '';
     return d.toLocaleDateString('es-EC', { day: 'numeric', month: 'short' });
+  }
+
+  private formatTime(scheduledDate?: string | Date, scheduledTime?: string): string {
+    if (scheduledTime) return scheduledTime;
+
+    if (!scheduledDate) return '00:00';
+
+    const d = typeof scheduledDate === 'string' ? new Date(scheduledDate) : scheduledDate;
+    if (isNaN(d.getTime())) return '00:00';
+
+    return d.toLocaleTimeString('es-EC', {
+      hour: '2-digit',
+      minute: '2-digit',
+    });
   }
 
   getIconBg(icon: string): string {
@@ -715,5 +730,4 @@ export default class DashboardPage {
     };
     return colors[icon] || '#6b7280';
   }
-
 }

@@ -28,37 +28,37 @@ import { MatchEventService, SSEMatchEvent } from '../../../../core/services/matc
 import { TeamService } from '../../../../core/services/team.service';
 import { PlayerService } from '../../../../core/services/player.service';
 
-import { Match, MatchStatus } from '../../../../core/models/match.model';
+import { MatchApiResponse, MatchStatus, UpdateMatchApiDto } from '../../../../core/models/match.model';
 import {
   MatchEventViewModel,
   CreateMatchEventDto,
 } from '../../../../core/models/event.model';
 import type { TypeMatchEvent } from '../../../../core/models/sport-config.model';
-import { Player } from '../../../../core/models/player.model';
+import type { PlayerApiResponse } from '../../../../core/models/player.model';
 
 const DEFAULT_PERIOD_DURATION = 2700; // TODO: conectar a sport.periodDuration
 
 interface LocalPlayer {
-  id:               string;
-  number:           number;
-  name:             string;
-  positionCode:     string;
-  teamSide:         'home' | 'away';
+  id: string;
+  number: number;
+  name: string;
+  positionCode: string;
+  teamSide: 'home' | 'away';
   originalPlayerId: string;
 }
 
 interface LocalTeam {
-  side:    'home' | 'away';
-  id:      string;
-  name:    string;
-  score:   number;
-  logo:    string;
+  side: 'home' | 'away';
+  id: string;
+  name: string;
+  score: number;
+  logo: string;
   players: LocalPlayer[];
 }
 
 interface HistoryState {
-  homeScore:      number;
-  awayScore:      number;
+  homeScore: number;
+  awayScore: number;
   elapsedSeconds: number;
 }
 
@@ -420,19 +420,36 @@ export default class MatchControlPage implements OnInit, OnDestroy {
 
   matchId = input.required<string>();
 
-  private matchService      = inject(MatchService);
+  private matchService = inject(MatchService);
   private matchEventService = inject(MatchEventService);
-  private teamService       = inject(TeamService);
-  private playerService     = inject(PlayerService);
-  private snackBar          = inject(MatSnackBar);
+  private teamService = inject(TeamService);
+  private playerService = inject(PlayerService);
+  private snackBar = inject(MatSnackBar);
 
-  isLoading  = signal(true);
-  matchData  = signal<Match | null>(null);
-  events     = signal<MatchEventViewModel[]>([]);
+  isLoading = signal(true);
+  matchData = signal<MatchApiResponse | null>(null);
+  events = signal<MatchEventViewModel[]>([]);
   eventTypes = signal<TypeMatchEvent[]>([]); // TODO: cargar desde campeonato
 
+  /**
+   * ESTADO LOCAL DE UI — CRONÓMETRO
+   * ─────────────────────────────────────────────────────────────
+   * elapsedSeconds e isRunning son estado exclusivo de la interfaz.
+   * El backend NO persiste ni retorna el tiempo transcurrido del reloj.
+   * MatchApiResponse incluye `elapsedSeconds` como campo del servidor,
+   * pero actualmente no se sincroniza aquí (se arranca siempre en 0).
+   * TODO: decidir en Fase 3 si se lee match.elapsedSeconds como seed.
+   * ─────────────────────────────────────────────────────────────
+   */
   elapsedSeconds = signal(0);
-  isRunning      = signal(false);
+  isRunning = signal(false);
+
+  /**
+   * Scores de referencia tomados del backend al cargar el partido.
+   * El score visual = baseline + scoring events recibidos vía SSE en esta sesión.
+   */
+  private baselineHomeScore = 0;
+  private baselineAwayScore = 0;
 
   homeTeam = signal<LocalTeam>({
     side: 'home', id: '', name: '', score: 0, logo: '', players: [],
@@ -442,9 +459,9 @@ export default class MatchControlPage implements OnInit, OnDestroy {
   });
 
   showAdminPanel = false;
-  isEditingTime  = false;
-  editMinutes    = 0;
-  editSeconds    = 0;
+  isEditingTime = false;
+  editMinutes = 0;
+  editSeconds = 0;
 
   private readonly MAX_HISTORY = 50;
   private undoStack: HistoryState[] = [];
@@ -455,7 +472,6 @@ export default class MatchControlPage implements OnInit, OnDestroy {
   private timerInterval?: ReturnType<typeof setInterval>;
   private sseSubscription?: Subscription;
 
-  // Usamos String() para convertir el matchId que puede ser DbId
   protected String = String;
 
   formattedTime = computed(() => {
@@ -477,7 +493,6 @@ export default class MatchControlPage implements OnInit, OnDestroy {
     this.matchService.getMatchById(this.matchId()).subscribe({
       next: (match) => {
         this.matchData.set(match);
-        // Match no tiene elapsedSeconds — arrancamos en 0
         this.elapsedSeconds.set(0);
 
         forkJoin({
@@ -485,27 +500,29 @@ export default class MatchControlPage implements OnInit, OnDestroy {
           awayTeam: this.teamService.getTeamById(String(match.awayTeamId)),
         }).subscribe({
           next: ({ homeTeam, awayTeam }) => {
+            this.baselineHomeScore = match.homeScore ?? 0;
+            this.baselineAwayScore = match.awayScore ?? 0;
+
             this.homeTeam.set({
-              side:    'home',
-              id:      String(homeTeam.id),
-              name:    homeTeam.name,
-              score:   match.homeScore,
-              logo:    homeTeam.logoUrl ?? '',
+              side: 'home',
+              id: String(homeTeam.id),
+              name: homeTeam.name,
+              score: match.homeScore ?? 0,
+              logo: homeTeam.logoUrl ?? '',
               players: [],
             });
+
             this.awayTeam.set({
-              side:    'away',
-              id:      String(awayTeam.id),
-              name:    awayTeam.name,
-              score:   match.awayScore,
-              logo:    awayTeam.logoUrl ?? '',
+              side: 'away',
+              id: String(awayTeam.id),
+              name: awayTeam.name,
+              score: match.awayScore ?? 0,
+              logo: awayTeam.logoUrl ?? '',
               players: [],
             });
+
             this.loadPlayers(String(homeTeam.id), String(awayTeam.id));
-            this.loadEventsAndConnect(
-              String(match.id),
-              String(match.homeTeamId)
-            );
+            this.loadEventsAndConnect(String(match.id), String(match.homeTeamId));
             this.isLoading.set(false);
             this.saveToHistory();
           },
@@ -531,34 +548,36 @@ export default class MatchControlPage implements OnInit, OnDestroy {
     }).subscribe({
       next: ({ home, away }) => {
         this.homeTeam.update(t => ({
-          ...t, players: home.map(p => this.toLocalPlayer(p, 'home')),
+          ...t,
+          players: home.map(p => this.toLocalPlayer(p, 'home')),
         }));
         this.awayTeam.update(t => ({
-          ...t, players: away.map(p => this.toLocalPlayer(p, 'away')),
+          ...t,
+          players: away.map(p => this.toLocalPlayer(p, 'away')),
         }));
       },
       error: (err) => console.error('Error loading players', err),
     });
   }
 
-  private toLocalPlayer(p: Player, side: 'home' | 'away'): LocalPlayer {
-    return {
-      id:               crypto.randomUUID(),
-      number:           p.number ?? 0,
-      name:             `${p.firstName} ${p.lastName}`,
-      positionCode:     p.position?.abbreviation ?? String(p.positionId),
-      teamSide:         side,
-      originalPlayerId: String(p.id),
-    };
-  }
+  private toLocalPlayer(p: PlayerApiResponse, side: 'home' | 'away'): LocalPlayer {
+  const positionCode = p.positionId ? String(p.positionId) : '—';
+
+  return {
+    id: crypto.randomUUID(),
+    number: p.number ?? 0,
+    name: `${p.firstName ?? ''} ${p.lastName ?? ''}`.trim(),
+    positionCode,
+    teamSide: side,
+    originalPlayerId: String(p.id),
+  };
+}
 
   private loadEventsAndConnect(matchId: string, homeTeamId: string): void {
     const pd = DEFAULT_PERIOD_DURATION;
 
-    this.matchEventService.getMatchEvents(matchId, homeTeamId, pd).subscribe({
-      next:  (evts) => this.events.set(evts),
-      error: (err)  => console.error('Error loading events', err),
-    });
+    // TODO: GET /match/:id/events NO está publicado en routes.ts del backend.
+    // La hidratación inicial se delega al mecanismo de catch-up del SSE.
 
     this.sseSubscription = this.matchEventService
       .connectToMatchStream(matchId, homeTeamId, pd)
@@ -569,19 +588,23 @@ export default class MatchControlPage implements OnInit, OnDestroy {
               if (list.some(e => e.id === msg.event.id)) return list;
               return [...list, msg.event].sort((a, b) => a.timeRaw - b.timeRaw);
             });
-            if (msg.event.category === 'scoring') {
-              if (msg.event.isHomeTeam) {
-                this.homeTeam.update(t => ({ ...t, score: t.score + 1 }));
-              } else {
-                this.awayTeam.update(t => ({ ...t, score: t.score + 1 }));
-              }
-            }
+            this.recomputeScoreFromEvents();
           } else {
-            this.events.update(list => list.filter(e => e.id !== msg.eventId));
+            this.events.update(list => list.filter(e => String(e.id) !== msg.eventId));
+            this.recomputeScoreFromEvents();
           }
         },
         error: (err) => console.error('SSE error', err),
       });
+  }
+
+  private recomputeScoreFromEvents(): void {
+    const evts = this.events();
+    const homePoints = evts.filter(e => e.category === 'scoring' && e.isHomeTeam).length;
+    const awayPoints = evts.filter(e => e.category === 'scoring' && !e.isHomeTeam).length;
+
+    this.homeTeam.update(t => ({ ...t, score: this.baselineHomeScore + homePoints }));
+    this.awayTeam.update(t => ({ ...t, score: this.baselineAwayScore + awayPoints }));
   }
 
   logEvent(eventType: TypeMatchEvent, player: LocalPlayer, side: 'home' | 'away'): void {
@@ -593,11 +616,11 @@ export default class MatchControlPage implements OnInit, OnDestroy {
     const team = side === 'home' ? this.homeTeam() : this.awayTeam();
 
     const dto: CreateMatchEventDto = {
-      matchId:          String(match.id),
+      matchId: String(match.id),
       typeMatchEventId: Number(eventType.id),
-      time:             this.elapsedSeconds(),
-      playerId:         player.originalPlayerId,
-      teamId:           team.id,
+      time: this.elapsedSeconds(),
+      playerId: player.originalPlayerId,
+      teamId: team.id,
     };
 
     this.matchEventService.createEvent(String(match.id), dto).subscribe({
@@ -628,7 +651,10 @@ export default class MatchControlPage implements OnInit, OnDestroy {
 
     this.saveToHistory();
 
-    this.matchService.updateMatch(String(match.id), { status }).subscribe({
+    this.matchService.updateMatch(
+      String(match.id),
+      { status } as unknown as UpdateMatchApiDto
+    ).subscribe({
       next: (updated) => {
         this.matchData.set(updated);
         if (updated.status === 'live') this.startTimer();
@@ -676,7 +702,9 @@ export default class MatchControlPage implements OnInit, OnDestroy {
     this.isEditingTime = false;
   }
 
-  cancelTimeEdit(): void { this.isEditingTime = false; }
+  cancelTimeEdit(): void {
+    this.isEditingTime = false;
+  }
 
   private stopTimer(): void {
     if (this.timerInterval) {
@@ -708,8 +736,8 @@ export default class MatchControlPage implements OnInit, OnDestroy {
 
   private currentState(): HistoryState {
     return {
-      homeScore:      this.homeTeam().score,
-      awayScore:      this.awayTeam().score,
+      homeScore: this.homeTeam().score,
+      awayScore: this.awayTeam().score,
       elapsedSeconds: this.elapsedSeconds(),
     };
   }
@@ -727,10 +755,17 @@ export default class MatchControlPage implements OnInit, OnDestroy {
 
   getStatusLabel(status: string): string {
     const labels: Record<string, string> = {
-      scheduled: 'Programado', warmup: 'Calentamiento', live: 'En Vivo',
-      halftime:  'Medio Tiempo', break: 'Descanso', overtime: 'Tiempo Extra',
-      penalties: 'Penales', finished: 'Finalizado', suspended: 'Suspendido',
-      postponed: 'Pospuesto', cancelled: 'Cancelado',
+      scheduled: 'Programado',
+      warmup: 'Calentamiento',
+      live: 'En Vivo',
+      halftime: 'Medio Tiempo',
+      break: 'Descanso',
+      overtime: 'Tiempo Extra',
+      penalties: 'Penales',
+      finished: 'Finalizado',
+      suspended: 'Suspendido',
+      postponed: 'Pospuesto',
+      cancelled: 'Cancelado',
     };
     return labels[status] ?? status;
   }
