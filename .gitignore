@@ -47,3 +47,5 @@ skills-lock.json
 .github
 
 bun.lock
+
+dist
