@@ -112,7 +112,7 @@ export class ChampionshipService {
 
   getChampionships(organizationId?: string): Observable<Championship[]> {
     const params = organizationId ? { organizationId } : {};
-    return this.api.get<Championship[]>(ApiEndpoints.CHAMPIONSHIPS.BASE, params).pipe(
+    return this.api.get<Championship[]>('championships', params).pipe(
       map((championships) => championships.map((c) => this.parseChampionshipDates(c))),
       catchError((error) => this.handleError('Error fetching championships', error)),
     );
@@ -140,21 +140,21 @@ export class ChampionshipService {
   }
 
   getChampionshipById(id: string): Observable<Championship> {
-    return this.api.get<Championship>(ApiEndpoints.CHAMPIONSHIPS.BY_ID(id)).pipe(
+    return this.api.get<Championship>(`championships/${id}`).pipe(
       map((championship) => this.parseChampionshipDates(championship)),
       catchError((error) => this.handleError('Error fetching championship', error)),
     );
   }
 
   createChampionship(championship: Partial<Championship>): Observable<Championship> {
-    return this.api.post<Championship>(ApiEndpoints.CHAMPIONSHIPS.BASE, championship).pipe(
+    return this.api.post<Championship>('championships', championship).pipe(
       map((c) => this.parseChampionshipDates(c)),
       catchError((error) => this.handleError('Error creating championship', error)),
     );
   }
 
   updateChampionship(id: string, championship: Partial<Championship>): Observable<Championship> {
-    return this.api.patch<Championship>(ApiEndpoints.CHAMPIONSHIPS.BY_ID(id), championship).pipe(
+    return this.api.patch<Championship>(`championships/${id}`, championship).pipe(
       map((c) => this.parseChampionshipDates(c)),
       catchError((error) => this.handleError('Error updating championship', error)),
     );
@@ -162,7 +162,7 @@ export class ChampionshipService {
 
   deleteChampionship(id: string): Observable<void> {
     return this.api
-      .delete<void>(ApiEndpoints.CHAMPIONSHIPS.BY_ID(id))
+      .delete<void>(`championships/${id}`)
       .pipe(catchError((error) => this.handleError('Error deleting championship', error)));
   }
 
