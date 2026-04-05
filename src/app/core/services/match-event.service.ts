@@ -5,7 +5,6 @@ import {
   MatchEvent,
   MatchEventViewModel,
   CreateMatchEventDto,
-  UpdateMatchEventDto,
   mapEventToViewModel,
 } from '../models/event.model';
 
@@ -132,60 +131,6 @@ export class MatchEventService {
     return this.api
       .delete<void>(`matches/${matchId}/events/${eventId}`)
       .pipe(catchError((err) => this.handleError('Error deleting event', err)));
-  }
-
-  // ─────────────────────────────────────────
-  // MÉTODOS DE COMPATIBILIDAD — NO SOPORTADOS POR BACKEND ACTUAL
-  // ─────────────────────────────────────────
-
-  /**
-   * NO existe endpoint público GET /matches/:id/events en el backend actual.
-   * Mantener este método solo evita romper imports de ramas más avanzadas.
-   */
-  getMatchEvents(_matchId: string): Observable<MatchEvent[]> {
-    return throwError(
-      () =>
-        new Error(
-          'GET de eventos no está publicado en el backend actual. Usar SSE en /matches/:matchId/events/stream.'
-        )
-    );
-  }
-
-  /**
-   * NO existe polling real de eventos por HTTP en el backend actual.
-   * Usar SSE.
-   */
-  getMatchEventsWithPolling(_matchId: string, _isLive: boolean): Observable<MatchEvent[]> {
-    return throwError(
-      () =>
-        new Error(
-          'Polling de eventos no soportado por el backend actual. Usar SSE en /matches/:matchId/events/stream.'
-        )
-    );
-  }
-
-  /**
-   * NO existe PATCH /events/:id en el backend actual.
-   */
-  updateEvent(_id: string, _event: UpdateMatchEventDto): Observable<MatchEvent> {
-    return throwError(
-      () =>
-        new Error(
-          'Actualización de eventos no soportada por el backend actual. Solo existen POST y DELETE.'
-        )
-    );
-  }
-
-  /**
-   * NO existe GET /events/:id en el backend actual.
-   */
-  getEventById(_id: string): Observable<MatchEvent> {
-    return throwError(
-      () =>
-        new Error(
-          'GET /events/:id no está publicado en el backend actual.'
-        )
-    );
   }
 
   private handleError(message: string, error: unknown): Observable<never> {

@@ -38,16 +38,41 @@ export enum MatchEventCategory {
 // ─────────────────────────────────────────────────────────────
 
 /**
- * Catálogo de deportes.
- * Cada deporte define cómo se mide un partido (goles, sets, puntos)
- * y cómo se estructuran sus períodos.
+ * Shape REAL del row de la tabla `sports` devuelto por Drizzle.
+ *
+ * ⚠️ `/api/categories` está COMENTADO en routes.ts del backend.
+ *    No hay endpoint HTTP para listar deportes actualmente.
+ *
+ * NOTA DE TIPOS DRIZZLE:
+ *   `periods` y `periodDuration` son `numeric` en PostgreSQL → Drizzle
+ *   los retorna como `string | null`, NO como `number`.
+ *   El frontend debe parsear con parseFloat() antes de usarlos.
+ */
+export interface SportApiResponse {
+  id: number;                       // serial → integer
+  name: string;
+  icon: string | null;
+  periods: string | null;           // numeric → string en Drizzle
+  matchTypeSingular: string | null;
+  matchTypePlural: string | null;
+  periodDuration: string | null;    // numeric → string en Drizzle
+  periodLabel: string | null;
+  periodLabelPlural: string | null;
+  isActive: boolean;
+}
+
+/**
+ * Catálogo de deportes — ViewModel del frontend.
+ * Para el contrato HTTP real, usar SportApiResponse.
  *
  * Nota de caché: este objeto puede vivir en memoria o Redis con TTL
  * de varias horas — casi nunca cambia en producción.
+ *
+ * ⚠️ No hay endpoint HTTP activo para obtener deportes (ver SportApiResponse).
  */
 export interface Sport {
   id: DbId;
-  name: string; // Campo implícito; asumido de la relación en el diagrama
+  name: string;
   icon: string;
 
   // Estructura temporal del partido
@@ -143,13 +168,21 @@ export interface SportTypeMatchEvent {
  * Ejemplos: max_jugadores_convocados=18, max_tarjetas_amarillas=2,
  *           duracion_tiempo_extra=15, max_sustituciones=5
  *
- * El campo `value` es el default del sistema.
- * Puede ser sobreescrito a nivel campeonato via ChampionshipMatchRule.
+ * ⚠️ DISCREPANCIA CON DB: la tabla `match_rules` solo tiene `id` y `name`.
+ *    NO tiene columna `value` ni `isActive`.
+ *    El `value` real está en la tabla pivote `match_rules_championship_sports`
+ *    (ChampionshipMatchRule). El frontend inventó este campo como conveniencia.
+ *    Usar `ChampionshipMatchRule.value` para el valor real.
  */
 export interface MatchRule {
   id: DbId;
   name: string;   // 'max_players', 'max_yellow_cards', 'extra_time_duration'
-  value: number;   // valor default
+  /**
+   * @deprecated NO existe en la tabla `match_rules` del backend.
+   * El valor real está en `ChampionshipMatchRule.value` (override) o
+   * en la lógica de negocio del campeonato.
+   */
+  value: number;
   isActive?: boolean;
 }
 

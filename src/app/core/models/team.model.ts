@@ -18,35 +18,56 @@ import type { DbId } from './db.types';
 // ─────────────────────────────────────────────────────────────
 
 /**
- * Shape devuelta por el backend en GET /team/:id y listas.
+ * Shape exacta devuelta por el backend en GET /team/:id y listas.
+ * Todos los campos reflejan las columnas reales de la tabla `teams` en Drizzle.
  *
- * TODO: el backend no tiene un TeamResponseDto explícito y completo.
- *       El archivo team.dto.ts solo define id, name, shortName, logo?, city?
- *       (el resto está comentado). Esta interfaz combina los campos visibles
- *       en TeamDTO + UpdateTeamDto como guía aproximada.
- *       Confirmar con el backend la shape real antes de añadir campos.
+ * Campos confirmados como NOT NULL en el schema:
+ *   id, championshipId, name, slug, isActive
  *
- * NOTA: el backend usa `shortname` (minúscula) en UpdateTeamDto, pero
- *       TeamDTO usa `shortName` (camelCase). Se usa `shortname` por alineación
- *       con UpdateTeamDto ya que es el DTO más reciente y completo.
+ * NOTA: el backend usa `shortname` (minúscula) en la tabla y en UpdateTeamDto.
+ *       `homeVenue` es un integer en DB (ID de cancha), no un string.
+ *       `city` no existe en la tabla — el campo es `location`.
+ *       `createdAt`/`updatedAt` NO existen en la tabla teams.
  */
 export interface TeamApiResponse {
   id: string;
+  /** NOT NULL en DB — siempre presente */
+  championshipId: string;
+  /** NOT NULL en DB — siempre presente */
   name: string;
-  shortname: string;
+  /** NOT NULL en DB — siempre presente */
+  slug: string;
+  shortname?: string | null;
   logoUrl?: string | null;
-  city?: string;
-  // Campos presentes en UpdateTeamDto — pueden no estar en el response por defecto
-  slug?: string;
   documentURL?: string | null;
   primaryColor?: string | null;
   secondaryColor?: string | null;
   foundedYear?: number | null;
-  homeVenue?: number | null;    // ID numérico de la cancha (no string)
+  /** ID numérico de la cancha (integer en DB, no string) */
+  homeVenue?: number | null;
   location?: string | null;
+  isTeamActive?: boolean | null;
+  hasActiveMatches?: boolean | null;
   coachName?: string | null;
   coachPhone?: string | null;
-  isActive?: boolean;
+  /** NOT NULL en DB con default true */
+  isActive: boolean;
+}
+
+/**
+ * Respuesta REAL de GET /teams?page=&limit= (paginado).
+ * Confirmado en Iceplay-Fropen/src/presentation/services/team.service.ts:
+ *   return { page, limit, total, next, prev, teams: rows }
+ *
+ * IMPORTANTE: el campo es `teams`, NO `data`.
+ */
+export interface TeamPagedResponse {
+  page: number;
+  limit: number;
+  total: number;
+  next: string | null;
+  prev: string | null;
+  teams: TeamApiResponse[];
 }
 
 /**
@@ -129,6 +150,11 @@ export interface Team {
   hasActiveMatches: boolean;
   isTeamActive?: boolean;
 
+  /**
+   * ⚠️ Estos campos NO existen en la tabla `teams` del backend.
+   * El service los sintetiza con `new Date()` al construir TeamProfile.
+   * No se puede confiar en su valor real.
+   */
   createdAt: Date;
   updatedAt: Date;
 
@@ -252,17 +278,22 @@ export interface TeamFiltersDto {
 // ─────────────────────────────────────────────────────────────
 
 export interface TeamListItem {
-  id: number;
+  /** UUID string — backend usa UUIDv7, no integer */
+  id: string;
   name: string;
-  shortname: string;
+  shortname: string | null;
   slug: string;
   logoUrl: string | null;
   primaryColor: string | null;
   secondaryColor: string | null;
   coachName: string | null;
   isActive: boolean;
-  hasActiveMatches: boolean;
-  playerCount: number;
+  hasActiveMatches: boolean | null;
+  /**
+   * ⚠️ No viene en el raw DB row — no hay JOIN de conteo en el backend actual.
+   * Siempre será undefined al usar los datos del backend.
+   */
+  playerCount?: number;
 }
 
 /**
@@ -288,6 +319,11 @@ export interface TeamStats {
   points: number;
 }
 
+/**
+ * @deprecated Usar TeamPagedResponse para llamadas HTTP reales.
+ * El backend devuelve `{ teams: [] }`, no `{ data: [] }`.
+ * Se mantiene para no romper componentes existentes que usen este tipo.
+ */
 export interface PaginatedTeams {
   data: TeamListItem[];
   total: number;

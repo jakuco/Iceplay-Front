@@ -20,7 +20,7 @@ import { MatchEventService } from '../../../../core/services/match-event.service
 import { TeamService } from '../../../../core/services/team.service';
 import { ChampionshipService } from '../../../../core/services/championship.service';
 import { MatchByIdResponse } from '../../../../core/models/match.model';
-import { formatEventMinute, MatchEvent } from '../../../../core/models/event.model';
+import { MatchEventViewModel } from '../../../../core/models/event.model';
 import { TeamApiResponse } from '../../../../core/models/team.model';
 import { Championship } from '../../../../core/models/championship.model';
 
@@ -289,7 +289,7 @@ export default class MatchDetails implements OnDestroy {
   private homeTeam = signal<TeamApiResponse | null>(null);
   private awayTeam = signal<TeamApiResponse | null>(null);
   private championship = signal<Championship | null>(null);
-  private events = signal<MatchEvent[]>([]);
+  private events = signal<MatchEventViewModel[]>([]);
   private eventSubscription?: Subscription;
   isLoading = signal(true);
 
@@ -401,23 +401,33 @@ export default class MatchDetails implements OnDestroy {
     return this.championshipService.getChampionshipById(String(championshipId));
   }
 
-  private loadEvents(matchId: string, isLive: boolean): void {
+  private loadEvents(matchId: string, _isLive: boolean): void {
     this.eventSubscription?.unsubscribe();
+    this.events.set([]);
+
+    const homeTeamId = String(this.homeTeam()?.id ?? '');
+    // Duración nominal de periodo en segundos. Valor de referencia hasta que
+    // exista endpoint GET /championships/:id/rules con `match_duration`.
+    const PERIOD_DURATION_SECONDS = 2700;
 
     this.eventSubscription = this.matchEventService
-      .getMatchEventsWithPolling(matchId, isLive)
+      .connectToMatchStream(matchId, homeTeamId, PERIOD_DURATION_SECONDS)
       .subscribe({
-        next: (events) => {
-          this.events.set(events);
+        next: (msg) => {
+          if (msg.type === 'add') {
+            this.events.update((current) => [...current, msg.event]);
+          } else {
+            this.events.update((current) => current.filter((e) => e.id !== msg.eventId));
+          }
         },
         error: (error) => {
-          console.error('Error loading events', error);
+          console.error('Error loading events via SSE', error);
         },
       });
   }
 
   private transformEvents(
-    events: MatchEvent[],
+    events: MatchEventViewModel[],
     homeTeam: TeamApiResponse,
     awayTeam: TeamApiResponse
   ): DisplayEvent[] {
@@ -427,8 +437,8 @@ export default class MatchDetails implements OnDestroy {
         const team = isHomeTeam ? homeTeam : awayTeam;
 
         return {
-          minute: formatEventMinute(event.time),
-          type: event.typeMatchEvent.label,
+          minute: event.timeFormatted,
+          type: event.typeLabel,
           description: event.description || '',
           teamName: team.name,
         };

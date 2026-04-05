@@ -344,9 +344,14 @@ export default class ChampionshipsListPage {
   updateChampionshipStatus(championshipId: number, newStatus: ChampionshipStatus): void {
     this.championshipService.updateStatus(String(championshipId), { status: newStatus }).subscribe({
       next: (updatedChampionship) => {
-        // Update the championship in the list
+        // El backend devuelve solo { id, name, status, season } — parcheamos
+        // únicamente el campo status en el objeto existente de la lista.
         this.championships.update((champs) =>
-          champs.map((c) => (c.id === championshipId ? updatedChampionship : c)),
+          champs.map((c) =>
+            c.id === championshipId
+              ? { ...c, status: updatedChampionship.status as ChampionshipStatus }
+              : c,
+          ),
         );
         this.snackBar.open(`Estado cambiado a "${this.getStatusLabel(newStatus)}"`, 'Cerrar', {
           duration: 3000,

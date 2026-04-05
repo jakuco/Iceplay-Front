@@ -89,6 +89,10 @@ export interface MatchDto {
  *
  * ⚠️ homeScore y awayScore NO están en esta respuesta.
  * ⚠️ venue NO está garantizado en esta respuesta.
+ * ⚠️ BLOQUEADO: `championshipId` NO está en esta respuesta aunque está en DB.
+ *    El backend no lo expone en getMatchById(). Mientras tanto,
+ *    los consumers que necesiten championshipId deben usar GET /matches/all
+ *    (MatchDto) o esperar que el backend amplíe la respuesta.
  */
 export interface MatchByIdResponse {
   id: string;
@@ -200,12 +204,16 @@ export interface CreateMatchApiDto {
 /**
  * DTO para actualizar un partido vía PUT /matches/:id.
  *
- * Se mantiene flexible para no romper ramas con naming distinto.
- * El backend real debe terminar imponiendo el contrato definitivo.
+ * ⚠️ CONTRATO REAL: El backend (`UpdateMatchDto`) usa snake_case + integers:
+ *   championship_id: number, home_team_id: number, away_team_id: number,
+ *   date: string, state: number, match_events: unknown
+ * Los campos camelCase de abajo son IGNORADOS por el backend actual.
+ * No enviar camelCase esperando que el backend los procese.
+ *
+ * TODO: cuando el backend migre a camelCase / UUIDs, limpiar este DTO.
  */
 export interface UpdateMatchApiDto {
-  status?: MatchStatus | string;
-
+  /** Procesado por el backend — snake_case real. */
   championship_id?: number;
   home_team_id?: number;
   away_team_id?: number;
@@ -213,6 +221,11 @@ export interface UpdateMatchApiDto {
   state?: number;
   match_events?: unknown;
 
+  /**
+   * @deprecated Ignorados por el backend actual.
+   * El backend solo lee snake_case. Mantener hasta migración.
+   */
+  status?: MatchStatus | string;
   championshipId?: string | number;
   homeTeamId?: string | number;
   awayTeamId?: string | number;

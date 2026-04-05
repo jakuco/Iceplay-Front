@@ -60,7 +60,8 @@ export enum GroupType {
 export interface Championship {
   id: DbId;
   organizationId: DbId;
-  sportId: DbId;
+  /** DB: integer("sport_id") NOT NULL — es integer, no UUID. */
+  sportId: number;
 
   // Identidad pública
   name: string;
@@ -83,7 +84,8 @@ export interface Championship {
   // Límites operacionales
   maxTeams: number;
   maxPlayersPerTeam: number;
-  isActive?: boolean;
+  /** DB: boolean("is_active").default(true).notNull() — siempre presente. */
+  isActive: boolean;
 
   createdAt: Date;
   updatedAt: Date;
@@ -224,7 +226,8 @@ export interface GroupTeam {
 /** UC: Crear campeonato */
 export interface CreateChampionshipDto {
   organizationId: DbId;
-  sportId: DbId;
+  /** DB: integer("sport_id") — debe ser integer, no UUID. */
+  sportId: number;
   name: string;
   slug: string;
   season: string;
@@ -358,7 +361,13 @@ export interface MatchFiltersDto {
 
 /**
  * UC: Listar campeonatos.
- * Solo campos planos para no inflar el listado. Sin relaciones profundas.
+ *
+ * ⚠️ CONTRATO REAL: GET /championships devuelve raw DB rows (Drizzle select).
+ * Los campos `teamCount`, `phaseCount`, `organization`, `sport` NO están
+ * en la respuesta actual — se marcan opcionales hasta que el backend
+ * implemente los JOINs correspondientes.
+ * Campos garantizados: id, name, slug, season, logo, status, startDate,
+ * endDate, maxTeams, organizationId, sportId, isActive.
  */
 export interface ChampionshipListItem {
   id: DbId;
@@ -371,13 +380,27 @@ export interface ChampionshipListItem {
   endDate: Date | null;
   maxTeams: number;
 
-  // Conteos calculados (no relaciones completas)
-  teamCount: number;
-  phaseCount: number;
+  // ⚠️ PARCIAL — no retornados por el backend actual (sin JOINs)
+  teamCount?: number;
+  phaseCount?: number;
+  organization?: Pick<Organization, 'id' | 'name' | 'logo' | 'country'>;
+  sport?: Pick<Sport, 'id' | 'name' | 'icon'>;
+}
 
-  // JOIN mínimo
-  organization: Pick<Organization, 'id' | 'name' | 'logo' | 'country'>;
-  sport: Pick<Sport, 'id' | 'name' | 'icon'>;
+/**
+ * Respuesta REAL de GET /championships/:id y de POST/PUT /championships/:id.
+ *
+ * El backend devuelve SOLO estos 4 campos.
+ * Usar este tipo en servicios que llaman a esas rutas.
+ * Si se necesita el modelo rico, hacer una segunda llamada o esperar
+ * que el backend amplíe el contrato.
+ */
+export interface ChampionshipApiResponse {
+  id: string;
+  name: string;
+  /** DB integer (0-4) mapeado al enum ChampionshipStatus. */
+  status: number;
+  season: string;
 }
 
 /**

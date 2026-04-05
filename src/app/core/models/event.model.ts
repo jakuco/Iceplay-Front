@@ -14,11 +14,15 @@ type TeamBasicInfo = Pick<Team, 'id' | 'name' | 'shortname' | 'logoUrl'>;
  *
  * Espejo de FullEventDTO del backend con compatibilidad frontend.
  *
- * Notas:
- * - El backend usa `relatedEventMatch`
- * - Algunas ramas del front usaban `relatedEventMatchId`
- * - Se soportan ambas, pero la fuente principal es `relatedEventMatch`
- * - `player` y `team` no están garantizados en SSE; se dejan opcionales
+ * Contratos confirmados del backend (FullEventDTO):
+ * - `id`, `matchId`, `typeMatchEventId`, `time`, `isActive`
+ * - `typeMatchEvent` incluye `isActive` propio del tipo
+ * - `relatedEventMatch` es el campo real del backend (string, no UUID)
+ *
+ * Notas de compatibilidad:
+ * - `relatedEventMatchId` es un alias legacy de ramas anteriores;
+ *   NO lo envía el backend. Usar `relatedEventMatch` como fuente de verdad.
+ * - `player` y `team` no están garantizados en SSE; se dejan opcionales.
  */
 export interface MatchEvent {
   id: DbId;
@@ -31,26 +35,35 @@ export interface MatchEvent {
    */
   time: number;
 
+  /**
+   * Estado activo del evento. Confirmado en FullEventDTO del backend.
+   */
+  isActive: boolean;
+
   typeMatchEvent: {
     id: number;
     label: string;
     category: string;
+    /** Estado activo del tipo de evento — incluido en FullEventDTO. */
+    isActive: boolean;
     icon?: string;
     color?: string;
     matchPoint?: number;
     standingPoints?: number;
+    relatedEvent?: string;
   };
 
   teamId?: DbId;
   playerId?: DbId;
 
   /**
-   * Nombre real del backend actual.
+   * Campo real del backend. Referencia a evento relacionado (string libre).
    */
   relatedEventMatch?: string;
 
   /**
-   * Alias legacy para compatibilidad de ramas viejas.
+   * @deprecated Alias legacy de ramas anteriores.
+   * El backend NO envía este campo. Usar `relatedEventMatch`.
    */
   relatedEventMatchId?: DbId;
 
@@ -155,6 +168,18 @@ export interface EventTimelineItem {
 
 /**
  * Convierte segundos corridos a periodo/minuto/extraMinute.
+ *
+ * @param timeInSeconds - Segundos totales transcurridos desde el inicio.
+ * @param periodDuration - Duración nominal de cada periodo en segundos
+ *                         (p. ej. 2700 para 45 min de fútbol).
+ *
+ * Nota sobre tiempo extra: el modelo de dato del backend (`elapsedSeconds`)
+ * es un reloj continuo. Con `periodDuration` como divisor, los segundos que
+ * superen el periodo nominal se absorben en el siguiente periodo por módulo.
+ * Para mostrar "45+2'" correctamente, el caller debe pasar los segundos
+ * acumulados *dentro* del periodo (no el total del partido) junto con el
+ * periodDuration nominal. Si `minutesIntoPeriod >= periodDurationMinutes`,
+ * se interpreta como tiempo añadido y se calcula `extraMinute`.
  */
 export function secondsToMatchTime(
   timeInSeconds: number,
@@ -166,14 +191,38 @@ export function secondsToMatchTime(
 } {
   const safeSeconds = Math.max(0, timeInSeconds);
   const safePeriodDuration = Math.max(1, periodDuration);
+  const periodDurationMinutes = Math.floor(safePeriodDuration / 60);
 
   const period = Math.floor(safeSeconds / safePeriodDuration) + 1;
   const secondsIntoPeriod = safeSeconds % safePeriodDuration;
+  const minutesIntoPeriod = Math.floor(secondsIntoPeriod / 60);
 
-  const minute = Math.floor(secondsIntoPeriod / 60);
-  const extraMinute = 0;
+  const minute = Math.min(minutesIntoPeriod, periodDurationMinutes);
+  const extraMinute = Math.max(0, minutesIntoPeriod - periodDurationMinutes);
 
   return { period, minute, extraMinute };
+}
+
+/**
+ * Convierte periodo/minuto/extraMinute de vuelta a segundos totales.
+ *
+ * Inverso de `secondsToMatchTime`. Útil para construir DTOs de creación
+ * de evento a partir de un input de minuto de partido en la UI.
+ *
+ * @param period - Número de periodo (base 1).
+ * @param minute - Minuto dentro del periodo (sin tiempo añadido).
+ * @param periodDuration - Duración nominal del periodo en segundos.
+ * @param extraMinute - Minutos de tiempo añadido (default 0).
+ */
+export function matchTimeToSeconds(
+  period: number,
+  minute: number,
+  periodDuration: number,
+  extraMinute = 0
+): number {
+  const safePeriodDuration = Math.max(1, periodDuration);
+  const periodStart = (Math.max(1, period) - 1) * safePeriodDuration;
+  return periodStart + (minute + extraMinute) * 60;
 }
 
 /**

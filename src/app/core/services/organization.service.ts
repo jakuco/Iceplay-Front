@@ -21,6 +21,13 @@ export interface Organization {
   status: 'active' | 'inactive';
 }
 
+/**
+ * @classification frontend-experimental
+ * ⚠️ No existe una ruta `/api/organizations` en el backend (routes.ts).
+ * Todos los métodos de este service fallarán en runtime con 404.
+ * La interfaz local `Organization` no coincide con `organization.model.ts`.
+ * No usar en producción hasta que el backend implemente el endpoint.
+ */
 @Injectable({
   providedIn: 'root',
 })

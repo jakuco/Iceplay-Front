@@ -9,6 +9,7 @@ import {
   MatchByIdResponse,
   MatchPagedResponse,
   MatchSearchPagedResponse,
+  MatchSearchResult,
   DayScheduleResponse,
   CreateMatchApiDto,
   UpdateMatchApiDto,
@@ -61,13 +62,21 @@ export class MatchService {
   // ─────────────────────────────────────────
   // GET /matches/search/all
   // ─────────────────────────────────────────
+
+  /**
+   * Búsqueda sin paginación de partidos.
+   *
+   * ⚠️ Contrato real: GET /matches/search/all devuelve
+   *   `MatchSearchResult[]` — cada ítem tiene `{ id, match, date, location, status }`.
+   *   `match` es una cadena concatenada "HomeTeam vs AwayTeam", NO un MatchDto.
+   */
   searchAllMatches(filters: {
     championship_id?: string;
     state?: string;
     date?: string;
     match_id?: string;
-  }): Observable<MatchDto[]> {
-    return this.api.get<MatchDto[]>('matches/search/all', filters).pipe(
+  }): Observable<MatchSearchResult[]> {
+    return this.api.get<MatchSearchResult[]>('matches/search/all', filters).pipe(
       catchError((error) => this.handleError('Error searching all matches', error)),
     );
   }

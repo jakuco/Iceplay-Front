@@ -5,6 +5,7 @@ import { catchError, map, switchMap } from 'rxjs/operators';
 import { ApiService } from './api.service';
 import {
   Championship,
+  ChampionshipApiResponse,
   ChampionshipDetail,
   ChampionshipListItem,
   ChampionshipStatus,
@@ -110,10 +111,18 @@ export class ChampionshipService {
 
   // ── HTTP API (integración rama cup) ─────────────────────────────────────
 
+  /**
+   * Devuelve la lista plana de campeonatos filtrando por organización.
+   *
+   * ⚠️ Contrato real: GET /championships devuelve
+   *   `{ championships, page, limit, total }`.
+   * Se extrae `championships` del envoltorio de paginación.
+   * Para acceder a los metadatos de paginación, usar `getAll()`.
+   */
   getChampionships(organizationId?: string): Observable<Championship[]> {
     const params = organizationId ? { organizationId } : {};
-    return this.api.get<Championship[]>('championships', params).pipe(
-      map((championships) => championships.map((c) => this.parseChampionshipDates(c))),
+    return this.api.get<BackendChampionshipsPage>('championships', params).pipe(
+      map((response) => response.championships.map((c) => this.parseChampionshipDates(c))),
       catchError((error) => this.handleError('Error fetching championships', error)),
     );
   }
@@ -125,20 +134,46 @@ export class ChampionshipService {
     );
   }
 
-  getChampionshipDetail(id: number): Observable<Championship> {
-    return this.api.get<Championship>(`championships/${id}/detail`).pipe(
+  /**
+   * Obtiene el detalle de un campeonato por su UUID.
+   *
+   * ⚠️ Contrato real: GET /championships/:id devuelve SOLO
+   *   `{ id, name, status, season }` — no el objeto Championship completo.
+   * Los campos extra (fechas, etc.) llegarán como undefined.
+   */
+  getChampionshipDetail(id: string): Observable<Championship> {
+    return this.api.get<Championship>(`championships/${id}`).pipe(
       map((championship) => this.parseChampionshipDates(championship)),
       catchError((error) => this.handleError('Error fetching championship details', error)),
     );
   }
 
+  /**
+   * Devuelve campeonatos activos.
+   *
+   * ⚠️ El backend NO garantiza filtrado por `status` en GET /championships.
+   * Se aplica filtro en cliente como salvaguarda.
+   * Para paginación correcta, usar `getAll({ status: ChampionshipStatus.Active })`.
+   */
   getActiveChampionships(): Observable<Championship[]> {
-    return this.api.get<Championship[]>('championships', { status: ChampionshipStatus.Active }).pipe(
-      map((championships) => championships.map((c) => this.parseChampionshipDates(c))),
+    return this.api.get<BackendChampionshipsPage>('championships', { status: ChampionshipStatus.Active }).pipe(
+      map((response) =>
+        response.championships
+          .map((c) => this.parseChampionshipDates(c))
+          .filter((c) => c.status === ChampionshipStatus.Active),
+      ),
       catchError((error) => this.handleError('Error fetching active championships', error)),
     );
   }
 
+  /**
+   * Obtiene un campeonato por UUID.
+   *
+   * ⚠️ Contrato real: GET /championships/:id devuelve SOLO
+   *   `{ id, name, status, season }` — no el modelo Championship completo.
+   * Los campos extra llegarán como undefined. Para el flujo principal
+   * de detalle, usar `getById()`.
+   */
   getChampionshipById(id: string): Observable<Championship> {
     return this.api.get<Championship>(`championships/${id}`).pipe(
       map((championship) => this.parseChampionshipDates(championship)),
@@ -153,8 +188,16 @@ export class ChampionshipService {
     );
   }
 
+  /**
+   * Actualiza un campeonato.
+   *
+   * ⚠️ El backend solo expone PUT /championships/:id — no PATCH.
+   * Se usa `api.put()` para coincidir con el método HTTP correcto.
+   * Para actualizaciones parciales del frontend, enviar solo los campos
+   * que cambian; el backend acepta Partial gracias a Zod.
+   */
   updateChampionship(id: string, championship: Partial<Championship>): Observable<Championship> {
-    return this.api.patch<Championship>(`championships/${id}`, championship).pipe(
+    return this.api.put<Championship>(`championships/${id}`, championship).pipe(
       map((c) => this.parseChampionshipDates(c)),
       catchError((error) => this.handleError('Error updating championship', error)),
     );
@@ -187,9 +230,16 @@ export class ChampionshipService {
     );
   }
 
-  updateStatus(id: string, dto: UpdateChampionshipStatusDto): Observable<Championship> {
-    return this.api.put<Championship>(`championships/${id}`, dto).pipe(
-      map(c => this.parseChampionshipDates(c)),
+  /**
+   * Cambia el estado de un campeonato.
+   *
+   * ⚠️ CONTRATO REAL: PUT /championships/:id devuelve SOLO
+   *   `{ id, name, status: number, season }`.
+   * Callers NO deben reemplazar un Championship completo con esta respuesta.
+   * Solo actualizar el campo `status` en el modelo local.
+   */
+  updateStatus(id: string, dto: UpdateChampionshipStatusDto): Observable<ChampionshipApiResponse> {
+    return this.api.put<ChampionshipApiResponse>(`championships/${id}`, dto).pipe(
       catchError(e => this.handleError('Error updating championship status', e)),
     );
   }

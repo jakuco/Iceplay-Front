@@ -19,31 +19,47 @@ import type { DbId } from './db.types';
 
 /**
  * Shape exacta devuelta por el backend en GET /player/:id y listas.
- * Basada en PlayerResponseDto (player-response.dto.ts).
+ * Todos los campos reflejan las columnas reales de la tabla `players` en Drizzle.
  * Las fechas llegan como strings ISO 8601 o null — NO como objetos Date.
+ *
+ * NOTA SOBRE height/weight:
+ *   El backend usa tipo `numeric` en PostgreSQL, que Drizzle devuelve como
+ *   `string | null` (no number). Los valores deben parsearse con parseFloat()
+ *   antes de usarse en cálculos. El ViewModel `Player` los expone como `number`.
+ *
+ * NOTA SOBRE positionId:
+ *   Es `integer` en DB sin `.notNull()` → puede ser null.
+ *   El backend devuelve el ID como string (los serializa en PlayerResponseDto).
  */
 export interface PlayerApiResponse {
   id: string;
   teamId: string;
-  championshipId: string | null;
-  organizationId: string | null;
+  /** positionId es integer nullable en DB; el backend lo serializa a string */
   positionId: string | null;
+  photoUrl: string | null;
   firstName: string;
   lastName: string;
   nickName: string | null;
   number: number | null;
-  birthDate: string | null;         // ISO 8601 string
-  height: number | null;
-  weight: number | null;
-  status: string;                   // 'active' | 'suspended' | 'injured' | 'inactive'
-  suspensionEndDate: string | null; // ISO 8601 string
+  birthDate: string | null;           // date → 'YYYY-MM-DD' string
+  /** numeric en DB → Drizzle retorna string, no number */
+  height: string | null;
+  /** numeric en DB → Drizzle retorna string, no number */
+  weight: string | null;
+  status: string;                     // 'Active' | 'suspended' | 'injured' | 'inactive'
+  suspensionEndDate: string | null;   // date → 'YYYY-MM-DD' string
   suspensionReason: string | null;
-  createdAt: string;                // ISO 8601 string
-  updatedAt: string;                // ISO 8601 string
+  isActive: boolean;
+  createdAt: string;                  // ISO 8601 timestamp string
+  updatedAt: string;                  // ISO 8601 timestamp string
+
+  // Relaciones opcionales — presentes solo en GET /players/:id (con JOIN)
+  team?: { id: string; name: string; shortname: string };
+  position?: { id: number; code: string; label: string; abbreviation: string };
 }
 
 /**
- * Shape REAL de la respuesta paginada de GET /player.
+ * Shape REAL de la respuesta paginada de GET /players.
  * Confirmado en Iceplay-Fropen/src/presentation/services/player.service.ts:
  *   return { page, limit, total, next, prev, players: rows }
  *
@@ -51,7 +67,8 @@ export interface PlayerApiResponse {
  * El frontend NO debe tratar esta respuesta como array plano.
  *
  * Filtros reales soportados por HTTP: SÓLO page y limit.
- * teamId, championshipId, organizationId → controller los IGNORA (no los lee de req.query).
+ * teamId, championshipId, organizationId → el controller los IGNORA (no los lee de req.query).
+ * Los filtros teamId/status sí existen en el service backend, pero no se exponen en HTTP.
  */
 export interface PlayerApiPaginatedResponse {
   page: number;
@@ -155,10 +172,21 @@ export interface TeamSummary {
  * Modelo de jugador para uso en la UI (fechas como Date, no string).
  * Se obtiene parseando PlayerApiResponse en el service.
  * Para el contrato HTTP real, usar PlayerApiResponse.
+ *
+ * NOTA DE NULLABILIDAD (según schema de DB):
+ *   positionId, number, birthDate son nullable en la tabla players.
+ *   height/weight en la API vienen como string (numeric en Drizzle) —
+ *   el service debe parsearlos a number antes de asignarlos al ViewModel.
  */
 export interface Player {
   id: DbId;
   teamId: DbId;
+  /**
+   * ⚠️ Nullable en DB (integer sin NOT NULL).
+   * En el ViewModel se mantiene no-null para compatibilidad con callers
+   * que usan positionId como argumento de tipo number (p.ej. positionLabel()).
+   * El service debe proveer un fallback (p.ej. 0) al parsear PlayerApiResponse.
+   */
   positionId: DbId;
   photoUrl?: string | null;
 
@@ -166,18 +194,24 @@ export interface Player {
   firstName: string;
   lastName: string;
   nickName: string | null;
-  birthDate: Date;
+  /** nullable en DB — date sin NOT NULL */
+  birthDate: Date | null;
 
   // Datos deportivos
-  number: number;        // número de camiseta; único por equipo
-  height: number | null; // cm
-  weight: number | null; // kg
+  /**
+   * ⚠️ Nullable en DB (integer sin NOT NULL).
+   * El service debe proveer un fallback (p.ej. 0) al parsear PlayerApiResponse.
+   */
+  number: number;
+  height: number | null; // cm — parseado desde string (numeric en Drizzle)
+  weight: number | null; // kg — parseado desde string (numeric en Drizzle)
 
   // Estado y sanciones
   status: PlayerStatus;
   suspensionEndDate: Date | null;
   suspensionReason: string | null;
-  isActive?: boolean;
+  /** NOT NULL en DB con default true */
+  isActive: boolean;
 
   createdAt: Date;
   updatedAt: Date;

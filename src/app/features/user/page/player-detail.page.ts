@@ -437,6 +437,7 @@ export default class PlayerDetailPage {
         status: PlayerStatus.Active,
         suspensionEndDate: null,
         suspensionReason: null,
+        isActive: true,
         createdAt: new Date(),
         updatedAt: new Date(),
       };

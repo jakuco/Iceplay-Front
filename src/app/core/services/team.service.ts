@@ -5,6 +5,7 @@ import { map, catchError } from 'rxjs/operators';
 
 import {
   TeamApiResponse,
+  TeamPagedResponse,
   UpdateTeamApiDto,
   TeamProfile,
 } from '../models/team.model';
@@ -38,13 +39,14 @@ export class TeamService {
     page = 1,
     limit = 10,
     filters?: { organizationId?: string; championshipId?: string }
-  ): Observable<TeamApiResponse[]> {
+  ): Observable<TeamPagedResponse> {
     const params: Record<string, string | number> = { page, limit };
 
     if (filters?.organizationId) params['organizationId'] = filters.organizationId;
     if (filters?.championshipId) params['championshipId'] = filters.championshipId;
 
-    return this.api.get<TeamApiResponse[]>('teams', params).pipe(
+    // Backend devuelve { page, limit, total, next, prev, teams: [] }, NO array plano.
+    return this.api.get<TeamPagedResponse>('teams', params).pipe(
       catchError((error) => this.handleError('Error fetching teams', error))
     );
   }
@@ -92,7 +94,7 @@ export class TeamService {
         return {
           id: team.id,
           name: team.name,
-          shortname: team.shortname,
+          shortname: team.shortname ?? '',
 
           championshipId: '',
           documentUrl: null,
@@ -104,7 +106,7 @@ export class TeamService {
           secondaryColor: team.secondaryColor ?? null,
           foundedYear: team.foundedYear ?? null,
           homeVenue: team.homeVenue ? String(team.homeVenue) : null,
-          location: team.location ?? team.city ?? null,
+          location: team.location ?? null,
           coachName: team.coachName ?? null,
           coachPhone: team.coachPhone ?? null,
           isActive: team.isActive ?? true,

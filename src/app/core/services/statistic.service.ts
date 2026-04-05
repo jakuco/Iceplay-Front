@@ -33,6 +33,14 @@ export interface StatisticsPlayer {
   ratio: number;
 }
 
+/**
+ * @classification frontend-experimental
+ * ⚠️ No existe ruta `/api/statistics` en el backend (routes.ts).
+ * Todos los métodos de este service fallarán en runtime con 404.
+ * Los tipos usan snake_case legacy (team_id, goals_for, etc.)
+ * que no coinciden con el estilo camelCase del backend actual.
+ * No usar en producción hasta que el backend implemente los endpoints.
+ */
 @Injectable({
   providedIn: 'root',
 })
