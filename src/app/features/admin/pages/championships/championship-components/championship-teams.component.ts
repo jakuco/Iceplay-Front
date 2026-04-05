@@ -163,7 +163,7 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
     <!-- Counter + progress -->
     <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white
                 border border-gray-200 text-[13px] font-medium text-gray-700 shrink-0">
-      <mat-icon class="!size-4 !text-[16px] text-gray-400">group</mat-icon>
+      <mat-icon class="size!-4 text-[16px]! text-gray-400">group</mat-icon>
       <span><strong class="text-gray-900">{{ teams().length }}</strong>/{{ maxTeams() }}</span>
       <div class="w-16 h-1.5 bg-gray-100 rounded-full overflow-hidden">
         <div
@@ -176,7 +176,7 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
 
     <!-- Search -->
     <div class="relative flex-1 min-w-[180px]">
-      <mat-icon class="absolute left-3 top-1/2 -translate-y-1/2 !size-4 !text-[16px] text-gray-400
+      <mat-icon class="absolute left-3 top-1/2 -translate-y-1/2 size!-4 text-[16px]! text-gray-400
                        pointer-events-none">search</mat-icon>
       <input
         class="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg bg-white text-[13px]
@@ -198,9 +198,9 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
         (click)="toggleImport()"
         type="button"
       >
-        <mat-icon class="!size-4 !text-[16px]">upload</mat-icon>
+        <mat-icon class="size-4! text-[16px]!">upload</mat-icon>
         Importar
-        <mat-icon class="!size-3.5 !text-[14px] transition-transform duration-200"
+        <mat-icon class="size-3.5! text-[14px]! transition-transform duration-200"
                   [style.transform]="showImport() ? 'rotate(180deg)' : 'rotate(0)'">
           expand_more
         </mat-icon>
@@ -216,7 +216,7 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
         type="button"
         [title]="isFull() ? 'Se alcanzó el límite de equipos' : 'Inscribir nuevo equipo'"
       >
-        <mat-icon class="!size-4 !text-[16px]">add</mat-icon>
+        <mat-icon class="size!-4 text-[16px]!">add</mat-icon>
         Inscribir
       </button>
     </div>
@@ -230,7 +230,7 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
       <div class="flex items-start justify-between gap-4 rounded-lg bg-blue-50
                   border border-blue-100 px-4 py-3">
         <div class="flex items-start gap-3">
-          <mat-icon class="!size-[18px] !text-[18px] text-blue-400 shrink-0 mt-0.5">
+          <mat-icon class="size!-[18px] text-[18px]! text-blue-400 shrink-0 mt-0.5">
             description
           </mat-icon>
           <div>
@@ -255,7 +255,7 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
           (click)="downloadTemplate()"
           type="button"
         >
-          <mat-icon class="!size-[14px] !text-[14px]">download</mat-icon>
+          <mat-icon class="size!-[14px] text-[14px]!">download</mat-icon>
           Plantilla CSV
         </button>
       </div>
@@ -285,7 +285,7 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
         />
         <div class="size-12 rounded-full bg-white border border-gray-200 flex items-center
                     justify-center shadow-sm">
-          <mat-icon class="!size-6 !text-[24px] text-gray-400">upload_file</mat-icon>
+          <mat-icon class="size!-6 text-[24px]! text-gray-400">upload_file</mat-icon>
         </div>
         <div>
           <p class="m-0 text-[14px] font-semibold text-gray-700">Arrastra Excel + imágenes aquí</p>
@@ -304,7 +304,7 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
           @for (item of importQueue(); track item.fileName) {
             <div class="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-gray-50
                         border border-gray-100 text-[12.5px]">
-              <mat-icon class="!size-4 !text-[16px] shrink-0"
+              <mat-icon class="size!-4 text-[16px]! shrink-0"
                 [class.text-blue-400]="item.status === 'uploading'"
                 [class.text-green-500]="item.status === 'done'"
                 [class.text-red-400]="item.status === 'error'"
@@ -343,7 +343,7 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
           (click)="cancelImport()"
           type="button"
         >
-          <mat-icon class="!size-[18px] !text-[18px]">close</mat-icon>
+          <mat-icon class="size!-[18px] text-[18px]!">close</mat-icon>
         </button>
       </div>
 
@@ -379,12 +379,12 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
                 <span class="text-[11px] text-gray-500">{{ team.players.length }} jugadores</span>
                 @if (team.logoFile) {
                   <span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-green-100 text-green-700 text-[10px] font-medium">
-                    <mat-icon class="!size-3 !text-[12px]">check</mat-icon> Logo
+                    <mat-icon class="size!-3 text-[12px]!">check</mat-icon> Logo
                   </span>
                 }
                 @if (hasPlayersWithPhoto(team.players)) {
                   <span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-green-100 text-green-700 text-[10px] font-medium">
-                    <mat-icon class="!size-3 !text-[12px]">check</mat-icon> 
+                    <mat-icon class="size!-3 text-[12px]!">check</mat-icon> 
                     {{ countPlayersWithPhoto(team.players) }} fotos
                   </span>
                 }
@@ -395,10 +395,10 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
                   type="button"
                   (click)="$event.stopPropagation(); removeImportedTeam(idx)"
                 >
-                  <mat-icon class="!size-3 !text-[12px]">delete</mat-icon>
+                  <mat-icon class="size!-3 text-[12px]!">delete</mat-icon>
                   Quitar
                 </button>
-                <mat-icon class="!size-5 !text-[20px] text-gray-600 transition-transform"
+                <mat-icon class="size!-5 text-[20px]! text-gray-600 transition-transform"
                           [style.transform]="expandedTeams().has(idx) ? 'rotate(180deg)' : 'rotate(0)'">
                   expand_more
                 </mat-icon>
@@ -526,7 +526,7 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
                             <td class="px-2 py-1.5 text-right">
                               @if (player.photoFile) {
                                 <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-green-50 text-green-700 text-[9px]">
-                                  <mat-icon class="!size-3 !text-[12px]">check</mat-icon> Foto ✓
+                                  <mat-icon class="size!-3 text-[12px]!">check</mat-icon> Foto ✓
                                 </span>
                               } @else {
                                 <span class="text-gray-400">—</span>
@@ -543,7 +543,7 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
                 @if (team.errors.length > 0) {
                   <div class="mt-3 rounded bg-red-50 border border-red-200 p-2">
                     <p class="text-[11px] font-semibold text-red-700 m-0 mb-1">
-                      <mat-icon class="!size-3 !text-[12px] inline">error</mat-icon>
+                      <mat-icon class="size!-3 text-[12px]! inline">error</mat-icon>
                       {{ team.errors.length }} error(es)
                     </p>
                     <ul class="list-none m-0 p-0">
@@ -566,7 +566,7 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
       @if (importErrors().length > 0) {
         <div class="rounded-lg bg-amber-50 border border-amber-200 p-3">
           <p class="text-[12px] font-semibold text-amber-700 m-0 mb-2">
-            <mat-icon class="!size-4 !text-[16px] inline mr-1">warning</mat-icon>
+            <mat-icon class="size!-4 text-[16px]! inline mr-1">warning</mat-icon>
             {{ importErrors().length }} Imagen(es) sin match
           </p>
           <ul class="list-none m-0 p-0 max-h-24 overflow-y-auto">
@@ -582,7 +582,7 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
       @if (importValidationErrors().length > 0) {
         <div class="rounded-lg bg-red-50 border border-red-200 p-3">
           <p class="text-[12px] font-semibold text-red-700 m-0 mb-2">
-            <mat-icon class="!size-4 !text-[16px] inline mr-1">error</mat-icon>
+            <mat-icon class="size!-4 text-[16px]! inline mr-1">error</mat-icon>
             {{ importValidationErrors().length }} error(es) bloquean la importación
           </p>
           <ul class="list-none m-0 p-0 max-h-28 overflow-y-auto">
@@ -615,7 +615,7 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
           type="button"
           [title]="canConfirmImport() ? 'Importar todos los equipos' : importBlockReason()"
         >
-          <mat-icon class="!size-4 !text-[16px] inline mr-1.5">check_circle</mat-icon>
+          <mat-icon class="size!-4 text-[16px]! inline mr-1.5">check_circle</mat-icon>
           Importar {{ importedTeams().length }} Equipo(s)
         </button>
       </div>
@@ -627,7 +627,7 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
 
     @if (filteredTeams().length === 0) {
       <div class="flex flex-col items-center gap-3 py-12 text-center text-gray-500">
-        <mat-icon class="!size-10 !text-[40px] text-gray-300">group_off</mat-icon>
+        <mat-icon class="size!-10 text-[40px]! text-gray-300">group_off</mat-icon>
         @if (searchQuery()) {
           <p class="m-0 text-[14px]">Sin resultados para "<strong>{{ searchQuery() }}</strong>"</p>
         } @else {
@@ -640,7 +640,7 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
             (click)="openCreateTeam()"
             type="button"
           >
-            <mat-icon class="!size-4 !text-[16px]">add</mat-icon> Inscribir primer equipo
+            <mat-icon class="size!-4 text-[16px]!">add</mat-icon> Inscribir primer equipo
           </button>
         }
       </div>
@@ -713,7 +713,7 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
                 title="Ver documento"
                 [attr.aria-label]="'Ver documento de ' + team.name"
               >
-                <mat-icon class="!size-[15px] !text-[15px]">description</mat-icon>
+                <mat-icon class="size!-[15px] text-[15px]!">description</mat-icon>
               </button>
             }
 
@@ -724,7 +724,7 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
               (click)="openEditTeam(team, $event)"
               type="button"
             >
-              <mat-icon class="!size-[14px] !text-[14px]">edit</mat-icon>
+              <mat-icon class="size!-[14px] text-[14px]!">edit</mat-icon>
               Editar
             </button>
 
@@ -736,12 +736,12 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
               type="button"
               title="Retirar equipo"
             >
-              <mat-icon class="!size-[14px] !text-[14px]">close</mat-icon>
+              <mat-icon class="size!-[14px] text-[14px]!">close</mat-icon>
             </button>
 
             <!-- Chevron -->
             <mat-icon
-              class="!size-4 !text-[16px] text-gray-400 transition-transform duration-200 ml-1"
+              class="size!-4 text-[16px]! text-gray-400 transition-transform duration-200 ml-1"
               [style.transform]="expandedTeams().has(team.id) || playerMatchedTeamIds().has(team.id) ? 'rotate(180deg)' : 'rotate(0)'"
             >expand_more</mat-icon>
           </div>
@@ -814,7 +814,7 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
                           type="button"
                           title="Editar jugador"
                         >
-                          <mat-icon class="!size-3.5 !text-[14px]">edit</mat-icon>
+                            <mat-icon class="size!-3.5 text-[14px]!">edit</mat-icon>
                         </button>
                       </td>
                     </tr>
@@ -823,7 +823,7 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
               </table>
             } @else {
               <div class="flex flex-col items-center gap-2 py-6 text-center text-gray-400">
-                <mat-icon class="!size-8 !text-[32px] text-gray-300">person_off</mat-icon>
+                <mat-icon class="size!-8 text-[32px]! text-gray-300">person_off</mat-icon>
                 <p class="m-0 text-[13px]">Sin jugadores inscritos</p>
               </div>
             }
@@ -850,7 +850,7 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
                   ? 'Límite de jugadores alcanzado'
                   : 'Agregar jugador al equipo ' + team.name"
               >
-                <mat-icon class="!size-[14px] !text-[14px]">person_add</mat-icon>
+                <mat-icon class="size!-[14px] text-[14px]!">person_add</mat-icon>
                 Agregar jugador
               </button>
               @if (team.players.length >= maxPlayersPerTeam()) {
@@ -878,7 +878,7 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
       (click)="save.emit(teams())"
       type="button"
     >
-      <mat-icon class="!size-4 !text-[16px]">save</mat-icon>
+      <mat-icon class="size!-4 text-[16px]!">save</mat-icon>
       Guardar todos los cambios
     </button>
   </div>
@@ -888,7 +888,7 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
 <!-- ══ TEAM MODAL (drawer lateral) ══════════════════════════ -->
 @if (teamModal()) {
   <div
-    class="fixed inset-0 z-[150] flex justify-end"
+    class="fixed inset-0 z-150 flex justify-end"
     style="background: rgba(0,0,0,0.35);"
     (click)="closeTeamModal()"
   >
@@ -906,7 +906,7 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
                  hover:bg-gray-100 border-none bg-transparent cursor-pointer transition-colors"
           (click)="closeTeamModal()" type="button"
         >
-          <mat-icon class="!size-[18px] !text-[18px]">close</mat-icon>
+          <mat-icon class="size!-[18px] text-[18px]!">close</mat-icon>
         </button>
       </div>
 
@@ -928,7 +928,7 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
             }
             <div class="absolute inset-0 bg-black/50 flex items-center justify-center
                         opacity-0 group-hover:opacity-100 transition-opacity">
-              <mat-icon class="!size-5 !text-[20px] text-white">photo_camera</mat-icon>
+              <mat-icon class="size!-5 text-[20px]! text-white">photo_camera</mat-icon>
             </div>
           </div>
           <input #logoFileInput type="file" accept="image/*" class="sr-only"
@@ -1047,7 +1047,7 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
         @if (teamModalError()) {
           <div class="flex items-center gap-2 rounded-lg bg-red-50 border border-red-200
                       px-3 py-2.5 text-[12.5px] text-red-600">
-            <mat-icon class="!size-4 !text-[16px] shrink-0">error_outline</mat-icon>
+            <mat-icon class="size!-4 text-[16px]! shrink-0">error_outline</mat-icon>
             {{ teamModalError() }}
           </div>
         }
@@ -1063,7 +1063,7 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
           (click)="submitTeamModal()"
           type="button"
         >
-          <mat-icon class="!size-4 !text-[16px]">save</mat-icon>
+          <mat-icon class="size!-4 text-[16px]!">save</mat-icon>
           {{ teamModal()!.id ? 'Guardar cambios' : 'Inscribir equipo' }}
         </button>
       </div>
