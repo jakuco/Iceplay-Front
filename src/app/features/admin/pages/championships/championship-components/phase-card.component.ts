@@ -9,61 +9,61 @@ import {
   output,
 } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
-import { MatIconModule }   from '@angular/material/icon';
+import { MatIconModule } from '@angular/material/icon';
 
 // ─── Types (re-exportados para uso en el parent) ──────────────
-export enum PhaseType   { League = 'league', Knockout = 'knockout', Groups = 'groups', Swiss = 'swiss' }
+export enum PhaseType { League = 'league', Knockout = 'knockout', Groups = 'groups', Swiss = 'swiss' }
 export enum PhaseStatus { Pending = 'pending', Active = 'active', Finished = 'finished' }
 
 export interface LeagueConfig {
-  winsPoints:     number;
-  drawPoints:     number;
-  lossPoints:     number;
-  totalRounds:    number;
-  legs:           number;
-  advanceCount:   number;
-  tiebreakOrder:  string;
+  winsPoints: number;
+  drawPoints: number;
+  lossPoints: number;
+  totalRounds: number;
+  legs: number;
+  advanceCount: number;
+  tiebreakOrder: string;
 }
 
 export interface KnockoutConfig {
-  legs:             number;
-  bracketSize:      number;
-  thirdPlaceMatch:  boolean;
-  seeding:          string;
-  awayGoalsRule:    boolean;
-  tieBreak:         string;
+  legs: number;
+  bracketSize: number;
+  thirdPlaceMatch: boolean;
+  seeding: string;
+  awayGoalsRule: boolean;
+  tieBreak: string;
 }
 
 export interface GroupsConfig {
-  numGroups:          number;
-  teamsPerGroup:      number;
-  legs:               number;
-  advancePerGroup:    number;
-  advanceBestThirds:  number;
-  tiebreakOrder:      string;
+  numGroups: number;
+  teamsPerGroup: number;
+  legs: number;
+  advancePerGroup: number;
+  advanceBestThirds: number;
+  tiebreakOrder: string;
 }
 
 export interface SwissConfig {
-  numRounds:            number;
-  pairingSystem:        string;
-  firstRound:           string;
-  allowRematch:         boolean;
-  tiebreakOrder:        string;
-  directAdvancedCount:  number;
-  playoffCount:         number;
+  numRounds: number;
+  pairingSystem: string;
+  firstRound: string;
+  allowRematch: boolean;
+  tiebreakOrder: string;
+  directAdvancedCount: number;
+  playoffCount: number;
 }
 
 export interface PhaseCardData {
-  id:          number;
-  name:        string;
-  phaseType:   PhaseType;
-  phaseOrder:  number;
-  status:      PhaseStatus;
-  isBase?:     boolean;    // true = fase generada por el formato, no eliminable
-  league?:     LeagueConfig;
-  knockout?:   KnockoutConfig;
-  groups?:     GroupsConfig;
-  swiss?:      SwissConfig;
+  id: number;
+  name: string;
+  phaseType: PhaseType;
+  phaseOrder: number;
+  status: PhaseStatus;
+  isBase?: boolean;    // true = fase generada por el formato, no eliminable
+  league?: LeagueConfig;
+  knockout?: KnockoutConfig;
+  groups?: GroupsConfig;
+  swiss?: SwissConfig;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -71,22 +71,22 @@ export interface PhaseCardData {
 // ─────────────────────────────────────────────────────────────
 
 const TYPE_META: Record<PhaseType, { label: string; tw: string }> = {
-  [PhaseType.League]:   { label: 'Liga',         tw: 'bg-blue-100  text-blue-700'     },
-  [PhaseType.Knockout]: { label: 'Eliminatoria', tw: 'bg-orange-100 text-orange-700'  },
-  [PhaseType.Groups]:   { label: 'Grupos',       tw: 'bg-purple-100 text-purple-700'  },
-  [PhaseType.Swiss]:    { label: 'Suizo',        tw: 'bg-emerald-100 text-emerald-700'},
+  [PhaseType.League]: { label: 'Liga', tw: 'bg-blue-100  text-blue-700' },
+  [PhaseType.Knockout]: { label: 'Eliminatoria', tw: 'bg-orange-100 text-orange-700' },
+  [PhaseType.Groups]: { label: 'Grupos', tw: 'bg-purple-100 text-purple-700' },
+  [PhaseType.Swiss]: { label: 'Suizo', tw: 'bg-emerald-100 text-emerald-700' },
 };
 
 const STATUS_META: Record<PhaseStatus, { label: string; dotTw: string; pillTw: string }> = {
-  [PhaseStatus.Active]:   { label: 'En Curso',   dotTw: 'bg-green-500',  pillTw: 'bg-green-50  text-green-700  ring-green-200'  },
-  [PhaseStatus.Pending]:  { label: 'Pendiente',  dotTw: 'bg-amber-400',  pillTw: 'bg-amber-50  text-amber-700  ring-amber-200'  },
-  [PhaseStatus.Finished]: { label: 'Finalizado', dotTw: 'bg-slate-400',  pillTw: 'bg-slate-100 text-slate-600  ring-slate-200'  },
+  [PhaseStatus.Active]: { label: 'En Curso', dotTw: 'bg-green-500', pillTw: 'bg-green-50  text-green-700  ring-green-200' },
+  [PhaseStatus.Pending]: { label: 'Pendiente', dotTw: 'bg-amber-400', pillTw: 'bg-amber-50  text-amber-700  ring-amber-200' },
+  [PhaseStatus.Finished]: { label: 'Finalizado', dotTw: 'bg-slate-400', pillTw: 'bg-slate-100 text-slate-600  ring-slate-200' },
 };
 
 function knockoutRounds(bracketSize: number): string {
   const names: Record<number, string> = {
     32: 'Dieciseisavos', 16: 'Octavos de Final',
-    8:  'Cuartos de Final', 4: 'Semifinal', 2: 'Final',
+    8: 'Cuartos de Final', 4: 'Semifinal', 2: 'Final',
   };
   const rounds: string[] = [];
   let n = bracketSize;
@@ -95,7 +95,7 @@ function knockoutRounds(bracketSize: number): string {
 }
 
 function swissPairingLabel(sys: string): string {
-  return { dutch: 'Holandés', accelerated: 'Acelerado', monrad: 'Monrad' }[sys] ?? sys;
+  return { random: 'Aleatorio', dutch: 'Holandés', accelerated: 'Acelerado', monrad: 'Monrad' }[sys] ?? sys;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -235,32 +235,32 @@ function swissPairingLabel(sys: string): string {
 export class PhaseCardComponent {
 
   // ── Inputs / Outputs ──────────────────────────────────────────
-  readonly phase     = input.required<PhaseCardData>();
-  readonly locked    = input(false);   // true = fase base, no eliminable
+  readonly phase = input.required<PhaseCardData>();
+  readonly locked = input(false);   // true = fase base, no eliminable
   readonly configure = output<PhaseCardData>();
-  readonly delete    = output<void>();
+  readonly delete = output<void>();
 
   // ── Exposed helpers for template ──────────────────────────────
   readonly knockoutRoundsLabel = () => knockoutRounds(this.phase().knockout?.bracketSize ?? 8);
-  readonly swissPairingLabel   = swissPairingLabel;
+  readonly swissPairingLabel = swissPairingLabel;
 
-  typeLabel()   { return TYPE_META[this.phase().phaseType].label;   }
-  statusLabel() { return STATUS_META[this.phase().status].label;    }
+  typeLabel() { return TYPE_META[this.phase().phaseType].label; }
+  statusLabel() { return STATUS_META[this.phase().status].label; }
 
-  typeTagClass()    { return TYPE_META[this.phase().phaseType].tw;          }
-  statusDotClass()  { return STATUS_META[this.phase().status].dotTw;        }
-  statusPillClass() { return STATUS_META[this.phase().status].pillTw;       }
+  typeTagClass() { return TYPE_META[this.phase().phaseType].tw; }
+  statusDotClass() { return STATUS_META[this.phase().status].dotTw; }
+  statusPillClass() { return STATUS_META[this.phase().status].pillTw; }
 
   activeBorderClass(): string {
     const s = this.phase().status;
-    if (s === PhaseStatus.Active)   return 'border-blue-300 shadow-[inset_3px_0_0_0_#3b82f6]';
+    if (s === PhaseStatus.Active) return 'border-blue-300 shadow-[inset_3px_0_0_0_#3b82f6]';
     if (s === PhaseStatus.Finished) return 'border-gray-200';
     return 'border-gray-200';
   }
 
   orderBadgeClass(): string {
     const s = this.phase().status;
-    if (s === PhaseStatus.Active)  return 'border-gray-100 bg-blue-50  text-blue-500';
+    if (s === PhaseStatus.Active) return 'border-gray-100 bg-blue-50  text-blue-500';
     if (s === PhaseStatus.Pending) return 'border-gray-100 bg-amber-50 text-amber-500';
     return 'border-gray-100 bg-gray-50 text-gray-400';
   }

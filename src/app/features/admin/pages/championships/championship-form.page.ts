@@ -68,7 +68,6 @@ interface NavTab { id: string; label: string; icon: string; count: number | null
 @Component({
   selector: 'app-championship-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  standalone: true,
   imports: [
     RouterLink,
     MatIconModule,
@@ -478,13 +477,15 @@ export default class ChampionshipFormPage implements OnInit {
     }
   }
 
-  /** Guarda fases y equipos pendientes para un championship ya existente. */
   private saveAllSections(id: string): Observable<void> {
     const saves: Observable<unknown>[] = [];
 
-    if (this.phases().length > 0) {
-      const dtos = this.phases().map(p => ({
-        name: p.name, phaseType: p.phaseType, phaseOrder: p.phaseOrder,
+    const phases = this.phases();
+    if (phases.length > 0) {
+      const dtos = phases.map(p => ({
+        name: p.name,
+        phaseType: p.phaseType,
+        phaseOrder: p.phaseOrder,
       }));
       saves.push(this.championshipSvc.savePhases(id, dtos));
     }
@@ -564,27 +565,104 @@ export default class ChampionshipFormPage implements OnInit {
           this.championshipRules.set(merged);
           this.cdr.markForCheck();
         });
-        this.championshipSvc.getPhases(id).subscribe(phasesFromSvc => {
-          const mapped: PhaseCardData[] = phasesFromSvc.map(p => ({
+        const phasesFromDetail = c.phases ?? [];
+        {
+          const mapped: PhaseCardData[] = phasesFromDetail.map(p => ({
             id: Number(p.id),
             name: p.name,
             phaseType: p.phaseType,
             phaseOrder: p.phaseOrder,
             status: p.status,
-            league: p.leagueConfig ? { winsPoints: 3, drawPoints: 1, lossPoints: 0, totalRounds: p.leagueConfig.advanceCount, legs: p.leagueConfig.legs, advanceCount: p.leagueConfig.advanceCount, tiebreakOrder: p.leagueConfig.tiebreakOrder } : undefined,
-            knockout: p.knockoutConfig ? { legs: p.knockoutConfig.legs, bracketSize: 0, thirdPlaceMatch: p.knockoutConfig.thirdPlaceMatch, seeding: p.knockoutConfig.seeding, awayGoalsRule: p.knockoutConfig.awayGoalsRule, tieBreak: p.knockoutConfig.tieBreak } : undefined,
-            groups: p.groupsConfig ? { numGroups: p.groupsConfig.numGroups, teamsPerGroup: p.groupsConfig.teamsPerGroup, legs: p.groupsConfig.legs, advancePerGroup: p.groupsConfig.advancePerGroup, advanceBestThirds: p.groupsConfig.advanceBestThirds, tiebreakOrder: p.groupsConfig.tiebreakOrder } : undefined,
-            swiss: p.swissConfig ? { numRounds: p.swissConfig.numRounds, pairingSystem: p.swissConfig.pairingSystem, firstRound: p.swissConfig.firstRound, allowRematch: p.swissConfig.allowRematch, tiebreakOrder: p.swissConfig.tiebreakOrder, directAdvancedCount: p.swissConfig.directAdvancedCount, playoffCount: p.swissConfig.playoffCount } : undefined,
+            league: p.leagueConfig
+              ? {
+                winsPoints: 3,
+                drawPoints: 1,
+                lossPoints: 0,
+                totalRounds: 10,
+                legs: p.leagueConfig.legs,
+                advanceCount: p.leagueConfig.advanceCount,
+                tiebreakOrder: 'points,goal_difference,goals_for,h2h,fair_play,draw',
+              }
+              : p.phaseType === PhaseType.League
+                ? {
+                  winsPoints: 3,
+                  drawPoints: 1,
+                  lossPoints: 0,
+                  totalRounds: 10,
+                  legs: 1,
+                  advanceCount: 4,
+                  tiebreakOrder: 'points,goal_difference,goals_for,h2h,fair_play,draw',
+                }
+                : undefined,
+            knockout: p.knockoutConfig
+              ? {
+                legs: p.knockoutConfig.legs,
+                bracketSize: 8,
+                thirdPlaceMatch: p.knockoutConfig.thirdPlaceMatch,
+                seeding: p.knockoutConfig.seeding,
+                awayGoalsRule: p.knockoutConfig.awayGoalsRule,
+                tieBreak: p.knockoutConfig.tieBreak,
+              }
+              : p.phaseType === PhaseType.Knockout
+                ? {
+                  legs: 1,
+                  bracketSize: 8,
+                  thirdPlaceMatch: false,
+                  seeding: 'ranking',
+                  awayGoalsRule: false,
+                  tieBreak: 'penalties',
+                }
+                : undefined,
+            groups: p.groupsConfig
+              ? {
+                numGroups: p.groupsConfig.numGroups,
+                teamsPerGroup: p.groupsConfig.teamsPerGroup,
+                legs: p.groupsConfig.legs,
+                advancePerGroup: p.groupsConfig.advancePerGroup,
+                advanceBestThirds: p.groupsConfig.advanceBestThirds,
+                tiebreakOrder: p.groupsConfig.tiebreakOrder,
+              }
+              : p.phaseType === PhaseType.Groups
+                ? {
+                  numGroups: 4,
+                  teamsPerGroup: 4,
+                  legs: 1,
+                  advancePerGroup: 2,
+                  advanceBestThirds: 0,
+                  tiebreakOrder: 'points,diff,gf,h2h,random',
+                }
+                : undefined,
+            swiss: p.swissConfig
+              ? {
+                numRounds: p.swissConfig.numRounds,
+                pairingSystem: p.swissConfig.pairingSystem,
+                firstRound: p.swissConfig.firstRound,
+                allowRematch: p.swissConfig.allowRematch,
+                tiebreakOrder: p.swissConfig.tiebreakOrder,
+                directAdvancedCount: p.swissConfig.directAdvancedCount,
+                playoffCount: p.swissConfig.playoffCount,
+              }
+              : p.phaseType === PhaseType.Swiss
+                ? {
+                  numRounds: 7,
+                  pairingSystem: 'random',
+                  firstRound: 'random',
+                  allowRematch: false,
+                  tiebreakOrder: 'points,goal_difference,goals_for,h2h,fair_play,draw',
+                  directAdvancedCount: 2,
+                  playoffCount: 4,
+                }
+                : undefined,
           }));
           this.phases.set(mapped);
           this.activeFormat.set(this.inferFormat(mapped));
           this.headerData.update(d => ({ ...d, phaseCount: mapped.length }));
-        });
+        }
         // Cargar equipos del campeonato
         this.championshipSvc.getTeams(id).subscribe(profiles => {
-          const mapped: TeamItem[] = profiles.map(p => ({
-            id: Number(p.id),
-            championshipId: Number(p.championshipId),
+          const mapped: TeamItem[] = profiles.map((p, teamIndex) => ({
+            id: this.toStableNumericId(p.id, teamIndex + 1),
+            championshipId: this.toStableNumericId(p.championshipId, 0),
             name: p.name,
             shortname: p.shortname,
             slug: p.slug,
@@ -598,10 +676,10 @@ export default class ChampionshipFormPage implements OnInit {
             coachName: p.coachName ?? '',
             coachPhone: p.coachPhone ?? '',
             isActive: p.isActive,
-            players: (p.players ?? []).map(pl => ({
-              id: Number(pl.id),
-              teamId: Number(pl.teamId),
-              positionId: Number(pl.positionId),
+            players: (p.players ?? []).map((pl, playerIndex) => ({
+              id: this.toStableNumericId(pl.id, (teamIndex + 1) * 1000 + playerIndex + 1),
+              teamId: this.toStableNumericId(pl.teamId, teamIndex + 1),
+              positionId: this.toStableNumericId(pl.positionId, 1),
               firstName: pl.firstName,
               lastName: pl.lastName,
               nickName: pl.nickName ?? null,
@@ -655,6 +733,29 @@ export default class ChampionshipFormPage implements OnInit {
       }
     }
     return Array.from(mapByNetwork.values());
+  }
+
+  private toStableNumericId(value: unknown, fallback: number): number {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return value;
+    }
+
+    const asNumber = Number(value);
+    if (Number.isFinite(asNumber)) {
+      return asNumber;
+    }
+
+    const text = String(value ?? '').trim();
+    if (!text) {
+      return fallback;
+    }
+
+    // Deterministic 32-bit hash for UUID/string ids to keep UI keys stable.
+    let hash = 0;
+    for (let i = 0; i < text.length; i++) {
+      hash = ((hash << 5) - hash + text.charCodeAt(i)) | 0;
+    }
+    return Math.abs(hash) || fallback;
   }
 
   private isHttpsUrl(value: string): boolean {

@@ -22,7 +22,7 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 
 // ─── Types ───────────────────────────────────────────────────
 
-export type ChampionshipHeaderStatus = 'draft' | 'registration' | 'active' | 'finished' | 'cancelled';
+export type ChampionshipHeaderStatus = 0 | 1 | 2 | 3 | 4 | 'draft' | 'registration' | 'active' | 'finished' | 'cancelled';
 
 export interface SportOption {
   id: number;
@@ -59,12 +59,25 @@ export interface ChampionshipHeaderSocialLink {
 
 // ─── Constants ───────────────────────────────────────────────
 
-const STATUS_META: Record<ChampionshipHeaderStatus, { label: string; dot: string; pill: string }> = {
+const STATUS_META: Record<'draft' | 'registration' | 'active' | 'finished' | 'cancelled', { label: string; dot: string; pill: string }> = {
   draft: { label: 'Borrador', dot: 'bg-slate-400', pill: 'bg-slate-500/20  text-slate-300   ring-slate-500/30' },
   registration: { label: 'Inscripciones', dot: 'bg-blue-400', pill: 'bg-blue-500/20   text-blue-300    ring-blue-500/30' },
   active: { label: 'Activo', dot: 'bg-green-400', pill: 'bg-green-500/20  text-green-300   ring-green-500/30' },
   finished: { label: 'Finalizado', dot: 'bg-slate-500', pill: 'bg-slate-500/20  text-slate-400   ring-slate-500/30' },
   cancelled: { label: 'Cancelado', dot: 'bg-red-400', pill: 'bg-red-500/20    text-red-300     ring-red-500/30' },
+};
+
+const STATUS_BY_VALUE: Record<string, keyof typeof STATUS_META> = {
+  '0': 'draft',
+  '1': 'registration',
+  '2': 'active',
+  '3': 'finished',
+  '4': 'cancelled',
+  draft: 'draft',
+  registration: 'registration',
+  active: 'active',
+  finished: 'finished',
+  cancelled: 'cancelled',
 };
 
 const SOCIAL_NETWORK_OPTIONS: Array<{
@@ -697,9 +710,9 @@ export class ChampionshipHeaderComponent {
     const meta = SOCIAL_NETWORK_OPTIONS.find(opt => opt.id === this.socialNetworkDraft);
     return meta?.placeholder ?? 'https://...';
   });
-  statusLabel() { return STATUS_META[this.data().status].label; }
-  statusDotClass() { return STATUS_META[this.data().status].dot; }
-  statusPillClass() { return STATUS_META[this.data().status].pill; }
+  statusLabel() { return this.getStatusMeta().label; }
+  statusDotClass() { return this.getStatusMeta().dot; }
+  statusPillClass() { return this.getStatusMeta().pill; }
 
   // ── Click outside ──────────────────────────────────────────────
   @HostListener('document:click', ['$event'])
@@ -857,6 +870,12 @@ export class ChampionshipHeaderComponent {
     } catch {
       return false;
     }
+  }
+
+  private getStatusMeta(): (typeof STATUS_META)[keyof typeof STATUS_META] {
+    const rawStatus = this.data().status;
+    const statusKey = STATUS_BY_VALUE[String(rawStatus).toLowerCase()] ?? 'draft';
+    return STATUS_META[statusKey];
   }
 
   // ── Date range label ───────────────────────────────────────────
