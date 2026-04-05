@@ -17,8 +17,9 @@ export const ApiEndpoints = {
     BASE: AUTH_BASE,
     LOGIN: `${AUTH_BASE}/login`,
     REGISTER: `${AUTH_BASE}/register`,
+    LOGOUT: `${AUTH_BASE}/logout`,
     VALIDATE_EMAIL: (token: string) => `${AUTH_BASE}/validate-email/${token}`,
-    RENEW: `${AUTH_BASE}/renew`
+    REFRESH: `${AUTH_BASE}/refresh`
   },
 
   PLAYERS: {

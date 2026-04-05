@@ -119,7 +119,7 @@ export class AuthService {
   private async fetchRefreshAndApplySession(): Promise<void> {
     const response = await firstValueFrom(
       this.api.post<AuthRefreshResponse>(
-        'auth/refresh',
+        ApiEndpoints.AUTH.REFRESH,
         {},
         { withCredentials: true }
       )
@@ -250,7 +250,7 @@ export class AuthService {
 
   async logout(): Promise<void> {
     await firstValueFrom(
-      this.api.post('auth/logout', {}, { withCredentials: true }).pipe(
+      this.api.post(ApiEndpoints.AUTH.LOGOUT, {}, { withCredentials: true }).pipe(
         tap(() => this.setAccessToken(null))
       )
     );
