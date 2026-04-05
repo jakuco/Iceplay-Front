@@ -19,11 +19,11 @@ import type { DbId } from './db.types';
  * El estado cancelled es terminal y puede venir de cualquier estado.
  */
 export enum ChampionshipStatus {
-  Draft = 'draft',
-  Registration = 'registration',
-  Active = 'active',
-  Finished = 'finished',
-  Cancelled = 'cancelled',
+  Draft = 0,
+  Registration = 1,
+  Active = 2,
+  Finished = 3,
+  Cancelled = 4,
 }
 
 /**

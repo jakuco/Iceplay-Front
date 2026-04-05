@@ -141,7 +141,7 @@ import { AuthService } from '../../../../core/services/auth.service';
                     <mat-icon>content_copy</mat-icon>
                     <span>Duplicar</span>
                   </button>
-                  <button mat-menu-item class="text-red-500">
+                  <button mat-menu-item class="text-red-500" (click)="deleteChampionship(item.id)">
                     <mat-icon>delete</mat-icon>
                     <span>Eliminar</span>
                   </button>
@@ -291,37 +291,54 @@ export default class ChampionshipsListPage {
   constructor() {
     effect((onCleanup) => {
       const user = this.authService.currentUser();
+      console.log('Current user in ChampionshipsListPage effect:', user);
       if (user && user.organizationId) {
         const sub = this.championshipService
-          .getAll({ organizationId: +user.organizationId })
+          .getAll({ organizationId: user.organizationId })
           .subscribe((result) => {
-          this.championships.set(result.data as unknown as Championship[]);
-        });
+            console.log('Championships fetched:', result.data);
+            this.championships.set(result.data as unknown as Championship[]);
+          });
         onCleanup(() => sub.unsubscribe());
       }
     });
   }
 
-  getStatusLabel(status: string): string {
+  getStatusLabel(status: ChampionshipStatus | string | number): string {
     const labels: Record<string, string> = {
+      [ChampionshipStatus.Draft]: 'Borrador',
+      [ChampionshipStatus.Registration]: 'Inscripciones',
+      [ChampionshipStatus.Active]: 'Activo',
+      [ChampionshipStatus.Finished]: 'Finalizado',
+      [ChampionshipStatus.Cancelled]: 'Cancelado',
       draft: 'Borrador',
       registration: 'Inscripciones',
       active: 'Activo',
       finished: 'Finalizado',
       cancelled: 'Cancelado',
     };
-    return labels[status] || status;
+    return labels[String(status)] ?? String(status);
   }
 
   getStatusIcon(status: ChampionshipStatus): string {
     const icons: Record<ChampionshipStatus, string> = {
-      draft: 'drafts',
-      registration: 'how_to_reg',
-      active: 'play_circle',
-      finished: 'check_circle',
-      cancelled: 'cancel',
+      [ChampionshipStatus.Draft]: 'drafts',
+      [ChampionshipStatus.Registration]: 'how_to_reg',
+      [ChampionshipStatus.Active]: 'play_circle',
+      [ChampionshipStatus.Finished]: 'check_circle',
+      [ChampionshipStatus.Cancelled]: 'cancel',
     };
     return icons[status] || 'help';
+  }
+
+  deleteChampionship(id: number): void {
+    this.championshipService.delete(String(id)).subscribe({
+      next: () => {
+        this.championships.update(champs => champs.filter(c => c.id !== id));
+        this.snackBar.open('Campeonato eliminado', 'Cerrar', { duration: 3000 });
+      },
+      error: () => this.snackBar.open('Error al eliminar', 'Cerrar', { duration: 3000 }),
+    });
   }
 
   updateChampionshipStatus(championshipId: number, newStatus: ChampionshipStatus): void {

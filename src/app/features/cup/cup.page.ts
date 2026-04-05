@@ -3,6 +3,7 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { MatIconModule } from '@angular/material/icon';
 import { ActivatedRoute } from '@angular/router';
 import { catchError, map, of, switchMap } from 'rxjs';
+import { ChampionshipStatus } from '../../core/models/championship.model';
 import { ChampionshipService } from '../../core/services/championship.service';
 
 interface LiveMatch {
@@ -799,6 +800,7 @@ export default class CupPage {
         this.championshipService.getAllChampionships().pipe(
           map((championships) => this.findChampionshipBySlug(championships, cupSlug)),
           switchMap((championship) => {
+            console.log('Championship found for slug:', championship);
             if (!championship) {
               return of(null);
             }
@@ -839,7 +841,12 @@ export default class CupPage {
 
   protected readonly isChampionshipLive = computed(() => {
     const status = this.championshipDetail()?.status;
-    return status === 1 || status === '1' || status === 'active';
+    return (
+      status === ChampionshipStatus.Active ||
+      status === '2' ||
+      status === '1' ||
+      status === 'active'
+    );
   });
 
   protected readonly championshipStatusLabel = computed(() =>

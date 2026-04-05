@@ -14,7 +14,7 @@ import {
   ChangeDetectionStrategy,
   ChangeDetectorRef,
   Component,
-  OnInit,
+  effect,
   computed,
   inject,
   input,
@@ -39,11 +39,11 @@ export type ChampionshipFormat =
   | 'swiss_playoff';    // Suizo + Playoff
 
 interface FormatOption {
-  id:          ChampionshipFormat;
-  label:       string;
+  id: ChampionshipFormat;
+  label: string;
   description: string;
-  icon:        string;
-  phases:      string[];   // resumen de fases que genera
+  icon: string;
+  phases: string[];   // resumen de fases que genera
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -81,11 +81,23 @@ const FORMAT_OPTIONS: FormatOption[] = [
   },
 ];
 
+const SWISS_PAIRING_SYSTEM = 'random';
+const SWISS_TIEBREAK_ORDER = 'points,goal_difference,goals_for,h2h,fair_play,draw';
+const LEAGUE_TIEBREAK_ORDER = SWISS_TIEBREAK_ORDER;
+const COMMON_TIEBREAK_LABELS = [
+  'Puntos',
+  'Diferencia de goles',
+  'Goles a favor',
+  'Enfrentamientos directos',
+  'Fair Play',
+  'Sorteo',
+];
+
 const BASE_PHASES: Record<ChampionshipFormat, () => PhaseCardData[]> = {
   league: () => [{
     id: 1, name: 'Fase de Liga', phaseType: PhaseType.League,
     phaseOrder: 1, status: PhaseStatus.Pending, isBase: true,
-    league: { winsPoints: 3, drawPoints: 1, lossPoints: 0, totalRounds: 10, legs: 1, tiebreakOrder: 'points,diff,gf,h2h,random', advanceCount: 4 },
+    league: { winsPoints: 3, drawPoints: 1, lossPoints: 0, totalRounds: 10, legs: 1, tiebreakOrder: LEAGUE_TIEBREAK_ORDER, advanceCount: 4 },
   }],
   groups_knockout: () => [
     {
@@ -108,7 +120,7 @@ const BASE_PHASES: Record<ChampionshipFormat, () => PhaseCardData[]> = {
     {
       id: 1, name: 'Fase Suiza', phaseType: PhaseType.Swiss,
       phaseOrder: 1, status: PhaseStatus.Pending, isBase: true,
-      swiss: { numRounds: 7, pairingSystem: 'dutch', firstRound: 'random', allowRematch: false, tiebreakOrder: 'points,buchholz', directAdvancedCount: 2, playoffCount: 4 },
+      swiss: { numRounds: 7, pairingSystem: SWISS_PAIRING_SYSTEM, firstRound: 'random', allowRematch: false, tiebreakOrder: SWISS_TIEBREAK_ORDER, directAdvancedCount: 2, playoffCount: 4 },
     },
     {
       id: 2, name: 'Playoff', phaseType: PhaseType.Knockout,
@@ -471,11 +483,11 @@ let _nextPhaseId = 100;
               </div>
               <div class="flex flex-col gap-1.5">
                 <label class="ph-label">Criterio de Desempate</label>
-                <select class="ph-field" [(ngModel)]="phaseForm.tiebreakOrder">
-                  <option value="points,diff,gf,h2h,random">Puntos → Diferencia → GF → H2H → Azar</option>
-                  <option value="points,diff,gf,random">Puntos → Diferencia → GF → Azar</option>
-                  <option value="points,h2h,diff,gf">Puntos → H2H → Diferencia → GF</option>
-                </select>
+                <div class="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-[13px] text-gray-700">
+                  @for (rule of leagueTiebreakCriteria(); track rule) {
+                    <div>{{ $index + 1 }}. {{ rule }}</div>
+                  }
+                </div>
               </div>
             }
 
@@ -586,11 +598,8 @@ let _nextPhaseId = 100;
                 </div>
                 <div class="flex flex-col gap-1.5">
                   <label class="ph-label">Sistema de Emparejamiento</label>
-                  <select class="ph-field" [(ngModel)]="phaseForm.pairingSystem">
-                    <option value="dutch">Holandés (Dutch)</option>
-                    <option value="accelerated">Acelerado</option>
-                    <option value="monrad">Monrad</option>
-                  </select>
+                  <div class="ph-field bg-gray-50 text-gray-700">Aleatorio </div>
+                  <small class="text-[11.5px] text-gray-400">No es configurable</small>
                 </div>
               </div>
               <div class="grid grid-cols-2 gap-4">
@@ -603,10 +612,11 @@ let _nextPhaseId = 100;
                 </div>
                 <div class="flex flex-col gap-1.5">
                   <label class="ph-label">Criterio de Desempate</label>
-                  <select class="ph-field" [(ngModel)]="phaseForm.swissTiebreakOrder">
-                    <option value="points,buchholz">Puntos → Buchholz</option>
-                    <option value="points,sonneborn">Puntos → Sonneborn-Berger</option>
-                  </select>
+                  <div class="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-[13px] text-gray-700">
+                    @for (rule of swissTiebreakCriteria(); track rule) {
+                      <div>{{ $index + 1 }}. {{ rule }}</div>
+                    }
+                  </div>
                 </div>
               </div>
               <div class="grid grid-cols-2 gap-4">
@@ -701,29 +711,32 @@ export class ChampionshipPhasesComponent {
 
   // ── Inputs / Outputs ──────────────────────────────────────────
   /** Fases pre-existentes (modo edición — viene del backend) */
-  readonly initialPhases  = input<PhaseCardData[]>([]);
-  readonly initialFormat  = input<ChampionshipFormat | null>(null);
+  readonly initialPhases = input<PhaseCardData[]>([]);
+  readonly initialFormat = input<ChampionshipFormat | null>(null);
 
-  readonly phasesChange   = output<PhaseCardData[]>();
-  readonly cancel         = output<void>();
-  readonly save           = output<PhaseCardData[]>();
+  readonly phasesChange = output<PhaseCardData[]>();
+  readonly cancel = output<void>();
+  readonly save = output<PhaseCardData[]>();
 
   // ── Services ──────────────────────────────────────────────────
   private snackBar = inject(MatSnackBar);
-  private cdr      = inject(ChangeDetectorRef);
+  private cdr = inject(ChangeDetectorRef);
 
   // ── Static ────────────────────────────────────────────────────
   readonly formatOptions = FORMAT_OPTIONS;
+  readonly leagueTiebreakCriteria = () => COMMON_TIEBREAK_LABELS;
+  readonly swissTiebreakCriteria = () => COMMON_TIEBREAK_LABELS;
 
   // ── State ─────────────────────────────────────────────────────
-  viewMode        = signal<PhaseViewMode>('format-picker');
-  selectedFormat  = signal<ChampionshipFormat | null>(null);
-  activeFormat    = signal<ChampionshipFormat | null>(null);
-  phases          = signal<PhaseCardData[]>([]);
-  originalPhases  = signal<PhaseCardData[]>([]);
-  editingPhaseId  = signal<number | null>(null);
-  phaseFormType   = signal<PhaseType>(PhaseType.League);
+  viewMode = signal<PhaseViewMode>('format-picker');
+  selectedFormat = signal<ChampionshipFormat | null>(null);
+  activeFormat = signal<ChampionshipFormat | null>(null);
+  phases = signal<PhaseCardData[]>([]);
+  originalPhases = signal<PhaseCardData[]>([]);
+  editingPhaseId = signal<number | null>(null);
+  phaseFormType = signal<PhaseType>(PhaseType.League);
   hasUnsavedChanges = signal(false);
+  private hasLoadedInitialData = false;
 
   // Drag state (plain object — not signal, updated via CD)
   dragState = { dragging: false, dragId: null as number | null, overId: null as number | null };
@@ -732,13 +745,13 @@ export class ChampionshipPhasesComponent {
   phaseForm = {
     phaseId: null as number | null, name: '', status: PhaseStatus.Pending as string, phaseOrder: 1,
     winsPoints: 3, drawPoints: 1, lossPoints: 0, totalRounds: 10, legs: 1,
-    tiebreakOrder: 'points,diff,gf,h2h,random', advanceCount: 4,
+    tiebreakOrder: LEAGUE_TIEBREAK_ORDER, advanceCount: 4,
     knockoutLegs: 1, bracketSize: 8, thirdPlaceMatch: false,
     seeding: 'ranking', awayGoalsRule: false, tieBreak: 'penalties',
     numGroups: 4, teamsPerGroup: 4, groupLegs: 1, advancePerGroup: 2,
     advanceBestThirds: 0, assignment: 'manual', groupTiebreakOrder: 'points,diff,gf,h2h,random',
-    numRounds: 7, pairingSystem: 'dutch', firstRound: 'random', allowRematch: false,
-    swissTiebreakOrder: 'points,buchholz', directAdvancedCount: 2, playoffCount: 4,
+    numRounds: 7, pairingSystem: SWISS_PAIRING_SYSTEM, firstRound: 'random', allowRematch: false,
+    swissTiebreakOrder: SWISS_TIEBREAK_ORDER, directAdvancedCount: 2, playoffCount: 4,
   };
 
   // ── Computed ──────────────────────────────────────────────────
@@ -755,9 +768,19 @@ export class ChampionshipPhasesComponent {
   );
 
   // ── Lifecycle ─────────────────────────────────────────────────
-  ngOnInit(): void {
-    const existing = this.initialPhases();
-    if (existing.length > 0) {
+  constructor() {
+    effect(() => {
+      const existing = this.initialPhases();
+      if (existing.length === 0) {
+        return;
+      }
+
+      // Avoid overriding local edits after the user starts changing phases.
+      if (this.hasLoadedInitialData && this.hasUnsavedChanges()) {
+        return;
+      }
+
+      this.hasLoadedInitialData = true;
       this.phases.set(existing.map(p => ({ ...p })));
       this.originalPhases.set(existing.map(p => ({ ...p })));
       const fmt = this.initialFormat() ?? this.inferFormat(existing);
@@ -766,16 +789,17 @@ export class ChampionshipPhasesComponent {
         this.selectedFormat.set(fmt);
       }
       this.viewMode.set('list');
-    }
+      this.cdr.markForCheck();
+    });
   }
 
   /** Infiere el formato del campeonato a partir de los tipos de fases existentes. */
   private inferFormat(phases: PhaseCardData[]): ChampionshipFormat | null {
     const types = new Set(phases.map(p => p.phaseType));
-    if (types.has(PhaseType.Swiss))                                       return 'swiss_playoff';
-    if (types.has(PhaseType.Groups))                                      return 'groups_knockout';
-    if (types.has(PhaseType.Knockout) && !types.has(PhaseType.League))   return 'knockout';
-    if (types.has(PhaseType.League))                                      return 'league';
+    if (types.has(PhaseType.Swiss)) return 'swiss_playoff';
+    if (types.has(PhaseType.Groups)) return 'groups_knockout';
+    if (types.has(PhaseType.Knockout) && !types.has(PhaseType.League)) return 'knockout';
+    if (types.has(PhaseType.League)) return 'league';
     return null;
   }
 
@@ -812,10 +836,10 @@ export class ChampionshipPhasesComponent {
       phaseId: phase.id, name: phase.name,
       status: phase.status, phaseOrder: phase.phaseOrder,
     });
-    if (phase.league)   Object.assign(this.phaseForm, { winsPoints: phase.league.winsPoints, drawPoints: phase.league.drawPoints, lossPoints: phase.league.lossPoints, totalRounds: phase.league.totalRounds, legs: phase.league.legs, tiebreakOrder: phase.league.tiebreakOrder, advanceCount: phase.league.advanceCount });
+    if (phase.league) Object.assign(this.phaseForm, { winsPoints: phase.league.winsPoints, drawPoints: phase.league.drawPoints, lossPoints: phase.league.lossPoints, totalRounds: phase.league.totalRounds, legs: phase.league.legs, tiebreakOrder: LEAGUE_TIEBREAK_ORDER, advanceCount: phase.league.advanceCount });
     if (phase.knockout) Object.assign(this.phaseForm, { knockoutLegs: phase.knockout.legs, bracketSize: phase.knockout.bracketSize, thirdPlaceMatch: phase.knockout.thirdPlaceMatch, seeding: phase.knockout.seeding, awayGoalsRule: phase.knockout.awayGoalsRule, tieBreak: phase.knockout.tieBreak });
-    if (phase.groups)   Object.assign(this.phaseForm, { numGroups: phase.groups.numGroups, teamsPerGroup: phase.groups.teamsPerGroup, groupLegs: phase.groups.legs, advancePerGroup: phase.groups.advancePerGroup, advanceBestThirds: phase.groups.advanceBestThirds, groupTiebreakOrder: phase.groups.tiebreakOrder });
-    if (phase.swiss)    Object.assign(this.phaseForm, { numRounds: phase.swiss.numRounds, pairingSystem: phase.swiss.pairingSystem, firstRound: phase.swiss.firstRound, allowRematch: phase.swiss.allowRematch, swissTiebreakOrder: phase.swiss.tiebreakOrder, directAdvancedCount: phase.swiss.directAdvancedCount, playoffCount: phase.swiss.playoffCount });
+    if (phase.groups) Object.assign(this.phaseForm, { numGroups: phase.groups.numGroups, teamsPerGroup: phase.groups.teamsPerGroup, groupLegs: phase.groups.legs, advancePerGroup: phase.groups.advancePerGroup, advanceBestThirds: phase.groups.advanceBestThirds, groupTiebreakOrder: phase.groups.tiebreakOrder });
+    if (phase.swiss) Object.assign(this.phaseForm, { numRounds: phase.swiss.numRounds, pairingSystem: SWISS_PAIRING_SYSTEM, firstRound: phase.swiss.firstRound, allowRematch: phase.swiss.allowRematch, swissTiebreakOrder: SWISS_TIEBREAK_ORDER, directAdvancedCount: phase.swiss.directAdvancedCount, playoffCount: phase.swiss.playoffCount });
     this.viewMode.set('detail');
   }
 
@@ -826,7 +850,7 @@ export class ChampionshipPhasesComponent {
       phaseId: null, name: '', status: PhaseStatus.Pending,
       phaseOrder: this.phases().length + 1,
       winsPoints: 3, drawPoints: 1, lossPoints: 0, totalRounds: 10, legs: 1,
-      tiebreakOrder: 'points,diff,gf,h2h,random', advanceCount: 4,
+      tiebreakOrder: LEAGUE_TIEBREAK_ORDER, advanceCount: 4,
     });
     this.viewMode.set('detail');
   }
@@ -836,16 +860,16 @@ export class ChampionshipPhasesComponent {
     const t = this.phaseFormType();
     const existing = this.phases().find(p => p.id === this.phaseForm.phaseId);
     const phase: PhaseCardData = {
-      id:         existing?.id ?? (_nextPhaseId++),
-      name:       this.phaseForm.name,
-      phaseType:  t,
+      id: existing?.id ?? (_nextPhaseId++),
+      name: this.phaseForm.name,
+      phaseType: t,
       phaseOrder: this.phaseForm.phaseOrder,
-      status:     this.phaseForm.status as PhaseStatus,
-      isBase:     existing?.isBase ?? false,
-      ...(t === PhaseType.League   && { league:   { winsPoints: this.phaseForm.winsPoints, drawPoints: this.phaseForm.drawPoints, lossPoints: this.phaseForm.lossPoints, totalRounds: this.phaseForm.totalRounds, legs: this.phaseForm.legs, tiebreakOrder: this.phaseForm.tiebreakOrder, advanceCount: this.phaseForm.advanceCount } }),
+      status: this.phaseForm.status as PhaseStatus,
+      isBase: existing?.isBase ?? false,
+      ...(t === PhaseType.League && { league: { winsPoints: this.phaseForm.winsPoints, drawPoints: this.phaseForm.drawPoints, lossPoints: this.phaseForm.lossPoints, totalRounds: this.phaseForm.totalRounds, legs: this.phaseForm.legs, tiebreakOrder: LEAGUE_TIEBREAK_ORDER, advanceCount: this.phaseForm.advanceCount } }),
       ...(t === PhaseType.Knockout && { knockout: { legs: this.phaseForm.knockoutLegs, bracketSize: this.phaseForm.bracketSize, thirdPlaceMatch: this.phaseForm.thirdPlaceMatch, seeding: this.phaseForm.seeding, awayGoalsRule: this.phaseForm.awayGoalsRule, tieBreak: this.phaseForm.tieBreak } }),
-      ...(t === PhaseType.Groups   && { groups:   { numGroups: this.phaseForm.numGroups, teamsPerGroup: this.phaseForm.teamsPerGroup, legs: this.phaseForm.groupLegs, advancePerGroup: this.phaseForm.advancePerGroup, advanceBestThirds: this.phaseForm.advanceBestThirds, tiebreakOrder: this.phaseForm.groupTiebreakOrder } }),
-      ...(t === PhaseType.Swiss    && { swiss:    { numRounds: this.phaseForm.numRounds, pairingSystem: this.phaseForm.pairingSystem, firstRound: this.phaseForm.firstRound, allowRematch: this.phaseForm.allowRematch, tiebreakOrder: this.phaseForm.swissTiebreakOrder, directAdvancedCount: this.phaseForm.directAdvancedCount, playoffCount: this.phaseForm.playoffCount } }),
+      ...(t === PhaseType.Groups && { groups: { numGroups: this.phaseForm.numGroups, teamsPerGroup: this.phaseForm.teamsPerGroup, legs: this.phaseForm.groupLegs, advancePerGroup: this.phaseForm.advancePerGroup, advanceBestThirds: this.phaseForm.advanceBestThirds, tiebreakOrder: this.phaseForm.groupTiebreakOrder } }),
+      ...(t === PhaseType.Swiss && { swiss: { numRounds: this.phaseForm.numRounds, pairingSystem: SWISS_PAIRING_SYSTEM, firstRound: this.phaseForm.firstRound, allowRematch: this.phaseForm.allowRematch, tiebreakOrder: SWISS_TIEBREAK_ORDER, directAdvancedCount: this.phaseForm.directAdvancedCount, playoffCount: this.phaseForm.playoffCount } }),
     };
     this.phases.update(list =>
       existing ? list.map(p => p.id === phase.id ? phase : p) : [...list, phase]
@@ -883,10 +907,10 @@ export class ChampionshipPhasesComponent {
   onTypeChange(type: PhaseType): void {
     this.phaseFormType.set(type);
     const defaults: Record<PhaseType, object> = {
-      [PhaseType.League]:   { winsPoints: 3, drawPoints: 1, lossPoints: 0, totalRounds: 10, legs: 1, tiebreakOrder: 'points,diff,gf,h2h,random', advanceCount: 4 },
+      [PhaseType.League]: { winsPoints: 3, drawPoints: 1, lossPoints: 0, totalRounds: 10, legs: 1, tiebreakOrder: LEAGUE_TIEBREAK_ORDER, advanceCount: 4 },
       [PhaseType.Knockout]: { knockoutLegs: 1, bracketSize: 8, thirdPlaceMatch: false, seeding: 'ranking', awayGoalsRule: false, tieBreak: 'penalties' },
-      [PhaseType.Groups]:   { numGroups: 4, teamsPerGroup: 4, groupLegs: 1, advancePerGroup: 2, advanceBestThirds: 0, assignment: 'manual', groupTiebreakOrder: 'points,diff,gf,h2h,random' },
-      [PhaseType.Swiss]:    { numRounds: 7, pairingSystem: 'dutch', firstRound: 'random', allowRematch: false, swissTiebreakOrder: 'points,buchholz', directAdvancedCount: 2, playoffCount: 4 },
+      [PhaseType.Groups]: { numGroups: 4, teamsPerGroup: 4, groupLegs: 1, advancePerGroup: 2, advanceBestThirds: 0, assignment: 'manual', groupTiebreakOrder: 'points,diff,gf,h2h,random' },
+      [PhaseType.Swiss]: { numRounds: 7, pairingSystem: SWISS_PAIRING_SYSTEM, firstRound: 'random', allowRematch: false, swissTiebreakOrder: SWISS_TIEBREAK_ORDER, directAdvancedCount: 2, playoffCount: 4 },
     };
     Object.assign(this.phaseForm, defaults[type]);
     this.cdr.markForCheck();
@@ -916,15 +940,15 @@ export class ChampionshipPhasesComponent {
 
   onListDrop(event: DragEvent): void {
     event.preventDefault();
-    const dragId  = this.dragState.dragId;
-    const overId  = this.dragState.overId;
+    const dragId = this.dragState.dragId;
+    const overId = this.dragState.overId;
     this.dragState = { dragging: false, dragId: null, overId: null };
 
     if (!dragId || dragId === overId) { this.cdr.markForCheck(); return; }
 
-    const list    = [...this.phases()];
+    const list = [...this.phases()];
     const fromIdx = list.findIndex(p => p.id === dragId);
-    const toIdx   = overId ? list.findIndex(p => p.id === overId) : list.length - 1;
+    const toIdx = overId ? list.findIndex(p => p.id === overId) : list.length - 1;
 
     if (fromIdx === -1 || toIdx === -1) { this.cdr.markForCheck(); return; }
 
@@ -951,10 +975,10 @@ export class ChampionshipPhasesComponent {
   }
   phaseTypeTagClass(type: string): string {
     return {
-      league:   'bg-blue-100 text-blue-700',
+      league: 'bg-blue-100 text-blue-700',
       knockout: 'bg-orange-100 text-orange-700',
-      groups:   'bg-purple-100 text-purple-700',
-      swiss:    'bg-emerald-100 text-emerald-700',
+      groups: 'bg-purple-100 text-purple-700',
+      swiss: 'bg-emerald-100 text-emerald-700',
     }[type] ?? 'bg-gray-100 text-gray-600';
   }
   knockoutRoundsLabel(size: number): string {

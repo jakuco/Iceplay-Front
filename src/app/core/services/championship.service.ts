@@ -1,14 +1,14 @@
 import { Injectable, inject } from '@angular/core';
-import { Observable, of, throwError } from 'rxjs';
-import { catchError, map } from 'rxjs/operators';
+import { Observable, forkJoin, of, throwError } from 'rxjs';
+import { catchError, map, switchMap } from 'rxjs/operators';
 
 import { ApiService } from './api.service';
 import {
   Championship,
   ChampionshipDetail,
   ChampionshipListItem,
-  ChampionshipRulesResponse,
   ChampionshipStatus,
+  ChampionshipRulesResponse,
   CreateChampionshipDto,
   CreateChampionshipMatchRuleDto,
   CreateSocialLinkDto,
@@ -23,14 +23,26 @@ import {
   UpdateChampionshipStatusDto,
 } from '../models/championship.model';
 import { CreateTeamDto, TeamProfile } from '../models/team.model';
+import type { Player } from '../models/player.model';
 import type { DbId } from '../models/db.types';
-import { ApiEndpoints } from '@core/constants/endpoints.const';
 
 // ─────────────────────────────────────────────────────────────
-// localStorage keys
+// Local types (not in model)
 // ─────────────────────────────────────────────────────────────
 
-const LS_CHAMPIONSHIPS = 'iceplay_championships';
+interface BackendChampionshipsPage {
+  championships: Championship[];
+  page: number;
+  limit: number;
+  total: number;
+  next: string | null;
+  prev: string | null;
+}
+
+// ─────────────────────────────────────────────────────────────
+// localStorage keys (mocks pendientes de backend)
+// ─────────────────────────────────────────────────────────────
+
 const LS_PHASES = 'iceplay_phases';
 const LS_RULES = 'iceplay_rules';
 const LS_TEAMS = 'iceplay_teams';
@@ -55,11 +67,11 @@ const FOOTBALL_RULES: DefaultRule[] = [
 ];
 
 const DEFAULT_RULES_BY_SPORT: Record<number, DefaultRule[]> = {
-  1: FOOTBALL_RULES,   // Fútbol
-  2: FOOTBALL_RULES,   // Básquetbol (misma estructura base)
-  3: FOOTBALL_RULES,   // Voleibol
-  4: FOOTBALL_RULES,   // Hockey
-  5: FOOTBALL_RULES,   // Béisbol
+  1: FOOTBALL_RULES,
+  2: FOOTBALL_RULES,
+  3: FOOTBALL_RULES,
+  4: FOOTBALL_RULES,
+  5: FOOTBALL_RULES,
 };
 
 const SOCIAL_NETWORKS: SocialNetwork[] = [
@@ -77,28 +89,23 @@ export class ChampionshipService {
   // ── CRUD base ──────────────────────────────────────────────────────────
 
   getAll(filters?: ChampionshipFiltersDto): Observable<PaginatedChampionships> {
-    // 🔴 MOCK — localStorage
-    let list = this.readList();
-    if (filters?.organizationId !== undefined) list = list.filter(c => c.organizationId === filters.organizationId);
-    if (filters?.sportId !== undefined) list = list.filter(c => c.sportId === filters.sportId);
-    if (filters?.status) list = list.filter(c => c.status === filters.status);
-    if (filters?.season) list = list.filter(c => c.season === filters.season);
-    if (filters?.search) {
-      const q = filters.search.toLowerCase();
-      list = list.filter(c => c.name.toLowerCase().includes(q) || c.slug.includes(q));
-    }
-    const page = filters?.page ?? 1;
-    const limit = filters?.limit ?? 20;
-    const start = (page - 1) * limit;
-    const data = list.slice(start, start + limit) as unknown as ChampionshipListItem[];
-    const totalPages = Math.ceil(list.length / limit) || 1;
-    return of({ data, total: list.length, page, limit, totalPages });
-
-    // 🟢 BACKEND — descomentar cuando el endpoint exista
-    // return this.api.get<PaginatedChampionships>(ApiEndpoints.CHAMPIONSHIPS.BASE, filters as Record<string, unknown>).pipe(
-    //   map(r => ({ ...r, data: r.data.map(c => this.parseChampionshipDates(c)) })),
-    //   catchError(e => this.handleError('Error fetching championships', e)),
-    // );
+    const params: Record<string, unknown> = {};
+    if (filters?.organizationId !== undefined) params['organizationId'] = filters.organizationId;
+    if (filters?.page !== undefined) params['page'] = filters.page;
+    if (filters?.limit !== undefined) params['limit'] = filters.limit;
+    if (filters?.status !== undefined) params['status'] = filters.status;
+    if (filters?.season) params['season'] = filters.season;
+    if (filters?.search) params['search'] = filters.search;
+    return this.api.get<BackendChampionshipsPage>('championships', params).pipe(
+      map(r => ({
+        data: r.championships.map(c => this.parseChampionshipDates(c)) as unknown as ChampionshipListItem[],
+        total: r.total,
+        page: r.page,
+        limit: r.limit,
+        totalPages: Math.ceil(r.total / r.limit) || 1,
+      })),
+      catchError(e => this.handleError('Error fetching championships', e)),
+    );
   }
 
   // ── HTTP API (integración rama cup) ─────────────────────────────────────
@@ -112,21 +119,21 @@ export class ChampionshipService {
   }
 
   getAllChampionships(): Observable<Championship[]> {
-    return this.api.get<Championship[]>(ApiEndpoints.CHAMPIONSHIPS.ALL).pipe(
+    return this.api.get<Championship[]>('championships/all').pipe(
       map((championships) => championships.map((c) => this.parseChampionshipDates(c))),
       catchError((error) => this.handleError('Error fetching championships', error)),
     );
   }
 
   getChampionshipDetail(id: number): Observable<Championship> {
-    return this.api.get<Championship>(ApiEndpoints.CHAMPIONSHIPS.DETAIL(`${id}`)).pipe(
+    return this.api.get<Championship>(`championships/${id}/detail`).pipe(
       map((championship) => this.parseChampionshipDates(championship)),
       catchError((error) => this.handleError('Error fetching championship details', error)),
     );
   }
 
   getActiveChampionships(): Observable<Championship[]> {
-    return this.api.get<Championship[]>(ApiEndpoints.CHAMPIONSHIPS.BASE, { status: 'active' }).pipe(
+    return this.api.get<Championship[]>('championships', { status: ChampionshipStatus.Active }).pipe(
       map((championships) => championships.map((c) => this.parseChampionshipDates(c))),
       catchError((error) => this.handleError('Error fetching active championships', error)),
     );
@@ -160,123 +167,51 @@ export class ChampionshipService {
   }
 
   getById(id: string): Observable<ChampionshipDetail> {
-    // 🔴 MOCK — localStorage
-    const champ = this.readList().find(c => String(c.id) === id);
-    if (!champ) return throwError(() => new Error(`Championship ${id} not found`));
-    const teamsStored = this.readRecord<TeamProfile[]>(LS_TEAMS)[id] ?? [];
-    const detail = {
-      ...champ,
-      organization: { id: champ.organizationId, name: 'Organización', logo: null },
-      sport: { id: champ.sportId, name: 'Deporte', icon: 'sports' },
-      socialLinks: this.getStoredSocialLinks(id),
-      phases: this.readRecord<Phase[]>(LS_PHASES)[id] ?? [],
-      matchRules: [],
-      teamCount: teamsStored.length,
-      activeMatchCount: 0,
-    } as unknown as ChampionshipDetail;
-    return of(detail);
-
-    // 🟢 BACKEND — descomentar cuando el endpoint exista
-    // return this.api.get<ChampionshipDetail>(ApiEndpoints.CHAMPIONSHIPS.BY_ID(id)).pipe(
-    //   map(c => ({ ...c, ...this.parseChampionshipDates(c) })),
-    //   catchError(e => this.handleError('Error fetching championship', e)),
-    // );
+    return this.api.get<ChampionshipDetail>(`championships/${id}/detail`).pipe(
+      map(c => ({ ...c, ...this.parseChampionshipDates(c) })),
+      catchError(e => this.handleError('Error fetching championship', e)),
+    );
   }
 
   create(dto: CreateChampionshipDto): Observable<Championship> {
-    // 🔴 MOCK — localStorage
-    const list = this.readList();
-    const nextId = list.length ? Math.max(...list.map(c => Number(c.id))) + 1 : 1;
-    const now = new Date();
-    const champ: Championship = {
-      id: nextId,
-      organizationId: dto.organizationId,
-      sportId: dto.sportId,
-      name: dto.name,
-      slug: dto.slug,
-      description: dto.description ?? null,
-      season: dto.season,
-      logo: dto.logo ?? null,
-      status: dto.status ?? ChampionshipStatus.Draft,
-      registrationStartDate: dto.registrationStartDate ?? null,
-      registrationEndDate: dto.registrationEndDate ?? null,
-      startDate: dto.startDate ?? null,
-      endDate: dto.endDate ?? null,
-      maxTeams: dto.maxTeams ?? 16,
-      maxPlayersPerTeam: dto.maxPlayersPerTeam ?? 20,
-      createdAt: now,
-      updatedAt: now,
-    };
-    this.writeList([...list, champ]);
-    return of(champ);
-
-    // 🟢 BACKEND — descomentar cuando el endpoint exista
-    // return this.api.post<Championship>(ApiEndpoints.CHAMPIONSHIPS.BASE, dto).pipe(
-    //   map(c => this.parseChampionshipDates(c)),
-    //   catchError(e => this.handleError('Error creating championship', e)),
-    // );
+    return this.api.post<Championship>('championships', dto).pipe(
+      map(c => this.parseChampionshipDates(c)),
+      catchError(e => this.handleError('Error creating championship', e)),
+    );
   }
 
   update(id: string, dto: UpdateChampionshipDto): Observable<Championship> {
-    // 🔴 MOCK — localStorage
-    const list = this.readList();
-    const index = list.findIndex(c => String(c.id) === id);
-    if (index === -1) return throwError(() => new Error(`Championship ${id} not found`));
-    const updated: Championship = { ...list[index], ...dto, updatedAt: new Date() };
-    list[index] = updated;
-    this.writeList(list);
-    return of(updated);
-
-    // 🟢 BACKEND — descomentar cuando el endpoint exista
-    // return this.api.patch<Championship>(ApiEndpoints.CHAMPIONSHIPS.BY_ID(id), dto).pipe(
-    //   map(c => this.parseChampionshipDates(c)),
-    //   catchError(e => this.handleError('Error updating championship', e)),
-    // );
+    return this.api.put<Championship>(`championships/${id}`, dto).pipe(
+      map(c => this.parseChampionshipDates(c)),
+      catchError(e => this.handleError('Error updating championship', e)),
+    );
   }
 
   updateStatus(id: string, dto: UpdateChampionshipStatusDto): Observable<Championship> {
-    // 🔴 MOCK — localStorage
-    const list = this.readList();
-    const index = list.findIndex(c => String(c.id) === id);
-    if (index === -1) return throwError(() => new Error(`Championship ${id} not found`));
-    const updated: Championship = { ...list[index], status: dto.status, updatedAt: new Date() };
-    list[index] = updated;
-    this.writeList(list);
-    return of(updated);
-
-    // 🟢 BACKEND — descomentar cuando el endpoint exista
-    // return this.api.patch<Championship>(ApiEndpoints.CHAMPIONSHIPS.STATUS(id), dto).pipe(
-    //   map(c => this.parseChampionshipDates(c)),
-    //   catchError(e => this.handleError('Error updating championship status', e)),
-    // );
+    return this.api.put<Championship>(`championships/${id}`, dto).pipe(
+      map(c => this.parseChampionshipDates(c)),
+      catchError(e => this.handleError('Error updating championship status', e)),
+    );
   }
 
   delete(id: string): Observable<void> {
-    // 🔴 MOCK — localStorage
-    this.writeList(this.readList().filter(c => String(c.id) !== id));
-    return of(undefined);
-
-    // 🟢 BACKEND — descomentar cuando el endpoint exista
-    // return this.api.delete<void>(ApiEndpoints.CHAMPIONSHIPS.BY_ID(id)).pipe(
-    //   catchError(e => this.handleError('Error deleting championship', e)),
-    // );
+    return this.api.delete<void>(`championships/${id}`).pipe(
+      catchError(e => this.handleError('Error deleting championship', e)),
+    );
   }
 
   // ── Sub-recursos ───────────────────────────────────────────────────────
 
   getPhases(championshipId: string): Observable<Phase[]> {
-    // 🔴 MOCK — localStorage
-    const phases = this.readRecord<Phase[]>(LS_PHASES)[championshipId] ?? [];
-    return of(phases);
-
-    // 🟢 BACKEND — descomentar cuando el endpoint exista
-    // return this.api.get<Phase[]>(ApiEndpoints.CHAMPIONSHIPS.PHASES(championshipId)).pipe(
-    //   catchError(e => this.handleError('Error fetching phases', e)),
-    // );
+    return this.getById(championshipId).pipe(
+      map(detail => detail.phases ?? []),
+      catchError(e => this.handleError('Error fetching phases', e)),
+    );
   }
 
   savePhases(championshipId: string, phases: CreatePhaseDto[]): Observable<Phase[]> {
-    // 🔴 MOCK — localStorage
+    // ⚠️ NO BACKEND ENDPOINT — las fases solo se pueden configurar en /setup al crear.
+    // Los cambios de fases en modo edición se guardan solo localmente (mock).
     const saved: Phase[] = phases.map((dto, i) => ({
       id: i + 1,
       championshipId: +championshipId,
@@ -293,31 +228,21 @@ export class ChampionshipService {
     record[championshipId] = saved;
     this.writeRecord(LS_PHASES, record);
     return of(saved);
-
-    // 🟢 BACKEND — descomentar cuando el endpoint exista
-    // return this.api.put<Phase[]>(ApiEndpoints.CHAMPIONSHIPS.PHASES(championshipId), phases).pipe(
-    //   catchError(e => this.handleError('Error saving phases', e)),
-    // );
   }
 
   getRules(championshipId: string): Observable<ChampionshipRulesResponse> {
-    // 🔴 MOCK — localStorage
+    // 🔴 MOCK — pendiente endpoint GET /championships/:id/rules
     const record = this.readRecord<ChampionshipRulesResponse>(LS_RULES);
     const stored = record[championshipId];
     if (stored) return of(stored);
     return of({ championshipId: +championshipId, sportId: 1, rules: [] });
-
-    // 🟢 BACKEND — descomentar cuando el endpoint exista
-    // return this.api.get<ChampionshipRulesResponse>(ApiEndpoints.CHAMPIONSHIPS.RULES(championshipId)).pipe(
-    //   catchError(e => this.handleError('Error fetching rules', e)),
-    // );
   }
 
   updateRules(
     championshipId: string,
     patches: CreateChampionshipMatchRuleDto[],
   ): Observable<ChampionshipRulesResponse> {
-    // 🔴 MOCK — localStorage
+    // 🔴 MOCK — pendiente endpoint PATCH /championships/:id/rules
     const record = this.readRecord<ChampionshipRulesResponse>(LS_RULES);
     const current = record[championshipId] ?? {
       championshipId: +championshipId,
@@ -342,16 +267,11 @@ export class ChampionshipService {
     record[championshipId] = current;
     this.writeRecord(LS_RULES, record);
     return of(current);
-
-    // 🟢 BACKEND — descomentar cuando el endpoint exista
-    // return this.api.patch<ChampionshipRulesResponse>(ApiEndpoints.CHAMPIONSHIPS.RULES(championshipId), patches).pipe(
-    //   catchError(e => this.handleError('Error updating rules', e)),
-    // );
   }
 
   /** Reglas por defecto del deporte — usadas al crear un campeonato nuevo */
   getDefaultRules(sportId: number): Observable<ChampionshipRulesResponse> {
-    // 🔴 MOCK — seed fijo por deporte (no depende de localStorage)
+    // 🔴 MOCK — pendiente endpoint GET /sports/:sportId/default-rules
     const key = `iceplay_default_rules_sport_${sportId}`;
     const raw = localStorage.getItem(key);
     if (raw) {
@@ -361,36 +281,45 @@ export class ChampionshipService {
     const response: ChampionshipRulesResponse = { championshipId: 0, sportId, rules: defaults };
     localStorage.setItem(key, JSON.stringify(response));
     return of(response);
-
-    // 🟢 BACKEND — descomentar cuando el endpoint exista
-    // return this.api.get<ChampionshipRulesResponse>(ApiEndpoints.SPORTS.DEFAULT_RULES(sportId)).pipe(
-    //   catchError(e => this.handleError('Error fetching default rules', e)),
-    // );
   }
 
   getTeams(championshipId: string): Observable<TeamProfile[]> {
-    // 🔴 MOCK — localStorage
-    const teams = this.readRecord<TeamProfile[]>(LS_TEAMS)[championshipId] ?? [];
-    return of(teams);
+    return this.api.get<unknown>('teams', { championshipId }).pipe(
+      map((response) => this.extractCollection(response, 'teams')),
+      switchMap((teams) => {
+        if (teams.length === 0) {
+          return of([]);
+        }
 
-    // 🟢 BACKEND — descomentar cuando el endpoint exista
-    // return this.api.get<TeamProfile[]>(ApiEndpoints.CHAMPIONSHIPS.TEAMS(championshipId)).pipe(
-    //   catchError(e => this.handleError('Error fetching teams', e)),
-    // );
+        return forkJoin(
+          teams.map((team, index) => {
+            const normalized = this.normalizeTeamProfile(team, championshipId);
+            const teamId = String((team as Record<string, unknown>)['id'] ?? normalized.id ?? index + 1);
+
+            return this.getPlayersByTeamId(teamId).pipe(
+              map((players) => ({
+                ...normalized,
+                players,
+              })),
+            );
+          }),
+        );
+      }),
+      catchError(() => {
+        // Fallback local para no bloquear edición si el endpoint falla temporalmente.
+        const teams = this.readRecord<TeamProfile[]>(LS_TEAMS)[championshipId] ?? [];
+        return of(teams);
+      }),
+    );
   }
 
   getSocialLinks(championshipId: string): Observable<SocialLink[]> {
-    // 🔴 MOCK — localStorage
+    // 🔴 MOCK — pendiente endpoint GET /championships/:id/social-links
     return of(this.getStoredSocialLinks(championshipId));
-
-    // 🟢 BACKEND — descomentar cuando el endpoint exista
-    // return this.api.get<SocialLink[]>(ApiEndpoints.CHAMPIONSHIPS.SOCIAL_LINKS(championshipId)).pipe(
-    //   catchError(e => this.handleError('Error fetching social links', e)),
-    // );
   }
 
   saveSocialLinks(championshipId: string, links: CreateSocialLinkDto[]): Observable<SocialLink[]> {
-    // 🔴 MOCK — localStorage
+    // 🔴 MOCK — pendiente endpoint PUT /championships/:id/social-links
     const uniqueByNetwork = new Map<DbId, CreateSocialLinkDto>();
     for (const link of links) {
       if (!link.link?.trim()) continue;
@@ -414,71 +343,15 @@ export class ChampionshipService {
     record[championshipId] = saved;
     this.writeRecord(LS_SOCIAL_LINKS, record);
     return of(saved);
-
-    // 🟢 BACKEND — descomentar cuando el endpoint exista
-    // return this.api.put<SocialLink[]>(ApiEndpoints.CHAMPIONSHIPS.SOCIAL_LINKS(championshipId), links).pipe(
-    //   catchError(e => this.handleError('Error saving social links', e)),
-    // );
   }
 
   saveTeams(championshipId: string, teams: (CreateTeamDto & { players?: any[] })[]): Observable<TeamProfile[]> {
-    // 🔴 MOCK — localStorage
-    const now = new Date();
-    const saved: TeamProfile[] = teams.map((dto, i) => ({
-      id: i + 1,
-      championshipId: +championshipId,
-      name: dto.name,
-      shortname: dto.shortname,
-      slug: dto.slug,
-      logoUrl: dto.logoUrl ?? null,
-      documentUrl: dto.documentUrl ?? null,
-      primaryColor: dto.primaryColor ?? null,
-      secondaryColor: dto.secondaryColor ?? null,
-      foundedYear: dto.foundedYear ?? null,
-      homeVenue: dto.homeVenue ?? null,
-      location: dto.location ?? null,
-      coachName: dto.coachName ?? null,
-      coachPhone: dto.coachPhone ?? null,
-      isActive: true,
-      hasActiveMatches: false,
-      createdAt: now,
-      updatedAt: now,
-      players: dto.players ?? [],
-      groups: [],
-      stats: {
-        teamId: i + 1,
-        played: 0,
-        won: 0,
-        drawn: 0,
-        lost: 0,
-        goalsFor: 0,
-        goalsAgainst: 0,
-        goalDifference: 0,
-        points: 0,
-      },
-    }));
-    const record = this.readRecord<TeamProfile[]>(LS_TEAMS);
-    record[championshipId] = saved;
-    this.writeRecord(LS_TEAMS, record);
-    return of(saved);
-
-    // 🟢 BACKEND — descomentar cuando el endpoint exista
-    // return this.api.put<TeamProfile[]>(ApiEndpoints.CHAMPIONSHIPS.TEAMS(championshipId), teams).pipe(
-    //   catchError(e => this.handleError('Error saving teams', e)),
-    // );
+    return this.api.post<TeamProfile[]>(`championships/${championshipId}/teams`, { teams }).pipe(
+      catchError(e => this.handleError('Error saving teams', e)),
+    );
   }
 
   // ── Privados ────────────────────────────────────────────────────────────
-
-  private readList(): Championship[] {
-    const raw = localStorage.getItem(LS_CHAMPIONSHIPS);
-    if (!raw) return [];
-    try { return JSON.parse(raw) as Championship[]; } catch { return []; }
-  }
-
-  private writeList(list: Championship[]): void {
-    localStorage.setItem(LS_CHAMPIONSHIPS, JSON.stringify(list));
-  }
 
   private readRecord<T>(key: string): Record<string, T> {
     const raw = localStorage.getItem(key);
@@ -499,11 +372,82 @@ export class ChampionshipService {
     }));
   }
 
+  private normalizeTeamProfile(team: unknown, championshipId: string): TeamProfile {
+    const source = team as Record<string, unknown>;
+    const players = this.normalizePlayers(source['players']);
+
+    return {
+      id: source['id'] as DbId,
+      championshipId: (source['championshipId'] ?? championshipId) as DbId,
+      name: String(source['name'] ?? ''),
+      shortname: String(source['shortname'] ?? ''),
+      slug: String(source['slug'] ?? ''),
+      logoUrl: (source['logoUrl'] ?? null) as string | null,
+      documentUrl: (source['documentUrl'] ?? source['documentURL'] ?? null) as string | null,
+      primaryColor: (source['primaryColor'] ?? null) as string | null,
+      secondaryColor: (source['secondaryColor'] ?? null) as string | null,
+      foundedYear: (source['foundedYear'] ?? null) as number | null,
+      homeVenue: (source['homeVenue'] ?? null) as string | null,
+      location: (source['location'] ?? null) as string | null,
+      coachName: (source['coachName'] ?? null) as string | null,
+      coachPhone: (source['coachPhone'] ?? null) as string | null,
+      isActive: Boolean(source['isActive'] ?? source['isTeamActive'] ?? true),
+      hasActiveMatches: Boolean(source['hasActiveMatches'] ?? false),
+      createdAt: source['createdAt'] ? new Date(String(source['createdAt'])) : new Date(),
+      updatedAt: source['updatedAt'] ? new Date(String(source['updatedAt'])) : new Date(),
+      players,
+      groups: (source['groups'] as TeamProfile['groups']) ?? [],
+      stats:
+        (source['stats'] as TeamProfile['stats']) ?? {
+          teamId: source['id'] as DbId,
+          played: 0,
+          won: 0,
+          drawn: 0,
+          lost: 0,
+          goalsFor: 0,
+          goalsAgainst: 0,
+          goalDifference: 0,
+          points: 0,
+        },
+    };
+  }
+
+  private normalizePlayers(value: unknown): Player[] {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+    return value as Player[];
+  }
+
+  private getPlayersByTeamId(teamId: string): Observable<Player[]> {
+    return this.api.get<unknown>('players', { teamId }).pipe(
+      map((response) => this.extractCollection(response, 'players') as Player[]),
+      catchError(() => of([])),
+    );
+  }
+
+  private extractCollection(response: unknown, key: string): unknown[] {
+    if (Array.isArray(response)) {
+      return response;
+    }
+
+    if (response && typeof response === 'object') {
+      const boxed = response as Record<string, unknown>;
+      const value = boxed[key];
+      if (Array.isArray(value)) {
+        return value;
+      }
+    }
+
+    return [];
+  }
+
   private parseChampionshipDates(c: Championship): Championship {
     const parse = (v: Date | string | null): Date | null =>
       v && typeof v === 'string' ? new Date(v) : (v as Date | null);
     return {
       ...c,
+      status: this.normalizeChampionshipStatus(c.status),
       startDate: parse(c.startDate),
       endDate: parse(c.endDate),
       registrationStartDate: parse(c.registrationStartDate),
@@ -511,6 +455,31 @@ export class ChampionshipService {
       createdAt: parse(c.createdAt) as Date,
       updatedAt: parse(c.updatedAt) as Date,
     };
+  }
+
+  private normalizeChampionshipStatus(status: Championship['status'] | string | number): ChampionshipStatus {
+    if (typeof status === 'number') {
+      if (status in ChampionshipStatus) {
+        return status as ChampionshipStatus;
+      }
+      return ChampionshipStatus.Draft;
+    }
+
+    const normalized = String(status).trim().toLowerCase();
+    const byName: Record<string, ChampionshipStatus> = {
+      draft: ChampionshipStatus.Draft,
+      registration: ChampionshipStatus.Registration,
+      active: ChampionshipStatus.Active,
+      finished: ChampionshipStatus.Finished,
+      cancelled: ChampionshipStatus.Cancelled,
+      '0': ChampionshipStatus.Draft,
+      '1': ChampionshipStatus.Registration,
+      '2': ChampionshipStatus.Active,
+      '3': ChampionshipStatus.Finished,
+      '4': ChampionshipStatus.Cancelled,
+    };
+
+    return byName[normalized] ?? ChampionshipStatus.Draft;
   }
 
   private handleError(message: string, error: unknown): Observable<never> {
