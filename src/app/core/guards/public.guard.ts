@@ -13,6 +13,8 @@ export const publicGuard: CanActivateFn = () => {
 
   console.log("publicGuard");
   
+
+  //TODO: FIXME ESTE GUARD HACE LA PETICION DEL REFRESH  EN EL LOGIN Y SI ESTA LOGUEADO REDIRIGE A LA RUTA DEFAULT
   return from(auth.ensureBootstrapped()).pipe(
     map(() => {
       if (!auth.isAuthenticated()) {

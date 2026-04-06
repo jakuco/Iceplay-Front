@@ -1,6 +1,7 @@
 import { inject } from '@angular/core';
 import { Router, type CanActivateFn } from '@angular/router';
 import { AuthService } from '../services/auth.service';
+import { from, map } from 'rxjs';
 
 /**
  * Guard that checks if user has super_admin role
@@ -10,16 +11,25 @@ export const superAdminGuard: CanActivateFn = () => {
   const authService = inject(AuthService);
   const router = inject(Router);
 
-  if (authService.isSuperAdmin()) {
-    return true;
-  }
+  // if (authService.isSuperAdmin()) {
+  //   return true;
+  // }
 
-  // If admin, redirect to admin panel
-  if (authService.isAdmin()) {
-    return router.createUrlTree(['/admin']);
-  }
+  // // If admin, redirect to admin panel
+  // if (authService.isAdmin()) {
+  //   return router.createUrlTree(['/admin']);
+  // }
 
-  // Otherwise redirect to home
-  return router.createUrlTree(['/']);
+  // // Otherwise redirect to home
+  // return router.createUrlTree(['/']);
+
+  //? Waits for session bootstrap so the role is available on F5 / direct URL.
+  return from(authService.ensureBootstrapped()).pipe(
+    map(() => {
+      if (authService.isSuperAdmin()) {
+        return true;
+      }
+      return router.createUrlTree(['/']);
+    }),
+  )
 };
-
