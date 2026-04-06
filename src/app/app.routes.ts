@@ -3,6 +3,7 @@ import { authGuard, adminGuard, superAdminGuard, publicGuard } from './core/guar
 
 export const routes: Routes = [
   //* Auth routes (login) - only for non-authenticated users
+  //TODO: Check if this guard is needed, it cause a refresh request to the server when the user is in the login page
   {
     path: 'auth',
     canActivate: [publicGuard],
