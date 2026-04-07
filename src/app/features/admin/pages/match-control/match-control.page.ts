@@ -517,6 +517,10 @@ export default class MatchControlPage implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.loadMatch();
+    this.matchEventService.getEventTypes().subscribe({
+      next: (types) => this.eventTypes.set(types),
+      error: (err) => console.error('Error loading event types', err),
+    });
   }
 
   ngOnDestroy(): void {

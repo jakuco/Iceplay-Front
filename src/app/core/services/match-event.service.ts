@@ -7,6 +7,7 @@ import {
   CreateMatchEventDto,
   mapEventToViewModel,
 } from '../models/event.model';
+import type { TypeMatchEvent } from '../models/sport-config.model';
 
 export interface SSEEventAdd {
   type: 'add';
@@ -131,6 +132,12 @@ export class MatchEventService {
     return this.api
       .delete<void>(`matches/${matchId}/events/${eventId}`)
       .pipe(catchError((err) => this.handleError('Error deleting event', err)));
+  }
+
+  getEventTypes(): Observable<TypeMatchEvent[]> {
+    return this.api
+      .get<TypeMatchEvent[]>('matches/event-types')
+      .pipe(catchError((err) => this.handleError('Error loading event types', err)));
   }
 
   private handleError(message: string, error: unknown): Observable<never> {
