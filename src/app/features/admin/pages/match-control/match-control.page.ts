@@ -216,17 +216,18 @@ interface HistoryState {
           </p>
         }
 
-        <div class="flex items-center gap-2">
-          @if (isRunning()) {
-            <button matIconButton (click)="pauseTimer()">
-              <mat-icon>pause</mat-icon>
-            </button>
-          } @else {
-            <button matFab="mini" (click)="startTimer()">
-              <mat-icon>play_arrow</mat-icon>
-            </button>
-          }
-          <button matIconButton (click)="resetTimer()">
+        <div class="grid grid-cols-[1fr_auto_1fr] gap-2 items-center">
+          <button
+            matFab="mini"
+            class="transition-all! col-start-2"
+            [class.shadow-none!]="isRunning()"
+            [class.bg-transparent!]="isRunning()"
+            (click)="isRunning() ? pauseTimer() : startTimer()"
+          >
+            <mat-icon>{{ isRunning() ? 'pause' : 'play_arrow'}}</mat-icon>
+          </button>
+
+          <button class="col-start-3" matIconButton (click)="resetTimer()">
             <mat-icon>restart_alt</mat-icon>
           </button>
         </div>
@@ -263,15 +264,16 @@ interface HistoryState {
               </h3>
               <div class="space-y-1">
                 @for (player of team.players; track player.id) {
-                  <div class="player-row grid grid-cols-[1fr_auto] items-center gap-2 rounded-lg p-2">
+                  <div class="player-row grid grid-cols-[20%_auto] items-center gap-2 rounded-lg p-2">
                     <div>
-                      <p class="text-sm">#{{ player.number }} {{ player.name }}</p>
+                      <p class="text-sm wrap-anywhere">#{{ player.number }} {{ player.name }}</p>
                       <p class="text-secondary text-xs">{{ player.positionCode }}</p>
                     </div>
-                    <div class="flex flex-wrap items-center gap-1">
+                    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3 items-center gap-1">
                       @for (et of eventTypes(); track et.id) {
                         <button
-                          class="action-btn"
+                          matButton
+                          class="action-btn min-h-9! h-fit! py-2"
                           [class]="'action-' + et.category"
                           [style.color]="et.color"
                           [matTooltip]="et.label"
@@ -285,6 +287,10 @@ interface HistoryState {
                       }
                     </div>
                   </div>
+
+                  @if ($index < team.players.length - 1) {
+                    <hr class="my-2 opacity-25">
+                  }
                 }
               </div>
             </div>
@@ -299,7 +305,7 @@ interface HistoryState {
       <div class="card overflow-hidden rounded-xl border border-(--mat-sys-outline-variant)">
         @if (events().length === 0) {
           <div class="text-secondary p-8 text-center">
-            <mat-icon class="mb-2 text-5xl! opacity-50">sports_soccer</mat-icon>
+            <mat-icon class="mb-2 size-12! text-5xl! opacity-50">sports_soccer</mat-icon>
             <p>No hay eventos registrados aún.</p>
           </div>
         } @else {
@@ -311,7 +317,7 @@ interface HistoryState {
                   <th class="w-32 px-4 py-3 text-left text-xs uppercase tracking-wider">Evento</th>
                   <th class="px-4 py-3 text-left text-xs uppercase tracking-wider">Jugador</th>
                   <th class="px-4 py-3 text-left text-xs uppercase tracking-wider">Equipo</th>
-                  <th class="w-20 px-4 py-3 text-right text-xs uppercase tracking-wider">Acc.</th>
+                  <th class="w-20 px-4 py-3 text-center text-xs uppercase tracking-wider">Acc.</th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-(--mat-sys-outline-variant)">
@@ -335,13 +341,13 @@ interface HistoryState {
                     <td class="text-secondary px-4 py-3 text-sm whitespace-nowrap">
                       {{ event.isHomeTeam ? homeTeam().name : awayTeam().name }}
                     </td>
-                    <td class="px-4 py-3 text-right whitespace-nowrap">
+                    <td class="px-4 py-3 text-center whitespace-nowrap">
                       <button
                         matIconButton
-                        class="h-8! w-8!"
+                        class="hover:text-red-400!"
                         (click)="removeEvent(String(event.id))"
                       >
-                        <mat-icon class="text-lg! text-red-400">delete</mat-icon>
+                        <mat-icon class="text-lg">delete</mat-icon>
                       </button>
                     </td>
                   </tr>
@@ -418,8 +424,12 @@ interface HistoryState {
       color: var(--mat-sys-on-surface-variant);
     }
 
+    .player-row {
+      transition: background-color 0.15s linear;
+    }
+
     .player-row:hover {
-      background-color: color-mix(in srgb, var(--mat-sys-primary) 8%, transparent);
+      background-color: color-mix(in srgb, var(--mat-sys-primary) 2%, transparent);
     }
 
     .status-chip {
