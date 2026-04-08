@@ -414,6 +414,7 @@ export default class MatchDetails implements OnDestroy {
       .connectToMatchStream(matchId, homeTeamId, PERIOD_DURATION_SECONDS)
       .subscribe({
         next: (msg) => {
+          // TODO: Score event and parsing
           if (msg.type === 'add') {
             this.events.update((current) => [...current, msg.event]);
           } else {
