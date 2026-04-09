@@ -58,21 +58,21 @@ const routes: Routes = [
       //   loadComponent: () => import('./pages/teams/team-form.page'),
       //   title: 'Editar Equipo - Admin',
       // },
-      // {
-      //   path: 'players',
-      //   loadComponent: () => import('./pages/players/players-list.page'),
-      //   title: 'Jugadores - Admin',
-      // },
-      // {
-      //   path: 'players/new',
-      //   loadComponent: () => import('./pages/players/player-form.page'),
-      //   title: 'Nuevo Jugador - Admin',
-      // },
-      // {
-      //   path: 'players/:id/edit',
-      //   loadComponent: () => import('./pages/players/player-form.page'),
-      //   title: 'Editar Jugador - Admin',
-      // },
+      {
+        path: 'players',
+        loadComponent: () => import('./pages/players/players-list.page'),
+        title: 'Jugadores - Admin',
+      },
+      {
+        path: 'players/new',
+        loadComponent: () => import('./pages/players/player-form.page'),
+        title: 'Nuevo Jugador - Admin',
+      },
+      {
+        path: 'players/:id/edit',
+        loadComponent: () => import('./pages/players/player-form.page'),
+        title: 'Editar Jugador - Admin',
+      },
       // {
       //   path: 'fixtures',
       //   loadComponent: () => import('./pages/fixtures/fixtures-list.page'),
