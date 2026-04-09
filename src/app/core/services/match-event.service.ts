@@ -1,6 +1,6 @@
 import { Injectable, inject, NgZone } from '@angular/core';
 import { ApiService } from './api.service';
-import { Observable, catchError, throwError } from 'rxjs';
+import { Observable, catchError, throwError, map } from 'rxjs';
 import {
   MatchEvent,
   MatchEventViewModel,
@@ -8,6 +8,7 @@ import {
   mapEventToViewModel,
 } from '../models/event.model';
 import type { TypeMatchEvent } from '../models/sport-config.model';
+import { ApiEndpoints } from '@core/constants/endpoints.const';
 
 export interface SSEEventAdd {
   type: 'add';
@@ -54,7 +55,7 @@ export class MatchEventService {
     periodDuration: number
   ): Observable<SSEMatchEvent> {
     return new Observable<SSEMatchEvent>((observer) => {
-      const source = this.api.subscribe(`matches/${matchId}/events/stream`);
+      const source = this.api.subscribe(ApiEndpoints.MATCHES.EVENTS_STREAM(matchId));
 
       source.addEventListener('add', (e: MessageEvent) => {
         this.ngZone.run(() => {
@@ -115,7 +116,7 @@ export class MatchEventService {
    */
   createEvent(matchId: string, dto: CreateMatchEventDto): Observable<void> {
     return this.api
-      .post<void>(`matches/${matchId}/events`, dto)
+      .post<void>(ApiEndpoints.MATCHES.EVENTS(matchId), dto)
       .pipe(catchError((err) => this.handleError('Error creating event', err)));
   }
 
@@ -130,14 +131,24 @@ export class MatchEventService {
    */
   deleteEvent(matchId: string, eventId: string): Observable<void> {
     return this.api
-      .delete<void>(`matches/${matchId}/events/${eventId}`)
+      .delete<void>(ApiEndpoints.MATCHES.EVENT_BY_ID(matchId, eventId))
       .pipe(catchError((err) => this.handleError('Error deleting event', err)));
   }
 
   getEventTypes(): Observable<TypeMatchEvent[]> {
     return this.api
-      .get<TypeMatchEvent[]>('matches/event-types')
+      .get<TypeMatchEvent[]>(ApiEndpoints.MATCHES.EVENT_TYPES)
       .pipe(catchError((err) => this.handleError('Error loading event types', err)));
+  }
+
+  getEvents(matchId: string, homeTeamId: string, periodDuration: number): Observable<MatchEventViewModel[]> {
+    const rawEvents = this.api
+      .get<MatchEvent[]>(ApiEndpoints.MATCHES.EVENTS(matchId))
+      .pipe(catchError((err) => this.handleError('Error loading events', err)));
+
+    return rawEvents.pipe(
+      map((events) => events.map((e) => mapEventToViewModel(e, homeTeamId, periodDuration)))
+    );
   }
 
   private handleError(message: string, error: unknown): Observable<never> {

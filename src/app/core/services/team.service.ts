@@ -1,6 +1,6 @@
 import { Injectable, inject } from '@angular/core';
 import { ApiService } from './api.service';
-import { Observable, of, throwError } from 'rxjs';
+import { forkJoin, Observable, of, throwError } from 'rxjs';
 import { map, catchError } from 'rxjs/operators';
 
 import {
@@ -14,7 +14,9 @@ import {
   Player,
   CreatePlayerDto,
   PlayerApiPaginatedResponse,
+  PlayerApiResponse
 } from '../models/player.model';
+import { ApiEndpoints } from '@core/constants/endpoints.const';
 
 export interface CsvImportResult {
   teamsImported: number;
@@ -60,7 +62,7 @@ export class TeamService {
     organizationId?: string;
     championshipId?: string;
   }): Observable<TeamApiResponse[]> {
-    return this.api.get<TeamApiResponse[]>('teams/all', filters).pipe(
+    return this.api.get<TeamApiResponse[]>(ApiEndpoints.TEAMS.ALL, filters).pipe(
       catchError((error) => this.handleError('Error fetching all teams', error))
     );
   }
@@ -77,7 +79,7 @@ export class TeamService {
   // Backend confirmado
   // ─────────────────────────────────────────
   getTeamById(id: string): Observable<TeamApiResponse> {
-    return this.api.get<TeamApiResponse>(`teams/${id}`).pipe(
+    return this.api.get<TeamApiResponse>(ApiEndpoints.TEAMS.BY_ID(id)).pipe(
       catchError((error) => this.handleError('Error fetching team', error))
     );
   }
@@ -89,8 +91,11 @@ export class TeamService {
   // Por seguridad, players se deja vacío.
   // ─────────────────────────────────────────
   getTeamWithPlayers(id: string): Observable<TeamProfile> {
-    return this.getTeamById(id).pipe(
-      map((team) => {
+    return forkJoin({
+      team: this.getTeamById(id),
+      playersPaginated: this.getAllPlayers(id),
+    }).pipe(
+      map(({ team, playersPaginated }) => {
         return {
           id: team.id,
           name: team.name,
@@ -114,7 +119,7 @@ export class TeamService {
           createdAt: new Date(),
           updatedAt: new Date(),
 
-          players: [] as Player[],
+          players: this.extractPlayers(playersPaginated),
           groups: [],
 
           stats: {
@@ -134,6 +139,25 @@ export class TeamService {
         this.handleError('Error fetching team with players', error)
       )
     );
+  }
+
+  private extractPlayers(playersPaginated: PlayerApiPaginatedResponse): Player[] {
+    const players: Player[] = [];
+    // TODO: Verify response.
+    // This assumes all players are returned in the same page. If that ever changes on
+    // the backend, this will break.
+
+    // FIXME: Forced conversion, most fields are invalid.
+    // I just need the name and ID of the player, so I'm leaving it like this for now.
+    players.push(...playersPaginated.players.map((p) => {
+      return {
+        ...p,
+        createdAt: new Date(p.createdAt),
+        updatedAt: new Date(p.updatedAt),
+      } as Player;
+    }));
+
+    return players;
   }
 
   // ─────────────────────────────────────────
@@ -173,7 +197,13 @@ export class TeamService {
   // GET /players acepta la query teamId, pero el backend actual la ignora.
   // ─────────────────────────────────────────
   getPlayers(teamId: string): Observable<PlayerApiPaginatedResponse> {
-    return this.api.get<PlayerApiPaginatedResponse>('players', { teamId }).pipe(
+    return this.api.get<PlayerApiPaginatedResponse>(ApiEndpoints.PLAYERS.BASE, { teamId }).pipe(
+      catchError((error) => this.handleError('Error fetching players', error))
+    );
+  }
+
+  getAllPlayers(teamId: string): Observable<PlayerApiPaginatedResponse> {
+    return this.api.get<PlayerApiPaginatedResponse>(ApiEndpoints.PLAYERS.BASE, { teamId }).pipe(
       catchError((error) => this.handleError('Error fetching players', error))
     );
   }
@@ -188,7 +218,7 @@ export class TeamService {
       organizationId: string;
     }
   ): Observable<Player> {
-    return this.api.post<Player>('players', player).pipe(
+    return this.api.post<Player>(ApiEndpoints.PLAYERS.BASE, player).pipe(
       catchError((error) => this.handleError('Error creating player', error))
     );
   }

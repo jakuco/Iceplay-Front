@@ -40,6 +40,7 @@
       "time": "Time",
       "event": "Event",
       "description": "Description",
+      "player": "Player",
       "team": "Team"
     },
     "events": {

@@ -10,6 +10,7 @@ import {
   // Legacy type kept only to avoid breaking old CSV-related frontend flows
   CreatePlayerDto,
 } from '../models/player.model';
+import { ApiEndpoints } from '@core/constants/endpoints.const';
 
 // ─────────────────────────────────────────────────────────────
 // Backend confirmado (Iceplay-Fropen/src/presentation/routes.ts):
@@ -47,7 +48,7 @@ export class PlayerService {
    * teamId, organizationId, championshipId → el controller los ignora (no los lee de req.query).
    */
   getPlayers(page = 1, limit = 10): Observable<PlayerApiPaginatedResponse> {
-    return this.api.get<PlayerApiPaginatedResponse>('players', { page, limit }).pipe(
+    return this.api.get<PlayerApiPaginatedResponse>(ApiEndpoints.PLAYERS.BASE, { page, limit }).pipe(
       catchError((err) => this.handleError('Error fetching players', err)),
     );
   }
@@ -56,7 +57,7 @@ export class PlayerService {
    * Get a single player by ID (UUIDv7). Uses GET /players/:id
    */
   getPlayerById(id: string): Observable<PlayerApiResponse> {
-    return this.api.get<PlayerApiResponse>(`players/${id}`).pipe(
+    return this.api.get<PlayerApiResponse>(ApiEndpoints.PLAYERS.BY_ID(id)).pipe(
       catchError((err) => this.handleError('Error fetching player', err)),
     );
   }
@@ -65,7 +66,7 @@ export class PlayerService {
    * Create a new player. Uses POST /players (requires auth).
    */
   createPlayer(player: CreatePlayerApiDto): Observable<PlayerApiResponse> {
-    return this.api.post<PlayerApiResponse>('players', player).pipe(
+    return this.api.post<PlayerApiResponse>(ApiEndpoints.PLAYERS.BASE, player).pipe(
       catchError((err) => this.handleError('Error creating player', err)),
     );
   }
@@ -74,7 +75,7 @@ export class PlayerService {
    * Update a player. Uses PUT /players/:id (requires auth).
    */
   updatePlayer(id: string, player: UpdatePlayerApiDto): Observable<PlayerApiResponse> {
-    return this.api.put<PlayerApiResponse>(`players/${id}`, player).pipe(
+    return this.api.put<PlayerApiResponse>(ApiEndpoints.PLAYERS.BY_ID(id), player).pipe(
       catchError((err) => this.handleError('Error updating player', err)),
     );
   }
@@ -84,7 +85,7 @@ export class PlayerService {
    */
   deletePlayer(id: string): Observable<void> {
     return this.api
-      .delete<void>(`players/${id}`)
+      .delete<void>(ApiEndpoints.PLAYERS.BY_ID(id))
       .pipe(catchError((err) => this.handleError('Error deleting player', err)));
   }
 
@@ -93,7 +94,7 @@ export class PlayerService {
    * GET /players ignora ?teamId=
    */
   getPlayersByTeam(teamId: string): Observable<PlayerApiPaginatedResponse> {
-    return this.api.get<PlayerApiPaginatedResponse>('players', { teamId }).pipe(
+    return this.api.get<PlayerApiPaginatedResponse>(ApiEndpoints.PLAYERS.BASE, { teamId }).pipe(
       catchError((err) => this.handleError('Error fetching players by team', err)),
     );
   }
@@ -103,7 +104,7 @@ export class PlayerService {
    * GET /players ignora ?championshipId=
    */
   getPlayersByChampionship(championshipId: string): Observable<PlayerApiPaginatedResponse> {
-    return this.api.get<PlayerApiPaginatedResponse>('players', { championshipId }).pipe(
+    return this.api.get<PlayerApiPaginatedResponse>(ApiEndpoints.PLAYERS.BASE, { championshipId }).pipe(
       catchError((err) => this.handleError('Error fetching championship players', err)),
     );
   }
@@ -113,7 +114,7 @@ export class PlayerService {
    * GET /players ignora ?organizationId=
    */
   getPlayersByOrganization(organizationId: string): Observable<PlayerApiPaginatedResponse> {
-    return this.api.get<PlayerApiPaginatedResponse>('players', { organizationId }).pipe(
+    return this.api.get<PlayerApiPaginatedResponse>(ApiEndpoints.PLAYERS.BASE, { organizationId }).pipe(
       catchError((err) => this.handleError('Error fetching organization players', err)),
     );
   }
@@ -193,7 +194,7 @@ export class PlayerService {
               weight,
             } as unknown as CreatePlayerDto;
 
-            return this.api.post<PlayerApiResponse>('players', legacyPayload).pipe(
+            return this.api.post<PlayerApiResponse>(ApiEndpoints.PLAYERS.BASE, legacyPayload).pipe(
               tap(() => result.playersImported++),
               catchError((error) => {
                 result.errors.push(

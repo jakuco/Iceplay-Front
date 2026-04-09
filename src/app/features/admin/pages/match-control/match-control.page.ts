@@ -23,25 +23,25 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { forkJoin, Subscription } from 'rxjs';
 
-import { MatchService } from '../../../../core/services/match.service';
+import { MatchService } from '@core/services/match.service';
 import {
   MatchEventService,
   SSEMatchEvent,
-} from '../../../../core/services/match-event.service';
-import { TeamService } from '../../../../core/services/team.service';
-import { PlayerService } from '../../../../core/services/player.service';
+} from '@core/services/match-event.service';
+import { TeamService } from '@core/services/team.service';
+import { PlayerService } from '@core/services/player.service';
 
 import {
   MatchByIdResponse,
   MatchStatus,
   UpdateMatchApiDto,
-} from '../../../../core/models/match.model';
+} from '@core/models/match.model';
 import {
   MatchEventViewModel,
   CreateMatchEventDto,
-} from '../../../../core/models/event.model';
-import type { TypeMatchEvent } from '../../../../core/models/sport-config.model';
-import type { PlayerApiResponse } from '../../../../core/models/player.model';
+} from '@core/models/event.model';
+import type { TypeMatchEvent } from '@core/models/sport-config.model';
+import type { PlayerApiResponse } from '@core/models/player.model';
 
 const DEFAULT_PERIOD_DURATION = 2700;
 
@@ -626,6 +626,13 @@ export default class MatchControlPage implements OnInit, OnDestroy {
 
   private loadEventsAndConnect(matchId: string, homeTeamId: string): void {
     const pd = DEFAULT_PERIOD_DURATION;
+
+    this.matchEventService.getEvents(matchId, homeTeamId, pd).subscribe({
+      next: (eventsArray) => {
+        this.events.set(eventsArray);
+      },
+      error: (err) => console.error('Failed to load events', err)
+    });
 
     this.sseSubscription?.unsubscribe();
     this.sseSubscription = this.matchEventService

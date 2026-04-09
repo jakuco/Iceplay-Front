@@ -57,6 +57,7 @@ export const ApiEndpoints = {
     ALL: `${MATCHES_BASE}/all`,
     BY_ID: (id: string) => `${MATCHES_BASE}/${id}`,
     EVENTS: (id: string) => `${MATCHES_BASE}/${id}/events`,
+    EVENT_TYPES: `${MATCHES_BASE}/event-types`,
     EVENT_BY_ID: (matchId: string, eventId: string) => `${MATCHES_BASE}/${matchId}/events/${eventId}`,
     EVENTS_STREAM: (id: string) => `${MATCHES_BASE}/${id}/events/stream`
   },

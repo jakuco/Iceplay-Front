@@ -13,16 +13,16 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatTabsModule } from '@angular/material/tabs';
 import { RouterLink } from '@angular/router';
 import { Subscription, forkJoin, of, type Observable } from 'rxjs';
-import { I18nService } from '../../../../core/services/i18n.service';
-import { TranslatePipe } from '../../../../core/pipes/translate.pipe';
-import { MatchService } from '../../../../core/services/match.service';
-import { MatchEventService } from '../../../../core/services/match-event.service';
-import { TeamService } from '../../../../core/services/team.service';
-import { ChampionshipService } from '../../../../core/services/championship.service';
-import { MatchByIdResponse } from '../../../../core/models/match.model';
-import { MatchEventViewModel } from '../../../../core/models/event.model';
-import { TeamApiResponse } from '../../../../core/models/team.model';
-import { Championship } from '../../../../core/models/championship.model';
+import { I18nService } from '@core/services/i18n.service';
+import { TranslatePipe } from '@core/pipes/translate.pipe';
+import { MatchService } from '@core/services/match.service';
+import { MatchEventService } from '@core/services/match-event.service';
+import { TeamService } from '@core/services/team.service';
+import { ChampionshipService } from '@core/services/championship.service';
+import { MatchByIdResponse } from '@core/models/match.model';
+import { MatchEventViewModel } from '@core/models/event.model';
+import { TeamApiResponse, TeamProfile } from '@core/models/team.model';
+import { Championship } from '@core/models/championship.model';
 
 interface DisplayMatch {
   id: string;
@@ -35,15 +35,15 @@ interface DisplayMatch {
   awayScore?: number;
   date: Date;
   league: string;
-  events?: DisplayEvent[];
+  events?: MatchEventViewModel[];
 }
 
-interface DisplayEvent {
-  minute: string;
-  type: string;
-  description: string;
-  teamName: string;
-}
+// interface DisplayEvent {
+//   minute: string;
+//   type: string;
+//   description: string;
+//   teamName: string;
+// }
 
 @Component({
   selector: 'app-match-details',
@@ -173,7 +173,7 @@ interface DisplayEvent {
                           <th
                             class="px-4 py-3 text-left text-xs font-medium tracking-wider uppercase"
                           >
-                            {{ 'match.table.description' | translate }}
+                            {{ 'match.table.player' | translate }}
                           </th>
                           <th
                             class="px-4 py-3 text-left text-xs font-medium tracking-wider uppercase"
@@ -183,27 +183,25 @@ interface DisplayEvent {
                         </tr>
                       </thead>
                       <tbody class="divide-y divide-(--mat-sys-outline-variant)">
-                        @for (event of m.events; track event.minute + event.type + event.teamName) {
+                        @for (event of match()?.events ?? []; track event.id) {
                           <tr>
-                            <td
-                              class="text-secondary px-4 py-3 font-mono text-sm font-bold whitespace-nowrap"
-                            >
-                              {{ event.minute }}
+                            <td class="text-secondary px-4 py-3 font-mono text-sm whitespace-nowrap">
+                              {{ event.timeFormatted }}
                             </td>
                             <td class="px-4 py-3 whitespace-nowrap">
                               <span
                                 class="inline-flex items-center gap-2 text-sm font-semibold"
-                                [style.color]="getEventColor(event.type)"
+                                [style.color]="event.typeColor"
                               >
-                                <mat-icon class="text-base!">{{
-                                  getEventIcon(event.type)
-                                }}</mat-icon>
-                                {{ getEventLabel(event.type) }}
+                                <mat-icon class="text-base!">{{ event.typeIcon }}</mat-icon>
+                                {{ event.typeLabel }}
                               </span>
                             </td>
-                            <td class="px-4 py-3 text-sm">{{ event.description }}</td>
+                            <td class="px-4 py-3 text-sm whitespace-nowrap">
+                              {{ playerName(event) }}
+                            </td>
                             <td class="text-secondary px-4 py-3 text-sm whitespace-nowrap">
-                              {{ event.teamName }}
+                              {{ event.isHomeTeam ? match()?.homeTeam?.name ?? "Local" : match()?.awayTeam?.name ?? "Visitante" }}
                             </td>
                           </tr>
                         }
@@ -286,8 +284,8 @@ export default class MatchDetails implements OnDestroy {
   matchId = input.required<string>();
 
   private matchData = signal<MatchByIdResponse | null>(null);
-  private homeTeam = signal<TeamApiResponse | null>(null);
-  private awayTeam = signal<TeamApiResponse | null>(null);
+  private homeTeam = signal<TeamProfile | null>(null);
+  private awayTeam = signal<TeamProfile | null>(null);
   private championship = signal<Championship | null>(null);
   private events = signal<MatchEventViewModel[]>([]);
   private eventSubscription?: Subscription;
@@ -338,7 +336,7 @@ export default class MatchDetails implements OnDestroy {
       awayScore,
       date: scheduledStart,
       league: champ?.name ?? 'Campeonato',
-      events: this.transformEvents(evts, home, away),
+      events: evts,
     };
   });
 
@@ -366,8 +364,8 @@ export default class MatchDetails implements OnDestroy {
           match.status === 'live' || match.status === 'warmup' || match.status === 'halftime';
 
         forkJoin({
-          homeTeam: this.teamService.getTeamById(String(match.homeTeamId)),
-          awayTeam: this.teamService.getTeamById(String(match.awayTeamId)),
+          homeTeam: this.teamService.getTeamWithPlayers(String(match.homeTeamId)),
+          awayTeam: this.teamService.getTeamWithPlayers(String(match.awayTeamId)),
           championship: this.resolveChampionship(match),
         }).subscribe({
           next: ({ homeTeam, awayTeam, championship }) => {
@@ -410,6 +408,13 @@ export default class MatchDetails implements OnDestroy {
     // exista endpoint GET /championships/:id/rules con `match_duration`.
     const PERIOD_DURATION_SECONDS = 2700;
 
+    this.matchEventService.getEvents(matchId, homeTeamId, PERIOD_DURATION_SECONDS).subscribe({
+      next: (eventsArray) => {
+        this.events.set(eventsArray);
+      },
+      error: (err) => console.error('Failed to load events', err)
+    });
+
     this.eventSubscription = this.matchEventService
       .connectToMatchStream(matchId, homeTeamId, PERIOD_DURATION_SECONDS)
       .subscribe({
@@ -427,29 +432,29 @@ export default class MatchDetails implements OnDestroy {
       });
   }
 
-  private transformEvents(
-    events: MatchEventViewModel[],
-    homeTeam: TeamApiResponse,
-    awayTeam: TeamApiResponse
-  ): DisplayEvent[] {
-    return events
-      .map((event) => {
-        const isHomeTeam = String(event.teamId ?? '') === String(homeTeam.id);
-        const team = isHomeTeam ? homeTeam : awayTeam;
+  // private transformEvents(
+  //   events: MatchEventViewModel[],
+  //   homeTeam: TeamApiResponse,
+  //   awayTeam: TeamApiResponse
+  // ): DisplayEvent[] {
+  //   return events
+  //     .map((event) => {
+  //       const isHomeTeam = String(event.teamId ?? '') === String(homeTeam.id);
+  //       const team = isHomeTeam ? homeTeam : awayTeam;
 
-        return {
-          minute: event.timeFormatted,
-          type: event.typeLabel,
-          description: event.description || '',
-          teamName: team.name,
-        };
-      })
-      .sort((a, b) => {
-        const minuteA = parseInt(a.minute.replace(/[^0-9]/g, ''), 10) || 0;
-        const minuteB = parseInt(b.minute.replace(/[^0-9]/g, ''), 10) || 0;
-        return minuteA - minuteB;
-      });
-  }
+  //       return {
+  //         minute: event.timeFormatted,
+  //         type: event.typeLabel,
+  //         description: event.description || '',
+  //         teamName: team.name,
+  //       };
+  //     })
+  //     .sort((a, b) => {
+  //       const minuteA = parseInt(a.minute.replace(/[^0-9]/g, ''), 10) || 0;
+  //       const minuteB = parseInt(b.minute.replace(/[^0-9]/g, ''), 10) || 0;
+  //       return minuteA - minuteB;
+  //     });
+  // }
 
   private toDate(value: string | Date | null | undefined): Date | null {
     if (!value) return null;
@@ -526,5 +531,11 @@ export default class MatchDetails implements OnDestroy {
       foul: this.i18nService.translate('match.events.foul') || 'Foul',
     };
     return labels[type] || type;
+  }
+
+  playerName(event: MatchEventViewModel): string {
+    const team = event.isHomeTeam ? this.homeTeam()! : this.awayTeam()!;
+    const p = team.players.find((pl) => pl.id === String(event.playerId));
+    return p ? `#${p.number} ${p.firstName} ${p.lastName}` : '—';
   }
 }
