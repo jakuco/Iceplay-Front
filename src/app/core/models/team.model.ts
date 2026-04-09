@@ -52,6 +52,8 @@ export interface TeamApiResponse {
   coachPhone?: string | null;
   /** NOT NULL en DB con default true */
   isActive: boolean;
+  /** Conteo real de jugadores activos. Viene en GET /teams/all desde backend. */
+  playerCount?: number;
 }
 
 /**

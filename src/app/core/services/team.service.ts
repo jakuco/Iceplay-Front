@@ -137,11 +137,13 @@ export class TeamService {
   }
 
   // ─────────────────────────────────────────
-  // POST /teams NO DISPONIBLE
+  // POST /teams
+  // Backend: { name, championshipId, location?, logoUrl?, foundedYear? }
+  // Campos extra son ignorados por el backend.
   // ─────────────────────────────────────────
-  createTeam(): Observable<never> {
-    return throwError(
-      () => new Error('POST /teams no está disponible en el backend')
+  createTeam(data: { name: string; championshipId: string; [key: string]: any }): Observable<TeamApiResponse> {
+    return this.api.post<TeamApiResponse>('teams', data).pipe(
+      catchError((error) => this.handleError('Error creating team', error))
     );
   }
 

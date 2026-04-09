@@ -38,26 +38,26 @@ const routes: Routes = [
         loadComponent: () => import('./pages/championships/championship-detail.page'),
         title: 'Detalle Campeonato - Admin',
       },
-      // {
-      //   path: 'teams',
-      //   loadComponent: () => import('./pages/teams/teams-list.page'),
-      //   title: 'Equipos - Admin',
-      // },
-      // {
-      //   path: 'teams/new',
-      //   loadComponent: () => import('./pages/teams/team-form.page'),
-      //   title: 'Nuevo Equipo - Admin',
-      // },
+      {
+        path: 'teams',
+        loadComponent: () => import('./pages/teams/teams-list.page'),
+        title: 'Equipos - Admin',
+      },
+      {
+        path: 'teams/new',
+        loadComponent: () => import('./pages/teams/team-form.page'),
+        title: 'Nuevo Equipo - Admin',
+      },
+      {
+        path: 'teams/:id/edit',
+        loadComponent: () => import('./pages/teams/team-form.page'),
+        title: 'Editar Equipo - Admin',
+      },
       {
         path: 'teams/:id',
         loadComponent: () => import('./pages/teams/team-detail.page'),
         title: 'Detalle Equipo - Admin',
       },
-      // {
-      //   path: 'teams/:id/edit',
-      //   loadComponent: () => import('./pages/teams/team-form.page'),
-      //   title: 'Editar Equipo - Admin',
-      // },
       {
         path: 'players',
         loadComponent: () => import('./pages/players/players-list.page'),

@@ -62,7 +62,7 @@ interface DisplayPlayer {
         <div class="filters-grid">
           <mat-form-field appearance="outline">
             <mat-label>Campeonato</mat-label>
-            <mat-select [(ngModel)]="selectedChampionshipId" (selectionChange)="filterPlayers()">
+            <mat-select [(ngModel)]="selectedChampionshipId" (selectionChange)="onChampionshipChange()">
               <mat-option value="">Todos</mat-option>
               @for (champ of championships(); track champ.id) {
                 <mat-option [value]="champ.id">{{ champ.name }}</mat-option>
@@ -72,7 +72,7 @@ interface DisplayPlayer {
 
           <mat-form-field appearance="outline">
             <mat-label>Equipo</mat-label>
-            <mat-select [(ngModel)]="selectedTeamId" (selectionChange)="filterPlayers()">
+            <mat-select [(ngModel)]="selectedTeamId" (selectionChange)="onTeamChange()">
               <mat-option value="">Todos</mat-option>
               @for (team of filteredTeams(); track team.id) {
                 <mat-option [value]="team.id">{{ team.name }}</mat-option>
@@ -85,7 +85,7 @@ interface DisplayPlayer {
             <input
               matInput
               [(ngModel)]="searchTerm"
-              (ngModelChange)="filterPlayers()"
+              (ngModelChange)="onSearchChange()"
               placeholder="Nombre o número"
             />
             <mat-icon matPrefix>search</mat-icon>
@@ -152,10 +152,23 @@ interface DisplayPlayer {
               <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
               <tr mat-row *matRowDef="let row; columns: displayedColumns"></tr>
             </table>
+
+            @if (!selectedTeamId && totalPlayers() > pageSize) {
+              <div class="pagination">
+                <button matIconButton [disabled]="currentPage() <= 1" (click)="prevPage()">
+                  <mat-icon>chevron_left</mat-icon>
+                </button>
+                <span class="page-info">
+                  {{ paginationStart() }}–{{ paginationEnd() }} de {{ totalPlayers() }}
+                </span>
+                <button matIconButton [disabled]="currentPage() * pageSize >= totalPlayers()" (click)="nextPage()">
+                  <mat-icon>chevron_right</mat-icon>
+                </button>
+              </div>
+            }
           } @else {
             <div class="empty-state">
               <mat-icon class="empty-state-icon">person_off</mat-icon>
-              <!-- <mat-icon >person_off</mat-icon> -->
               <h3>No hay jugadores</h3>
               <p>Crea tu primer jugador para comenzar</p>
               <button matButton="filled" routerLink="/admin/players/new">
@@ -207,7 +220,20 @@ interface DisplayPlayer {
       border-radius: 12px;
       overflow: hidden;
     }
-
+    .pagination {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      padding: 0.75rem 1rem;
+      border-top: 1px solid var(--mat-sys-outline-variant);
+    }
+    .page-info {
+      font-size: 0.875rem;
+      color: var(--mat-sys-on-surface-variant);
+      min-width: 120px;
+      text-align: center;
+    }
     .empty-state-icon {
       font-size: 64px;
       width: 64px;
@@ -215,7 +241,6 @@ interface DisplayPlayer {
       color: var(--mat-sys-outline);
       margin-bottom: 1rem;
     }
-
     .empty-state {
       text-align: center;
       padding: 4rem 2rem;
@@ -232,6 +257,7 @@ interface DisplayPlayer {
 })
 export default class PlayersListPage implements OnInit {
     displayedColumns = ['number', 'name', 'position', 'team', 'status', 'actions'];
+    readonly pageSize = 20;
 
     private playerService = inject(PlayerService);
     private teamService = inject(TeamService);
@@ -239,16 +265,23 @@ export default class PlayersListPage implements OnInit {
     private authService = inject(AuthService);
     private router = inject(Router);
 
-    allPlayers = signal<PlayerApiResponse[]>([]);
+    /** Raw players from the last API call */
+    rawPlayers = signal<PlayerApiResponse[]>([]);
     allTeams = signal<TeamApiResponse[]>([]);
+    filteredTeams = signal<TeamApiResponse[]>([]);
     championships = signal<Championship[]>([]);
     displayPlayers = signal<DisplayPlayer[]>([]);
     isLoading = signal(false);
+
+    currentPage = signal(1);
+    totalPlayers = signal(0);
 
     selectedChampionshipId = '';
     selectedTeamId = '';
     searchTerm = '';
 
+    paginationStart = signal(1);
+    paginationEnd = signal(0);
 
     constructor() {
         effect(() => {
@@ -260,7 +293,6 @@ export default class PlayersListPage implements OnInit {
     }
 
     ngOnInit(): void {
-        // Reload data when navigating to this route (exact match or with query params)
         this.router.events
             .pipe(
                 filter(
@@ -278,23 +310,20 @@ export default class PlayersListPage implements OnInit {
             });
     }
 
-    filteredTeams = signal<TeamApiResponse[]>([]);
-
+    /** Initial load: fetch teams + championships, then load first page of players */
     private loadData(organizationId: string): void {
         this.isLoading.set(true);
         forkJoin({
-            players: this.playerService.getPlayersByOrganization(organizationId),
             teams: this.teamService.getTeamsByOrganization(organizationId),
             championships: this.championshipService.getChampionships(organizationId),
         }).subscribe({
-            next: ({ players, teams, championships }) => {
-                this.allPlayers.set(players.players);
+            next: ({ teams, championships }) => {
                 this.allTeams.set(teams);
+                this.filteredTeams.set(teams);
                 this.championships.set(
                     championships.filter((c) => c.status === ChampionshipStatus.Active),
                 );
-                this.filterPlayers();
-                this.isLoading.set(false);
+                this.loadPlayers();
             },
             error: (error) => {
                 console.error('Error loading data', error);
@@ -303,10 +332,51 @@ export default class PlayersListPage implements OnInit {
         });
     }
 
-    filterPlayers(): void {
-        let filtered = this.allPlayers();
+    /** Load players from the API based on current filter state */
+    private loadPlayers(): void {
+        const user = this.authService.currentUser();
+        if (!user?.organizationId) return;
 
-        // Filter by team championship
+        this.isLoading.set(true);
+
+        if (this.selectedTeamId) {
+            // Server-side: fetch all players for selected team (no pagination)
+            this.playerService.getPlayersByTeam(this.selectedTeamId).subscribe({
+                next: (resp) => {
+                    this.rawPlayers.set(resp.players ?? []);
+                    this.totalPlayers.set(resp.players?.length ?? 0);
+                    this.transformAndDisplay();
+                    this.isLoading.set(false);
+                },
+                error: (err) => {
+                    console.error('Error loading players by team', err);
+                    this.isLoading.set(false);
+                },
+            });
+        } else {
+            // Server-side: paginated org-level load
+            this.playerService
+                .getPlayersByOrganization(String(user.organizationId), this.currentPage(), this.pageSize)
+                .subscribe({
+                    next: (resp) => {
+                        this.rawPlayers.set(resp.players);
+                        this.totalPlayers.set(resp.total);
+                        this.transformAndDisplay();
+                        this.isLoading.set(false);
+                    },
+                    error: (err) => {
+                        console.error('Error loading players', err);
+                        this.isLoading.set(false);
+                    },
+                });
+        }
+    }
+
+    /** Client-side filter + transform rawPlayers → displayPlayers */
+    private transformAndDisplay(): void {
+        let filtered = this.rawPlayers();
+
+        // Championship filter (client-side: no backend support)
         if (this.selectedChampionshipId) {
             const teamsInChampionship = this.allTeams()
                 .filter((t) => String(t.championshipId) === this.selectedChampionshipId)
@@ -314,12 +384,7 @@ export default class PlayersListPage implements OnInit {
             filtered = filtered.filter((p) => teamsInChampionship.includes(p.teamId as any));
         }
 
-        // Filter by team
-        if (this.selectedTeamId) {
-            filtered = filtered.filter((p) => String(p.teamId) === this.selectedTeamId);
-        }
-
-        // Filter by search term
+        // Search filter (client-side)
         if (this.searchTerm) {
             const term = this.searchTerm.toLowerCase();
             filtered = filtered.filter((p) => {
@@ -331,16 +396,12 @@ export default class PlayersListPage implements OnInit {
             });
         }
 
-        // Update filtered teams based on championship
-        if (this.selectedChampionshipId) {
-            this.filteredTeams.set(
-                this.allTeams().filter((t) => String(t.championshipId) === this.selectedChampionshipId),
-            );
-        } else {
-            this.filteredTeams.set(this.allTeams());
-        }
+        // Update pagination display values
+        const start = (this.currentPage() - 1) * this.pageSize + 1;
+        const end = Math.min(this.currentPage() * this.pageSize, this.totalPlayers());
+        this.paginationStart.set(start);
+        this.paginationEnd.set(end);
 
-        // Transform to display format
         const display: DisplayPlayer[] = filtered.map((player) => {
             const team = this.allTeams().find((t) => String(t.id) === String(player.teamId));
             const fullName = `${player.firstName || ''} ${player.lastName || ''}`.trim() || 'Sin nombre';
@@ -358,6 +419,48 @@ export default class PlayersListPage implements OnInit {
         });
 
         this.displayPlayers.set(display);
+    }
+
+    onChampionshipChange(): void {
+        // Update team dropdown options based on championship
+        if (this.selectedChampionshipId) {
+            this.filteredTeams.set(
+                this.allTeams().filter((t) => String(t.championshipId) === this.selectedChampionshipId),
+            );
+        } else {
+            this.filteredTeams.set(this.allTeams());
+        }
+        // Clear team selection if it no longer belongs to the selected championship
+        if (this.selectedTeamId) {
+            const teamStillValid = this.filteredTeams().some((t) => String(t.id) === this.selectedTeamId);
+            if (!teamStillValid) this.selectedTeamId = '';
+        }
+        this.currentPage.set(1);
+        this.loadPlayers();
+    }
+
+    onTeamChange(): void {
+        this.currentPage.set(1);
+        this.loadPlayers();
+    }
+
+    onSearchChange(): void {
+        // Search is client-side only — no server call needed
+        this.transformAndDisplay();
+    }
+
+    prevPage(): void {
+        if (this.currentPage() > 1) {
+            this.currentPage.update((p) => p - 1);
+            this.loadPlayers();
+        }
+    }
+
+    nextPage(): void {
+        if (this.currentPage() * this.pageSize < this.totalPlayers()) {
+            this.currentPage.update((p) => p + 1);
+            this.loadPlayers();
+        }
     }
 
     deletePlayer(playerId: string): void {

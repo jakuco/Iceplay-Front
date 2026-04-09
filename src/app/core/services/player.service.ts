@@ -89,11 +89,12 @@ export class PlayerService {
   }
 
   /**
-   * @deprecated-behavior FILTRO NO FUNCIONAL.
-   * GET /players ignora ?teamId=
+   * GET /players?teamId=
+   * Backend: cuando se pasa teamId, el controller llama playerService.getPlayersByTeam()
+   * y devuelve { players: [] } (sin wrapper de paginación).
    */
-  getPlayersByTeam(teamId: string): Observable<PlayerApiPaginatedResponse> {
-    return this.api.get<PlayerApiPaginatedResponse>('players', { teamId }).pipe(
+  getPlayersByTeam(teamId: string): Observable<{ players: PlayerApiResponse[] }> {
+    return this.api.get<{ players: PlayerApiResponse[] }>('players', { teamId }).pipe(
       catchError((err) => this.handleError('Error fetching players by team', err)),
     );
   }
@@ -109,11 +110,12 @@ export class PlayerService {
   }
 
   /**
-   * @deprecated-behavior FILTRO NO FUNCIONAL.
-   * GET /players ignora ?organizationId=
+   * GET /players?organizationId=&page=&limit=
+   * Filtro organizationId confirmado en backend (controller + service).
+   * Respuesta paginada: { page, limit, total, next, prev, players[] }.
    */
-  getPlayersByOrganization(organizationId: string): Observable<PlayerApiPaginatedResponse> {
-    return this.api.get<PlayerApiPaginatedResponse>('players', { organizationId }).pipe(
+  getPlayersByOrganization(organizationId: string, page = 1, limit = 20): Observable<PlayerApiPaginatedResponse> {
+    return this.api.get<PlayerApiPaginatedResponse>('players', { organizationId, page, limit }).pipe(
       catchError((err) => this.handleError('Error fetching organization players', err)),
     );
   }
