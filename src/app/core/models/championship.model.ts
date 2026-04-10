@@ -328,6 +328,46 @@ export interface UpdateChampionshipMatchRuleDto {
   value: number;
 }
 
+// ─────────────────────────────────────────────────────────────
+// DTOs — API Endpoints (Phase)
+// ─────────────────────────────────────────────────────────────
+
+/** POST /api/phases */
+export interface CreatePhaseApiDto {
+  championshipId: DbId;
+  name: string;
+  phaseType: string;
+  phaseOrder: number;
+  status: string;
+  isActive: boolean;
+}
+
+/** PUT /api/phases/:id */
+export interface UpdatePhaseApiDto extends CreatePhaseApiDto {
+  id: number;
+}
+
+/** PATCH /api/phases/:id */
+export interface PatchPhaseApiDto {
+  championshipId?: DbId;
+  name?: string;
+  phaseType?: 'swiss';
+  phaseOrder?: number;
+  status?: string;
+}
+
+/** POST|PUT /api/phases/:id/swiss */
+export interface PhaseSwissApiDto {
+  phaseId: number;
+  numRounds: number;
+  pairingSystem: string;
+  firstRound: string;
+  allowRematch: boolean;
+  tiebreakOrder: string;
+  directAdvancedCount: number;
+  playoffCount: number;
+}
+
 
 // ─────────────────────────────────────────────────────────────
 // DTOs — QUERY / FILTROS
@@ -434,6 +474,47 @@ export interface ChampionshipRulesResponse {
     currentValue: number;   // override o default si no hay override
     isOverridden: boolean;
   }>;
+}
+
+/** Transporte backend: GET /championships (paginado). */
+export interface BackendChampionshipsPage {
+  championships: Championship[];
+  page: number;
+  limit: number;
+  total: number;
+  next: string | null;
+  prev: string | null;
+}
+
+/** Transporte backend: entidad Phase sin normalizar. */
+export interface BackendPhase {
+  id: number;
+  championshipId: DbId;
+  name: string;
+  phaseType: string;
+  phaseOrder: number;
+  status: string;
+  isActive?: boolean;
+  configuration?: Record<string, unknown> | null;
+  swissConfig?: Record<string, unknown>;
+  swiss?: Record<string, unknown>;
+}
+
+/** Transporte backend: catálogo de match-rules por deporte. */
+export interface BackendMatchRule {
+  id: DbId;
+  name: string;
+  value?: number | string | null;
+  defaultValue?: number | string | null;
+  isActive?: boolean;
+}
+
+/** Payload para upsert de social link. */
+export interface SocialLinkUpsertPayload {
+  championshipId: string;
+  socialNetworkId: DbId;
+  link: string;
+  isActive: boolean;
 }
 
 /**

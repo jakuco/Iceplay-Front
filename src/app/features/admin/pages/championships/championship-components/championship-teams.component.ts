@@ -30,7 +30,9 @@ import {
 import { FormsModule } from '@angular/forms';
 import { KeyValuePipe } from '@angular/common';
 import { MatIconModule } from '@angular/material/icon';
+import { MatButtonModule } from '@angular/material/button';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { finalize } from 'rxjs/operators';
 
 import {
   PlayerModalComponent,
@@ -38,6 +40,7 @@ import {
   PositionOption,
   MOCK_POSITIONS,
 } from './player-modal.component';
+import { ChampionshipService } from '../../../../../core/services/championship.service';
 import { FileUploadComponent } from '../../../../../shared/ui/file-upload/file-upload.component';
 import { PdfViewerComponent } from '../../../../../shared/ui/pdf-viewer/pdf-viewer.component';
 import { TeamImportService, ImportedTeamPayload, ImportedPlayer, FieldError } from '../../../../../core/services/team-import.service';
@@ -50,6 +53,8 @@ export type PlayerStatus = 'active' | 'suspended' | 'injured' | 'inactive';
 
 export interface TeamPlayer {
   id: number;
+  /** UUID del backend — presente cuando el jugador ya existe en la BD. */
+  backendId?: string;
   teamId: number;
   positionId: number;
   firstName: string;
@@ -66,6 +71,8 @@ export interface TeamPlayer {
 
 export interface TeamItem {
   id: number;
+  /** UUID del backend — presente cuando el equipo ya existe en la BD. */
+  backendId?: string;
   championshipId: number;
   name: string;
   shortname: string;
@@ -139,7 +146,7 @@ const PLAYER_STATUS_META: Record<PlayerStatus, { label: string; classes: string 
   active: { label: 'Activo', classes: 'bg-green-50 text-green-700' },
   suspended: { label: 'Suspendido', classes: 'bg-amber-50 text-amber-700' },
   injured: { label: 'Lesionado', classes: 'bg-orange-50 text-orange-700' },
-  inactive: { label: 'Inactivo', classes: 'bg-gray-100 text-gray-500' },
+  inactive: { label: 'Inactivo', classes: 'bg-[var(--mat-sys-surface-container-high)] text-[var(--mat-sys-on-surface-variant)]' },
 };
 
 // CSV template headers (localized)
@@ -153,7 +160,7 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
   selector: 'app-championship-teams',
   changeDetection: ChangeDetectionStrategy.OnPush,
   standalone: true,
-  imports: [FormsModule, MatIconModule, PlayerModalComponent, FileUploadComponent, PdfViewerComponent],
+  imports: [FormsModule, MatIconModule, MatButtonModule, PlayerModalComponent, FileUploadComponent, PdfViewerComponent],
   template: `
 <div class="max-w-[960px] mx-auto px-7 pt-6 pb-8 flex flex-col gap-4">
 
@@ -161,11 +168,11 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
   <div class="flex items-center gap-3 flex-wrap">
 
     <!-- Counter + progress -->
-    <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white
-                border border-gray-200 text-[13px] font-medium text-gray-700 shrink-0">
-      <mat-icon class="size!-4 text-[16px]! text-gray-400">group</mat-icon>
-      <span><strong class="text-gray-900">{{ teams().length }}</strong>/{{ maxTeams() }}</span>
-      <div class="w-16 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+    <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[var(--mat-sys-surface-container)]
+                border border-[var(--mat-sys-outline-variant)] text-[13px] font-medium text-[var(--mat-sys-on-surface)] shrink-0">
+      <mat-icon class="size!-4 text-[16px]! text-[var(--mat-sys-on-surface-variant)]">group</mat-icon>
+      <span><strong class="text-[var(--mat-sys-on-surface)]">{{ teams().length }}</strong>/{{ maxTeams() }}</span>
+      <div class="w-16 h-1.5 bg-[var(--mat-sys-surface-container-high)] rounded-full overflow-hidden">
         <div
           class="h-full rounded-full transition-all duration-300"
           [style.width.%]="progressPct()"
@@ -176,12 +183,12 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
 
     <!-- Search -->
     <div class="relative flex-1 min-w-[180px]">
-      <mat-icon class="absolute left-3 top-1/2 -translate-y-1/2 size!-4 text-[16px]! text-gray-400
+      <mat-icon class="absolute left-3 top-1/2 -translate-y-1/2 size!-4 text-[16px]! text-[var(--mat-sys-on-surface-variant)]
                        pointer-events-none">search</mat-icon>
       <input
-        class="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg bg-white text-[13px]
-               text-gray-900 outline-none focus:border-blue-400 focus:ring-2
-               focus:ring-blue-400/10 transition-all placeholder:text-gray-400"
+        class="w-full pl-9 pr-3 py-2 border border-[var(--mat-sys-outline-variant)] rounded-lg bg-[var(--mat-sys-surface-container)] text-[13px]
+               text-[var(--mat-sys-on-surface)] outline-none focus:border-blue-400 focus:ring-2
+               focus:ring-blue-400/10 transition-all placeholder:text-[var(--mat-sys-on-surface-variant)]"
         [ngModel]="searchQuery()" (ngModelChange)="searchQuery.set($event)"
         placeholder="Buscar equipo..."
       />
@@ -192,9 +199,9 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
       <button
         class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-[13px]
                font-medium cursor-pointer transition-colors border"
-        [style.background]="showImport() ? '#3b82f6' : '#fff'"
-        [style.color]="showImport() ? '#fff' : '#374151'"
-        [style.border-color]="showImport() ? '#3b82f6' : '#d1d5db'"
+        [style.background]="showImport() ? '#3b82f6' : 'var(--mat-sys-surface-container)'"
+        [style.color]="showImport() ? '#fff' : 'var(--mat-sys-on-surface)'"
+        [style.border-color]="showImport() ? '#3b82f6' : 'var(--mat-sys-outline-variant)'"
         (click)="toggleImport()"
         type="button"
       >
@@ -208,15 +215,13 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
 
       <!-- Inscribir -->
       <button
-        class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-blue-500 border-none
-               text-white text-[13px] font-semibold cursor-pointer hover:bg-blue-600
-               transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        matButton="filled"
         [disabled]="isFull()"
         (click)="openCreateTeam()"
         type="button"
         [title]="isFull() ? 'Se alcanzó el límite de equipos' : 'Inscribir nuevo equipo'"
       >
-        <mat-icon class="size!-4 text-[16px]!">add</mat-icon>
+        <mat-icon>add</mat-icon>
         Inscribir
       </button>
     </div>
@@ -224,22 +229,22 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
 
   <!-- ══ IMPORT PANEL ═════════════════════════════════════ -->
   @if (showImport()) {
-    <div class="rounded-xl border border-gray-200 bg-white p-4 flex flex-col gap-3">
+    <div class="rounded-xl border border-[var(--mat-sys-outline-variant)] bg-[var(--mat-sys-surface-container)] p-4 flex flex-col gap-3">
 
       <!-- Info banner -->
-      <div class="flex items-start justify-between gap-4 rounded-lg bg-blue-50
-                  border border-blue-100 px-4 py-3">
+      <div class="flex items-start justify-between gap-4 rounded-lg bg-[var(--mat-sys-surface-container-low)]
+                  border border-[var(--mat-sys-outline-variant)] px-4 py-3">
         <div class="flex items-start gap-3">
-          <mat-icon class="size!-[18px] text-[18px]! text-blue-400 shrink-0 mt-0.5">
+          <mat-icon class="size!-[18px] text-[18px]! text-[var(--mat-sys-primary)] shrink-0 mt-0.5">
             description
           </mat-icon>
           <div>
-            <p class="m-0 text-[13px] text-blue-800 font-semibold">
+            <p class="m-0 text-[13px] text-[var(--mat-sys-on-surface)] font-semibold">
               Importa equipos masivamente desde un archivo
               <span class="font-bold">.csv</span> o
               <span class="font-bold">.xlsx</span>.
             </p>
-            <p class="m-0 mt-0.5 text-[12px] text-blue-600">
+            <p class="m-0 mt-0.5 text-[12px] text-[var(--mat-sys-on-surface-variant)]">
               Columnas reconocidas: nombre, nombre_corto, entrenador, teléfono, ciudad,
               color_primario, color_secundario
             </p>
@@ -249,9 +254,9 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
              cuando el servicio de descarga esté disponible.
              this.teamService.downloadTemplate().subscribe(blob => saveAs(blob, 'plantilla.csv')) -->
         <button
-          class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border
-                 border-blue-200 text-[12.5px] font-medium text-blue-600 cursor-pointer
-                 hover:bg-blue-50 transition-colors shrink-0"
+          class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--mat-sys-surface-container)] border
+                 border-[var(--mat-sys-outline-variant)] text-[12.5px] font-medium text-[var(--mat-sys-primary)] cursor-pointer
+                 hover:bg-[var(--mat-sys-surface-container-high)] transition-colors shrink-0"
           (click)="downloadTemplate()"
           type="button"
         >
@@ -266,8 +271,8 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
                flex flex-col items-center justify-center gap-2 py-10 px-6 text-center"
         [class.border-blue-400]="isDragOver()"
         [class.bg-blue-50]="isDragOver()"
-        [class.border-gray-300]="!isDragOver()"
-        [class.bg-gray-50]="!isDragOver()"
+        [style.border-color]="!isDragOver() ? 'var(--mat-sys-outline)' : ''"
+        [style.background]="!isDragOver() ? 'var(--mat-sys-surface-container-low)' : ''"
         [class.opacity-50]="importState() === 'uploading'"
         [class.pointer-events-none]="importState() === 'uploading'"
         (dragover)="onDragOver($event)"
@@ -283,13 +288,13 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
           class="sr-only"
           (change)="onFilesSelected($event)"
         />
-        <div class="size-12 rounded-full bg-white border border-gray-200 flex items-center
+        <div class="size-12 rounded-full bg-[var(--mat-sys-surface-container)] border border-[var(--mat-sys-outline-variant)] flex items-center
                     justify-center shadow-sm">
-          <mat-icon class="size!-6 text-[24px]! text-gray-400">upload_file</mat-icon>
+          <mat-icon class="size!-6 text-[24px]! text-[var(--mat-sys-on-surface-variant)]">upload_file</mat-icon>
         </div>
         <div>
-          <p class="m-0 text-[14px] font-semibold text-gray-700">Arrastra Excel + imágenes aquí</p>
-          <p class="m-0 mt-1 text-[12px] text-gray-400">
+          <p class="m-0 text-[14px] font-semibold text-[var(--mat-sys-on-surface)]">Arrastra Excel + imágenes aquí</p>
+          <p class="m-0 mt-1 text-[12px] text-[var(--mat-sys-on-surface-variant)]">
             Excel + logo (opcional) + fotos de jugadores (opcional)
           </p>
         </div>
@@ -302,8 +307,8 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
       @if (importQueue().length) {
         <div class="flex flex-col gap-2">
           @for (item of importQueue(); track item.fileName) {
-            <div class="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-gray-50
-                        border border-gray-100 text-[12.5px]">
+            <div class="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-[var(--mat-sys-surface-container-low)]
+                        border border-[var(--mat-sys-outline-variant)] text-[12.5px]">
               <mat-icon class="size!-4 text-[16px]! shrink-0"
                 [class.text-blue-400]="item.status === 'uploading'"
                 [class.text-green-500]="item.status === 'done'"
@@ -314,8 +319,8 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
                    item.status === 'error' ? 'error' :
                    item.status === 'conflict' ? 'warning' : 'hourglass_top' }}
               </mat-icon>
-              <span class="flex-1 truncate text-gray-700">{{ item.fileName }}</span>
-              <span class="text-gray-400 shrink-0">
+              <span class="flex-1 truncate text-[var(--mat-sys-on-surface)]">{{ item.fileName }}</span>
+              <span class="text-[var(--mat-sys-on-surface-variant)] shrink-0">
                 {{ item.status === 'uploading' ? 'Procesando...' :
                    item.status === 'done'      ? item.teamName + ' importado' :
                    item.status === 'conflict'  ? 'Conflicto' : item.error }}
@@ -329,17 +334,17 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
 
   <!-- ══ IMPORT PREVIEW PANEL ═════════════════════════════ -->
   @if (importState() === 'preview') {
-    <div class="rounded-xl border border-blue-200 bg-white p-6 flex flex-col gap-4">
-      
+    <div class="rounded-xl border border-[var(--mat-sys-outline-variant)] bg-[var(--mat-sys-surface-container)] p-6 flex flex-col gap-4">
+
       <!-- Header -->
       <div class="flex items-center justify-between">
         <div>
-          <h3 class="text-[15px] font-bold text-gray-900 m-0">Preview: {{ importedTeams().length }} Equipo(s)</h3>
-          <p class="text-[12px] text-gray-500 m-0 mt-1">{{ importProgressText() }}</p>
+          <h3 class="text-[15px] font-bold text-[var(--mat-sys-on-surface)] m-0">Preview: {{ importedTeams().length }} Equipo(s)</h3>
+          <p class="text-[12px] text-[var(--mat-sys-on-surface-variant)] m-0 mt-1">{{ importProgressText() }}</p>
         </div>
         <button
-          class="size-8 flex items-center justify-center rounded-lg text-gray-400
-                 hover:bg-gray-100 border-none bg-transparent cursor-pointer transition-colors"
+          class="size-8 flex items-center justify-center rounded-lg text-[var(--mat-sys-on-surface-variant)]
+                 hover:bg-[var(--mat-sys-surface-container-high)] border-none bg-transparent cursor-pointer transition-colors"
           (click)="cancelImport()"
           type="button"
         >
@@ -348,16 +353,16 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
       </div>
 
       <!-- Progreso -->
-      <div class="rounded-lg bg-blue-50 border border-blue-100 p-3">
+      <div class="rounded-lg bg-[var(--mat-sys-surface-container-low)] border border-[var(--mat-sys-outline-variant)] p-3">
         <div class="flex items-center justify-between mb-2">
-          <span class="text-[12px] font-medium text-blue-900">
+          <span class="text-[12px] font-medium text-[var(--mat-sys-on-surface)]">
             {{ importProgress().imagesProcessed }}/{{ importProgress().totalImages }} imágenes
           </span>
-          <span class="text-[12px] font-medium text-blue-900">
+          <span class="text-[12px] font-medium text-[var(--mat-sys-on-surface)]">
             {{ importedTeams().length }} Excel(s) procesado(s)
           </span>
         </div>
-        <div class="h-2 bg-blue-200 rounded-full overflow-hidden">
+        <div class="h-2 bg-[var(--mat-sys-surface-container-high)] rounded-full overflow-hidden">
           <div
             class="h-full bg-blue-500 transition-all duration-300"
             [style.width.%]="importProgress().totalImages > 0 
@@ -370,13 +375,13 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
       <!-- Teams preview - Acordeones -->
       <div class="flex flex-col gap-3 max-h-96 overflow-y-auto">
         @for (team of importedTeams(); track team.name; let idx = $index) {
-          <div class="rounded-lg border border-gray-200 overflow-hidden">
+          <div class="rounded-lg border border-[var(--mat-sys-outline-variant)] overflow-hidden">
             <!-- Header del acordeón -->
-            <div class="bg-gray-50 p-3 flex items-center justify-between cursor-pointer hover:bg-gray-100"
+            <div class="bg-[var(--mat-sys-surface-container-low)] p-3 flex items-center justify-between cursor-pointer hover:bg-[var(--mat-sys-surface-container-high)]"
                  (click)="toggleTeamExpand(idx)">
               <div class="flex items-center gap-2 flex-1">
-                <span class="text-[13px] font-semibold text-gray-900">{{ team.name }} ({{ team.shortname }})</span>
-                <span class="text-[11px] text-gray-500">{{ team.players.length }} jugadores</span>
+                <span class="text-[13px] font-semibold text-[var(--mat-sys-on-surface)]">{{ team.name }} ({{ team.shortname }})</span>
+                <span class="text-[11px] text-[var(--mat-sys-on-surface-variant)]">{{ team.players.length }} jugadores</span>
                 @if (team.logoFile) {
                   <span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-green-100 text-green-700 text-[10px] font-medium">
                     <mat-icon class="size!-3 text-[12px]!">check</mat-icon> Logo
@@ -398,7 +403,7 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
                   <mat-icon class="size!-3 text-[12px]!">delete</mat-icon>
                   Quitar
                 </button>
-                <mat-icon class="size!-5 text-[20px]! text-gray-600 transition-transform"
+                <mat-icon class="size!-5 text-[20px]! text-[var(--mat-sys-on-surface-variant)] transition-transform"
                           [style.transform]="expandedTeams().has(idx) ? 'rotate(180deg)' : 'rotate(0)'">
                   expand_more
                 </mat-icon>
@@ -407,7 +412,7 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
 
             <!-- Contenido del acordeón -->
             @if (expandedTeams().has(idx)) {
-              <div class="p-4 border-t border-gray-200 bg-white">
+              <div class="p-4 border-t border-[var(--mat-sys-outline-variant)] bg-[var(--mat-sys-surface-container)]">
                 <!-- Logo + Datos -->
                 <div class="flex gap-3 mb-4">
                   <div class="size-24 rounded-lg flex items-center justify-center text-white font-bold
@@ -422,7 +427,7 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
                   <div class="flex-1">
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
                       <input
-                        class="px-2 py-1.5 text-[12px] border border-gray-300 rounded-md"
+                        class="px-2 py-1.5 text-[12px] border border-[var(--mat-sys-outline-variant)] rounded-md bg-[var(--mat-sys-surface-container)]"
                         [class.border-red-400]="hasImportedTeamFieldError(team, 'name')"
                         [class.bg-red-50]="hasImportedTeamFieldError(team, 'name')"
                         placeholder="Nombre equipo"
@@ -430,7 +435,7 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
                         (ngModelChange)="onImportedTeamFieldChange(idx, 'name', $event)"
                       />
                       <input
-                        class="px-2 py-1.5 text-[12px] border border-gray-300 rounded-md"
+                        class="px-2 py-1.5 text-[12px] border border-[var(--mat-sys-outline-variant)] rounded-md bg-[var(--mat-sys-surface-container)]"
                         [class.border-red-400]="hasImportedTeamFieldError(team, 'shortname')"
                         [class.bg-red-50]="hasImportedTeamFieldError(team, 'shortname')"
                         placeholder="Nombre corto"
@@ -438,7 +443,7 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
                         (ngModelChange)="onImportedTeamFieldChange(idx, 'shortname', $event)"
                       />
                       <input
-                        class="px-2 py-1.5 text-[12px] border border-gray-300 rounded-md"
+                        class="px-2 py-1.5 text-[12px] border border-[var(--mat-sys-outline-variant)] rounded-md bg-[var(--mat-sys-surface-container)]"
                         [class.border-red-400]="hasImportedTeamFieldError(team, 'coachName')"
                         [class.bg-red-50]="hasImportedTeamFieldError(team, 'coachName')"
                         placeholder="Entrenador"
@@ -446,14 +451,14 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
                         (ngModelChange)="onImportedTeamFieldChange(idx, 'coachName', $event)"
                       />
                       <input
-                        class="px-2 py-1.5 text-[12px] border border-gray-300 rounded-md"
+                        class="px-2 py-1.5 text-[12px] border border-[var(--mat-sys-outline-variant)] rounded-md bg-[var(--mat-sys-surface-container)]"
                         placeholder="Teléfono"
                         [ngModel]="team.coachPhone || ''"
                         (ngModelChange)="onImportedTeamFieldChange(idx, 'coachPhone', $event)"
                       />
                     </div>
                     <input
-                      class="mt-2 w-full px-2 py-1.5 text-[12px] border border-gray-300 rounded-md"
+                      class="mt-2 w-full px-2 py-1.5 text-[12px] border border-[var(--mat-sys-outline-variant)] rounded-md bg-[var(--mat-sys-surface-container)]"
                       placeholder="Ciudad / ubicación"
                       [ngModel]="team.location || ''"
                       (ngModelChange)="onImportedTeamFieldChange(idx, 'location', $event)"
@@ -462,7 +467,7 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
                       <div class="flex items-center gap-1">
                         <div class="size-3 rounded" [style.background]="team.primaryColor"></div>
                         <input
-                          class="w-24 px-1.5 py-1 text-[10px] border border-gray-300 rounded"
+                          class="w-24 px-1.5 py-1 text-[10px] border border-[var(--mat-sys-outline-variant)] rounded bg-[var(--mat-sys-surface-container)]"
                           [ngModel]="team.primaryColor"
                           (ngModelChange)="onImportedTeamFieldChange(idx, 'primaryColor', $event)"
                         />
@@ -470,7 +475,7 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
                       <div class="flex items-center gap-1">
                         <div class="size-3 rounded" [style.background]="team.secondaryColor"></div>
                         <input
-                          class="w-24 px-1.5 py-1 text-[10px] border border-gray-300 rounded"
+                          class="w-24 px-1.5 py-1 text-[10px] border border-[var(--mat-sys-outline-variant)] rounded bg-[var(--mat-sys-surface-container)]"
                           [ngModel]="team.secondaryColor"
                           (ngModelChange)="onImportedTeamFieldChange(idx, 'secondaryColor', $event)"
                         />
@@ -480,16 +485,16 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
                 </div>
 
                 <!-- Tabla de jugadores + fotos -->
-                <div class="border-t border-gray-100 pt-3">
-                  <p class="text-[12px] font-semibold text-gray-900 m-0 mb-2">Jugadores ({{ team.players.length }})</p>
+                <div class="border-t border-[var(--mat-sys-outline-variant)] pt-3">
+                  <p class="text-[12px] font-semibold text-[var(--mat-sys-on-surface)] m-0 mb-2">Jugadores ({{ team.players.length }})</p>
                   <div class="max-h-56 overflow-y-auto pr-1">
                     <table class="w-full text-[11px]">
                       <tbody>
                         @for (player of team.players; track $index) {
-                          <tr class="border-b border-gray-100 last:border-b-0">
+                          <tr class="border-b border-[var(--mat-sys-outline-variant)] last:border-b-0">
                             <td class="px-2 py-1.5 font-medium w-16">
                               <input
-                                class="w-full px-1 py-1 text-[11px] border border-gray-300 rounded"
+                                class="w-full px-1 py-1 text-[11px] border border-[var(--mat-sys-outline-variant)] rounded bg-[var(--mat-sys-surface-container)]"
                                 [class.border-red-400]="hasImportedPlayerFieldError(player, 'number')"
                                 [class.bg-red-50]="hasImportedPlayerFieldError(player, 'number')"
                                 [ngModel]="player.number"
@@ -499,14 +504,14 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
                             <td class="px-2 py-1.5">
                               <div class="grid grid-cols-2 gap-1">
                                 <input
-                                  class="w-full px-1 py-1 text-[11px] border border-gray-300 rounded"
+                                  class="w-full px-1 py-1 text-[11px] border border-[var(--mat-sys-outline-variant)] rounded bg-[var(--mat-sys-surface-container)]"
                                   [class.border-red-400]="hasImportedPlayerFieldError(player, 'firstName')"
                                   [class.bg-red-50]="hasImportedPlayerFieldError(player, 'firstName')"
                                   [ngModel]="player.firstName"
                                   (ngModelChange)="onImportedPlayerFieldChange(idx, $index, 'firstName', $event)"
                                 />
                                 <input
-                                  class="w-full px-1 py-1 text-[11px] border border-gray-300 rounded"
+                                  class="w-full px-1 py-1 text-[11px] border border-[var(--mat-sys-outline-variant)] rounded bg-[var(--mat-sys-surface-container)]"
                                   [class.border-red-400]="hasImportedPlayerFieldError(player, 'lastName')"
                                   [class.bg-red-50]="hasImportedPlayerFieldError(player, 'lastName')"
                                   [ngModel]="player.lastName"
@@ -516,7 +521,7 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
                             </td>
                             <td class="px-2 py-1.5 w-24">
                               <input
-                                class="w-full px-1 py-1 text-[11px] border border-gray-300 rounded uppercase"
+                                class="w-full px-1 py-1 text-[11px] border border-[var(--mat-sys-outline-variant)] rounded bg-[var(--mat-sys-surface-container)] uppercase"
                                 [class.border-red-400]="hasImportedPlayerFieldError(player, 'position')"
                                 [class.bg-red-50]="hasImportedPlayerFieldError(player, 'position')"
                                 [ngModel]="player.position"
@@ -529,7 +534,7 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
                                   <mat-icon class="size!-3 text-[12px]!">check</mat-icon> Foto ✓
                                 </span>
                               } @else {
-                                <span class="text-gray-400">—</span>
+                                <span class="text-[var(--mat-sys-on-surface-variant)]">—</span>
                               }
                             </td>
                           </tr>
@@ -597,25 +602,16 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
       }
 
       <!-- Botones de acción -->
-      <div class="flex justify-end gap-3 pt-2 border-t border-gray-100">
+      <div class="flex justify-end gap-3 pt-2 border-t border-[var(--mat-sys-outline-variant)]">
+        <button matButton (click)="cancelImport()" type="button">Cancelar</button>
         <button
-          class="px-4 py-2 rounded-lg bg-white border border-gray-300 text-[13px]
-                 font-medium text-gray-600 cursor-pointer hover:bg-gray-50 transition-colors"
-          (click)="cancelImport()"
-          type="button"
-        >
-          Cancelar
-        </button>
-        <button
-          class="px-4 py-2 rounded-lg bg-blue-500 border-none text-white text-[13px]
-                 font-semibold cursor-pointer hover:bg-blue-600 transition-colors
-                 disabled:opacity-50 disabled:cursor-not-allowed"
+          matButton="filled"
           [disabled]="!canConfirmImport()"
           (click)="confirmImportedTeam()"
           type="button"
           [title]="canConfirmImport() ? 'Importar todos los equipos' : importBlockReason()"
         >
-          <mat-icon class="size!-4 text-[16px]! inline mr-1.5">check_circle</mat-icon>
+          <mat-icon>check_circle</mat-icon>
           Importar {{ importedTeams().length }} Equipo(s)
         </button>
       </div>
@@ -623,24 +619,17 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
   }
 
   <!-- ══ TEAMS LIST ════════════════════════════════════════ -->
-  <div class="rounded-xl border border-gray-200 bg-white overflow-hidden">
+  <div class="rounded-xl border border-[var(--mat-sys-outline-variant)] bg-[var(--mat-sys-surface-container)] overflow-hidden">
 
     @if (filteredTeams().length === 0) {
-      <div class="flex flex-col items-center gap-3 py-12 text-center text-gray-500">
-        <mat-icon class="size!-10 text-[40px]! text-gray-300">group_off</mat-icon>
+      <div class="flex flex-col items-center gap-3 py-12 text-center text-[var(--mat-sys-on-surface-variant)]">
+        <mat-icon class="size!-10 text-[40px]! text-[var(--mat-sys-outline)]">group_off</mat-icon>
         @if (searchQuery()) {
           <p class="m-0 text-[14px]">Sin resultados para "<strong>{{ searchQuery() }}</strong>"</p>
         } @else {
           <p class="m-0 text-[14px]">No hay equipos inscritos aún.</p>
-          <button
-            class="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-blue-500
-                   text-white text-[13px] font-semibold border-none cursor-pointer
-                   hover:bg-blue-600 disabled:opacity-40 disabled:cursor-not-allowed"
-            [disabled]="isFull()"
-            (click)="openCreateTeam()"
-            type="button"
-          >
-            <mat-icon class="size!-4 text-[16px]!">add</mat-icon> Inscribir primer equipo
+          <button matButton="filled" [disabled]="isFull()" (click)="openCreateTeam()" type="button">
+            <mat-icon>add</mat-icon> Inscribir primer equipo
           </button>
         }
       </div>
@@ -648,12 +637,12 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
 
     @for (team of filteredTeams(); track team.id; let last = $last) {
       <!-- Team row -->
-      <div [class.border-b]="!last" class="border-gray-100">
+      <div [class.border-b]="!last" class="border-[var(--mat-sys-outline-variant)]">
 
         <!-- ── Team header (clickeable → expand) ── -->
         <div
           class="flex items-center gap-3 px-4 py-3.5 cursor-pointer select-none
-                 hover:bg-gray-50 transition-colors"
+                 hover:bg-[var(--mat-sys-surface-container-low)] transition-colors"
           (click)="toggleTeam(team.id)"
         >
           <!-- Logo placeholder -->
@@ -672,13 +661,13 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
           <!-- Info -->
           <div class="flex-1 min-w-0">
             <div class="flex items-center gap-2">
-              <span class="text-[14px] font-semibold text-gray-900 truncate">{{ team.name }}</span>
+              <span class="text-[14px] font-semibold text-[var(--mat-sys-on-surface)] truncate">{{ team.name }}</span>
               @if (!team.isActive) {
                 <span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full
-                             bg-gray-100 text-gray-500">INACTIVO</span>
+                             bg-[var(--mat-sys-surface-container-high)] text-[var(--mat-sys-on-surface-variant)]">INACTIVO</span>
               }
             </div>
-            <p class="m-0 text-[12px] text-gray-400 truncate">
+            <p class="m-0 text-[12px] text-[var(--mat-sys-on-surface-variant)] truncate">
               {{ team.players.length }} jugadores · {{ team.coachName || '—' }} · {{ team.location || '—' }}
             </p>
           </div>
@@ -691,14 +680,14 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
               [class.bg-green-50]="team.isActive"
               [class.text-green-700]="team.isActive"
               [class.border-green-200]="team.isActive"
-              [class.bg-gray-50]="!team.isActive"
-              [class.text-gray-500]="!team.isActive"
-              [class.border-gray-200]="!team.isActive"
+              [style.background]="!team.isActive ? 'var(--mat-sys-surface-container-high)' : ''"
+              [style.color]="!team.isActive ? 'var(--mat-sys-on-surface-variant)' : ''"
+              [style.border-color]="!team.isActive ? 'var(--mat-sys-outline-variant)' : ''"
             >
               <span
                 class="size-1.5 rounded-full"
                 [class.bg-green-500]="team.isActive"
-                [class.bg-gray-400]="!team.isActive"
+                [style.background]="!team.isActive ? 'var(--mat-sys-outline)' : ''"
               ></span>
               {{ team.isActive ? 'Activo' : 'Inactivo' }}
             </span>
@@ -719,9 +708,10 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
 
             <button
               class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-[12.5px]
-                     font-medium text-gray-600 bg-transparent border border-gray-200
-                     cursor-pointer hover:bg-gray-100 transition-colors"
+                     font-medium text-[var(--mat-sys-on-surface-variant)] bg-transparent border border-[var(--mat-sys-outline-variant)]
+                     cursor-pointer hover:bg-[var(--mat-sys-surface-container-high)] transition-colors"
               (click)="openEditTeam(team, $event)"
+              [disabled]="pendingTeamDeletes().has(team.id)"
               type="button"
             >
               <mat-icon class="size!-[14px] text-[14px]!">edit</mat-icon>
@@ -733,6 +723,7 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
                      bg-red-50 text-red-400 cursor-pointer hover:bg-red-100 hover:text-red-600
                      transition-colors"
               (click)="removeTeam(team.id, $event)"
+              [disabled]="pendingTeamDeletes().has(team.id)"
               type="button"
               title="Retirar equipo"
             >
@@ -741,7 +732,7 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
 
             <!-- Chevron -->
             <mat-icon
-              class="size!-4 text-[16px]! text-gray-400 transition-transform duration-200 ml-1"
+              class="size!-4 text-[16px]! text-[var(--mat-sys-on-surface-variant)] transition-transform duration-200 ml-1"
               [style.transform]="expandedTeams().has(team.id) || playerMatchedTeamIds().has(team.id) ? 'rotate(180deg)' : 'rotate(0)'"
             >expand_more</mat-icon>
           </div>
@@ -749,23 +740,23 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
 
         <!-- ── Players expand panel ── -->
         @if (expandedTeams().has(team.id) || playerMatchedTeamIds().has(team.id)) {
-          <div class="border-t border-gray-100 bg-gray-50">
+          <div class="border-t border-[var(--mat-sys-outline-variant)] bg-[var(--mat-sys-surface-container-low)]">
 
             <!-- Players table -->
             @if (team.players.length > 0) {
               <table class="w-full text-left border-collapse">
                 <thead>
-                  <tr class="border-b border-gray-200">
-                    <th class="px-4 py-2 text-[10px] font-bold uppercase tracking-wide text-gray-400 w-12">#</th>
-                    <th class="px-4 py-2 text-[10px] font-bold uppercase tracking-wide text-gray-400">Jugador</th>
-                    <th class="px-4 py-2 text-[10px] font-bold uppercase tracking-wide text-gray-400">Posición</th>
-                    <th class="px-4 py-2 text-[10px] font-bold uppercase tracking-wide text-gray-400">Estado</th>
+                  <tr class="border-b border-[var(--mat-sys-outline-variant)]">
+                    <th class="px-4 py-2 text-[10px] font-bold uppercase tracking-wide text-[var(--mat-sys-on-surface-variant)] w-12">#</th>
+                    <th class="px-4 py-2 text-[10px] font-bold uppercase tracking-wide text-[var(--mat-sys-on-surface-variant)]">Jugador</th>
+                    <th class="px-4 py-2 text-[10px] font-bold uppercase tracking-wide text-[var(--mat-sys-on-surface-variant)]">Posición</th>
+                    <th class="px-4 py-2 text-[10px] font-bold uppercase tracking-wide text-[var(--mat-sys-on-surface-variant)]">Estado</th>
                     <th class="px-4 py-2 w-8"></th>
                   </tr>
                 </thead>
                 <tbody>
                   @for (player of team.players; track player.id) {
-                    <tr class="border-b border-gray-100 hover:bg-white transition-colors group">
+                    <tr class="border-b border-[var(--mat-sys-outline-variant)] hover:bg-[var(--mat-sys-surface-container)] transition-colors group">
                       <td class="px-4 py-2.5">
                         <span class="inline-flex size-7 items-center justify-center rounded-full
                                      text-[12px] font-bold text-white shrink-0"
@@ -788,15 +779,15 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
                               </span>
                             }
                           </div>
-                          <span class="text-[13.5px] font-semibold text-gray-900">
+                          <span class="text-[13.5px] font-semibold text-[var(--mat-sys-on-surface)]">
                             {{ player.firstName }} {{ player.lastName }}
                           </span>
                           @if (player.nickName) {
-                            <span class="text-[11px] text-gray-400">"{{ player.nickName }}"</span>
+                            <span class="text-[11px] text-[var(--mat-sys-on-surface-variant)]">"{{ player.nickName }}"</span>
                           }
                         </div>
                       </td>
-                      <td class="px-4 py-2.5 text-[13px] text-gray-600">
+                      <td class="px-4 py-2.5 text-[13px] text-[var(--mat-sys-on-surface-variant)]">
                         {{ positionLabel(player.positionId) }}
                       </td>
                       <td class="px-4 py-2.5">
@@ -807,9 +798,9 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
                       </td>
                       <td class="px-4 py-2.5">
                         <button
-                          class="size-6 flex items-center justify-center rounded text-gray-400
-                                 bg-transparent border-none cursor-pointer hover:bg-gray-200
-                                 hover:text-gray-600 transition-colors opacity-0 group-hover:opacity-100"
+                          class="size-6 flex items-center justify-center rounded text-[var(--mat-sys-on-surface-variant)]
+                                 bg-transparent border-none cursor-pointer hover:bg-[var(--mat-sys-surface-container-high)]
+                                 hover:text-[var(--mat-sys-on-surface)] transition-colors opacity-0 group-hover:opacity-100"
                           (click)="openEditPlayer(team, player)"
                           type="button"
                           title="Editar jugador"
@@ -822,14 +813,14 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
                 </tbody>
               </table>
             } @else {
-              <div class="flex flex-col items-center gap-2 py-6 text-center text-gray-400">
-                <mat-icon class="size!-8 text-[32px]! text-gray-300">person_off</mat-icon>
+              <div class="flex flex-col items-center gap-2 py-6 text-center text-[var(--mat-sys-on-surface-variant)]">
+                <mat-icon class="size!-8 text-[32px]! text-[var(--mat-sys-outline)]">person_off</mat-icon>
                 <p class="m-0 text-[13px]">Sin jugadores inscritos</p>
               </div>
             }
 
             <!-- Add player button -->
-            <div class="px-4 py-3 border-t border-gray-100 flex items-center gap-3">
+            <div class="px-4 py-3 border-t border-[var(--mat-sys-outline-variant)] flex items-center gap-3">
               <button
                 class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12.5px]
                        font-medium border transition-colors"
@@ -838,9 +829,9 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
                 [class.border-blue-100]="team.players.length < maxPlayersPerTeam()"
                 [class.hover:bg-blue-100]="team.players.length < maxPlayersPerTeam()"
                 [class.cursor-pointer]="team.players.length < maxPlayersPerTeam()"
-                [class.text-gray-400]="team.players.length >= maxPlayersPerTeam()"
-                [class.bg-gray-50]="team.players.length >= maxPlayersPerTeam()"
-                [class.border-gray-200]="team.players.length >= maxPlayersPerTeam()"
+                [style.color]="team.players.length >= maxPlayersPerTeam() ? 'var(--mat-sys-on-surface-variant)' : ''"
+                [style.background]="team.players.length >= maxPlayersPerTeam() ? 'var(--mat-sys-surface-container-high)' : ''"
+                [style.border-color]="team.players.length >= maxPlayersPerTeam() ? 'var(--mat-sys-outline-variant)' : ''"
                 [class.cursor-not-allowed]="team.players.length >= maxPlayersPerTeam()"
                 [class.opacity-60]="team.players.length >= maxPlayersPerTeam()"
                 (click)="openCreatePlayer(team)"
@@ -858,7 +849,7 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
                   Límite de {{ maxPlayersPerTeam() }} jugadores alcanzado
                 </span>
               } @else {
-                <span class="text-[11.5px] text-gray-400">
+                <span class="text-[11.5px] text-[var(--mat-sys-on-surface-variant)]">
                   {{ team.players.length }}/{{ maxPlayersPerTeam() }} jugadores
                 </span>
               }
@@ -867,20 +858,6 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
         }
       </div>
     }
-  </div>
-
-  <!-- ══ FOOTER ════════════════════════════════════════════ -->
-  <div class="flex justify-end pt-3 border-t border-gray-200">
-    <button
-      class="inline-flex items-center gap-1.5 px-[18px] py-2 rounded-lg bg-blue-500
-             text-white text-[13px] font-semibold border-none cursor-pointer
-             hover:bg-blue-600 transition-colors"
-      (click)="save.emit(teams())"
-      type="button"
-    >
-      <mat-icon class="size!-4 text-[16px]!">save</mat-icon>
-      Guardar todos los cambios
-    </button>
   </div>
 
 </div>
@@ -893,17 +870,17 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
     (click)="closeTeamModal()"
   >
     <div
-      class="h-full w-full max-w-[440px] bg-white flex flex-col shadow-2xl"
+      class="h-full w-full max-w-[440px] bg-[var(--mat-sys-surface-container)] flex flex-col shadow-2xl"
       (click)="$event.stopPropagation()"
     >
       <!-- Header -->
-      <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-        <h2 class="text-[16px] font-bold text-gray-900 m-0">
+      <div class="flex items-center justify-between px-6 py-4 border-b border-[var(--mat-sys-outline-variant)]">
+        <h2 class="text-[16px] font-bold text-[var(--mat-sys-on-surface)] m-0">
           {{ teamModal()!.id ? 'Editar Equipo' : 'Inscribir Equipo' }}
         </h2>
         <button
-          class="size-8 flex items-center justify-center rounded-lg text-gray-400
-                 hover:bg-gray-100 border-none bg-transparent cursor-pointer transition-colors"
+          class="size-8 flex items-center justify-center rounded-lg text-[var(--mat-sys-on-surface-variant)]
+                 hover:bg-[var(--mat-sys-surface-container-high)] border-none bg-transparent cursor-pointer transition-colors"
           (click)="closeTeamModal()" type="button"
         >
           <mat-icon class="size!-[18px] text-[18px]!">close</mat-icon>
@@ -934,21 +911,21 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
           <input #logoFileInput type="file" accept="image/*" class="sr-only"
                  (change)="onTeamLogoSelected($event)" />
           <div>
-            <p class="m-0 text-[13px] font-medium text-gray-700">Logo del equipo</p>
-            <p class="m-0 mt-0.5 text-[11.5px] text-gray-400">Haz clic en la imagen para cambiarla</p>
+            <p class="m-0 text-[13px] font-medium text-[var(--mat-sys-on-surface)]">Logo del equipo</p>
+            <p class="m-0 mt-0.5 text-[11.5px] text-[var(--mat-sys-on-surface-variant)]">Haz clic en la imagen para cambiarla</p>
           </div>
         </div>
 
         <!-- Nombre + Nombre corto -->
         <div class="grid grid-cols-2 gap-3">
           <div class="flex flex-col gap-1.5">
-            <label class="text-[12px] font-semibold text-gray-600 uppercase tracking-wide">
+            <label class="text-[12px] font-semibold text-[var(--mat-sys-on-surface-variant)] uppercase tracking-wide">
               Nombre <span class="text-red-400">*</span>
             </label>
             <input class="team-input" [(ngModel)]="teamModal()!.name" placeholder="Ej: Osos Polares" />
           </div>
           <div class="flex flex-col gap-1.5">
-            <label class="text-[12px] font-semibold text-gray-600 uppercase tracking-wide">
+            <label class="text-[12px] font-semibold text-[var(--mat-sys-on-surface-variant)] uppercase tracking-wide">
               Nombre corto
             </label>
             <input class="team-input" [(ngModel)]="teamModal()!.shortname"
@@ -959,13 +936,13 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
         <!-- Coach + Teléfono -->
         <div class="grid grid-cols-2 gap-3">
           <div class="flex flex-col gap-1.5">
-            <label class="text-[12px] font-semibold text-gray-600 uppercase tracking-wide">
+            <label class="text-[12px] font-semibold text-[var(--mat-sys-on-surface-variant)] uppercase tracking-wide">
               Entrenador
             </label>
             <input class="team-input" [(ngModel)]="teamModal()!.coachName" placeholder="Nombre del coach" />
           </div>
           <div class="flex flex-col gap-1.5">
-            <label class="text-[12px] font-semibold text-gray-600 uppercase tracking-wide">
+            <label class="text-[12px] font-semibold text-[var(--mat-sys-on-surface-variant)] uppercase tracking-wide">
               Teléfono coach
             </label>
             <input class="team-input" [(ngModel)]="teamModal()!.coachPhone" placeholder="+57 300..." />
@@ -975,15 +952,15 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
         <!-- Ciudad + Año fundación -->
         <div class="grid grid-cols-2 gap-3">
           <div class="flex flex-col gap-1.5">
-            <label class="text-[12px] font-semibold text-gray-600 uppercase tracking-wide">
+            <label class="text-[12px] font-semibold text-[var(--mat-sys-on-surface-variant)] uppercase tracking-wide">
               Ciudad
             </label>
             <input class="team-input" [(ngModel)]="teamModal()!.location" placeholder="Ej: Bogotá" />
           </div>
           <div class="flex flex-col gap-1.5">
-            <label class="text-[12px] font-semibold text-gray-600 uppercase tracking-wide">
+            <label class="text-[12px] font-semibold text-[var(--mat-sys-on-surface-variant)] uppercase tracking-wide">
               Año de fundación
-              <span class="ml-1 normal-case text-[10px] font-normal text-gray-300">(opcional)</span>
+              <span class="ml-1 normal-case text-[10px] font-normal text-[var(--mat-sys-on-surface-variant)]">(opcional)</span>
             </label>
             <input class="team-input" type="number" min="1800" max="2100"
                    [(ngModel)]="teamModal()!.foundedYear" placeholder="Ej: 1995" />
@@ -992,9 +969,9 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
 
         <!-- Estadio / Sede -->
         <div class="flex flex-col gap-1.5">
-          <label class="text-[12px] font-semibold text-gray-600 uppercase tracking-wide">
+          <label class="text-[12px] font-semibold text-[var(--mat-sys-on-surface-variant)] uppercase tracking-wide">
             Estadio / Sede
-            <span class="ml-1 normal-case text-[10px] font-normal text-gray-300">(opcional)</span>
+            <span class="ml-1 normal-case text-[10px] font-normal text-[var(--mat-sys-on-surface-variant)]">(opcional)</span>
           </label>
           <input class="team-input" [(ngModel)]="teamModal()!.homeVenue"
                  placeholder="Ej: Estadio El Campín" />
@@ -1002,25 +979,25 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
 
         <!-- Colores -->
         <div>
-          <label class="text-[12px] font-semibold text-gray-600 uppercase tracking-wide block mb-2">
+          <label class="text-[12px] font-semibold text-[var(--mat-sys-on-surface-variant)] uppercase tracking-wide block mb-2">
             Colores del equipo
           </label>
           <div class="flex items-center gap-4">
             <div class="flex flex-col items-center gap-1.5">
               <input
                 type="color"
-                class="w-12 h-10 rounded-lg border border-gray-200 cursor-pointer p-0.5 bg-white"
+                class="w-12 h-10 rounded-lg border border-[var(--mat-sys-outline-variant)] cursor-pointer p-0.5 bg-[var(--mat-sys-surface-container)]"
                 [(ngModel)]="teamModal()!.primaryColor"
               />
-              <span class="text-[10px] text-gray-400">Principal</span>
+              <span class="text-[10px] text-[var(--mat-sys-on-surface-variant)]">Principal</span>
             </div>
             <div class="flex flex-col items-center gap-1.5">
               <input
                 type="color"
-                class="w-12 h-10 rounded-lg border border-gray-200 cursor-pointer p-0.5 bg-white"
+                class="w-12 h-10 rounded-lg border border-[var(--mat-sys-outline-variant)] cursor-pointer p-0.5 bg-[var(--mat-sys-surface-container)]"
                 [(ngModel)]="teamModal()!.secondaryColor"
               />
-              <span class="text-[10px] text-gray-400">Secundario</span>
+              <span class="text-[10px] text-[var(--mat-sys-on-surface-variant)]">Secundario</span>
             </div>
             <!-- Preview -->
             <div class="flex-1 h-10 rounded-lg overflow-hidden flex">
@@ -1032,7 +1009,7 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
 
         <!-- Documento del equipo -->
         <div class="flex flex-col gap-1.5">
-          <label class="text-[12px] font-semibold text-gray-600 uppercase tracking-wide">
+          <label class="text-[12px] font-semibold text-[var(--mat-sys-on-surface-variant)] uppercase tracking-wide">
             Documento del equipo
           </label>
           <app-file-upload
@@ -1054,17 +1031,11 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
       </div>
 
       <!-- Footer -->
-      <div class="flex items-center justify-end gap-2.5 px-6 py-4 border-t border-gray-100 bg-gray-50">
-        <button class="btn-ghost-sm" (click)="closeTeamModal()" type="button">Cancelar</button>
-        <button
-          class="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-blue-500 text-white
-                 text-[13px] font-semibold border-none cursor-pointer hover:bg-blue-600
-                 transition-colors"
-          (click)="submitTeamModal()"
-          type="button"
-        >
-          <mat-icon class="size!-4 text-[16px]!">save</mat-icon>
-          {{ teamModal()!.id ? 'Guardar cambios' : 'Inscribir equipo' }}
+      <div class="flex items-center justify-end gap-2.5 px-6 py-4 border-t border-[var(--mat-sys-outline-variant)] bg-[var(--mat-sys-surface-container-low)]">
+        <button matButton (click)="closeTeamModal()" type="button">Cancelar</button>
+        <button matButton="filled" [disabled]="isSavingTeam()" (click)="submitTeamModal()" type="button">
+          <mat-icon>save</mat-icon>
+          {{ isSavingTeam() ? 'Guardando...' : (teamModal()!.id ? 'Guardar cambios' : 'Inscribir equipo') }}
         </button>
       </div>
     </div>
@@ -1096,28 +1067,29 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
     :host { display: block; }
     .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); }
     .team-input {
-      padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 8px;
-      font-size: 14px; color: #111827; background: #fff; font-family: inherit;
+      padding: 8px 12px; border: 1px solid var(--mat-sys-outline-variant); border-radius: 8px;
+      font-size: 14px; color: var(--mat-sys-on-surface); background: var(--mat-sys-surface-container); font-family: inherit;
       outline: none; transition: border-color .15s; width: 100%; box-sizing: border-box;
     }
     .team-input:focus { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,0.1); }
     .btn-ghost-sm {
-      padding: 8px 16px; border-radius: 8px; background: #fff; color: #374151;
-      font-size: 13px; font-weight: 500; border: 1px solid #d1d5db; cursor: pointer;
+      padding: 8px 16px; border-radius: 8px; background: var(--mat-sys-surface-container); color: var(--mat-sys-on-surface);
+      font-size: 13px; font-weight: 500; border: 1px solid var(--mat-sys-outline-variant); cursor: pointer;
       transition: background .15s;
     }
-    .btn-ghost-sm:hover { background: #f9fafb; }
+    .btn-ghost-sm:hover { background: var(--mat-sys-surface-container-high); }
   `,
 })
 export class ChampionshipTeamsComponent {
 
   // ── Inputs / Outputs ──────────────────────────────────────────
+  readonly championshipId = input<string | null>(null);
   readonly maxTeams = input(16);
   readonly maxPlayersPerTeam = input(20);
   readonly initialTeams = input<TeamItem[]>([]);
   readonly positions = MOCK_POSITIONS;
 
-  readonly save = output<TeamItem[]>();
+  readonly teamsChange = output<TeamItem[]>();
   /** Emite cuando hay cambios locales sin guardar (jugador/equipo añadido, editado o eliminado). */
   readonly dirty = output<void>();
 
@@ -1125,12 +1097,14 @@ export class ChampionshipTeamsComponent {
   private snackBar = inject(MatSnackBar);
   private cdr = inject(ChangeDetectorRef);
   private teamImportService = inject(TeamImportService);
+  private championshipSvc = inject(ChampionshipService);
 
   // ── State ─────────────────────────────────────────────────────
   teams = signal<TeamItem[]>([]);
 
   constructor() {
     effect(() => {
+      console.log('Initializing teams:', this.initialTeams());
       this.teams.set(this.initialTeams().map(t => ({ ...t, players: [...t.players] })));
     });
     this.destroyRef.onDestroy(() => {
@@ -1158,6 +1132,9 @@ export class ChampionshipTeamsComponent {
   teamModalError = signal('');
   playerModal = signal<{ player: PlayerFormData | null; teamId: number } | null>(null);
   pdfViewerData = signal<{ url: string; title: string } | null>(null);
+  isSavingTeam = signal(false);
+  pendingTeamDeletes = signal<Set<number>>(new Set());
+  pendingPlayerOps = signal<Set<number>>(new Set());
 
   private destroyRef = inject(DestroyRef);
   private blobUrls: string[] = [];
@@ -1180,6 +1157,73 @@ export class ChampionshipTeamsComponent {
     return this.normalize(name)
       .trim()
       .replace(/\s+/g, ' ');
+  }
+
+  private emitTeamsChange(): void {
+    this.teamsChange.emit(this.teams());
+  }
+
+  private toSlug(name: string): string {
+    return name.toLowerCase().normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+  }
+
+  private markTeamDeletePending(teamId: number, pending: boolean): void {
+    this.pendingTeamDeletes.update((set) => {
+      const next = new Set(set);
+      if (pending) next.add(teamId);
+      else next.delete(teamId);
+      return next;
+    });
+  }
+
+  private markPlayerPending(playerId: number, pending: boolean): void {
+    this.pendingPlayerOps.update((set) => {
+      const next = new Set(set);
+      if (pending) next.add(playerId);
+      else next.delete(playerId);
+      return next;
+    });
+  }
+
+  private mapProfileToTeamItem(profile: {
+    id: string | number;
+    championshipId: string | number;
+    name: string;
+    shortname?: string | null;
+    slug: string;
+    logoUrl?: string | null;
+    documentUrl?: string | null;
+    primaryColor?: string | null;
+    secondaryColor?: string | null;
+    location?: string | null;
+    foundedYear?: number | null;
+    homeVenue?: string | number | null;
+    coachName?: string | null;
+    coachPhone?: string | null;
+    isActive: boolean;
+  }, existingId?: number): TeamItem {
+    return {
+      id: existingId ?? _nextTeamId++,
+      backendId: String(profile.id),
+      championshipId: Number(profile.championshipId) || 0,
+      name: profile.name,
+      shortname: String(profile.shortname ?? ''),
+      slug: profile.slug,
+      logoUrl: profile.logoUrl ?? null,
+      documentUrl: profile.documentUrl ?? null,
+      primaryColor: profile.primaryColor ?? '#1a56db',
+      secondaryColor: profile.secondaryColor ?? '#e74694',
+      location: String(profile.location ?? ''),
+      foundedYear: profile.foundedYear ?? null,
+      homeVenue: String(profile.homeVenue ?? ''),
+      coachName: String(profile.coachName ?? ''),
+      coachPhone: String(profile.coachPhone ?? ''),
+      isActive: profile.isActive,
+      players: [],
+    };
   }
 
   // ── Computed ──────────────────────────────────────────────────
@@ -1552,34 +1596,103 @@ export class ChampionshipTeamsComponent {
     };
     console.log('Team files payload (mock upload):', filePayload);
 
-    if (f.id) {
-      // Edit
-      if (f.logoUrl?.startsWith('blob:')) this.blobUrls.push(f.logoUrl);
-      if (f.documentUrl?.startsWith('blob:')) this.blobUrls.push(f.documentUrl);
-      this.teams.update(list => list.map(t => t.id !== f.id ? t : {
-        ...t, name: f.name, shortname: f.shortname, coachName: f.coachName,
-        coachPhone: f.coachPhone, location: f.location,
-        foundedYear: f.foundedYear, homeVenue: f.homeVenue,
-        primaryColor: f.primaryColor, secondaryColor: f.secondaryColor,
-        logoUrl: f.logoUrl, documentUrl: f.documentUrl,
-      }));
-      this.snackBar.open('Equipo actualizado', 'Cerrar', { duration: 2000 });
-    } else {
-      // Create
-      const slug = f.name.toLowerCase().normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
-      const newTeam: TeamItem = {
-        id: _nextTeamId++, championshipId: 1, name: f.name, shortname: f.shortname,
-        slug, logoUrl: f.logoUrl, documentUrl: f.documentUrl,
-        primaryColor: f.primaryColor, secondaryColor: f.secondaryColor, location: f.location,
-        foundedYear: f.foundedYear, homeVenue: f.homeVenue,
-        coachName: f.coachName, coachPhone: f.coachPhone, isActive: true, players: [],
-      };
-      this.teams.update(list => [...list, newTeam]);
-      this.snackBar.open(`Equipo "${f.name}" inscrito`, 'Cerrar', { duration: 2000 });
+    const championshipId = this.championshipId();
+    const dto = {
+      championshipId: championshipId ?? String(this.teams()[0]?.championshipId ?? ''),
+      name: f.name,
+      shortname: f.shortname,
+      slug: this.toSlug(f.name),
+      coachName: f.coachName,
+      coachPhone: f.coachPhone,
+      location: f.location,
+      foundedYear: f.foundedYear,
+      homeVenue: f.homeVenue,
+      primaryColor: f.primaryColor,
+      secondaryColor: f.secondaryColor,
+      logoUrl: f.logoUrl,
+      documentUrl: f.documentUrl,
+      isActive: true,
+    };
+
+    if (!dto.championshipId) {
+      if (f.id) {
+        this.teams.update(list => list.map(t => t.id !== f.id ? t : {
+          ...t,
+          name: f.name,
+          shortname: f.shortname,
+          coachName: f.coachName,
+          coachPhone: f.coachPhone,
+          location: f.location,
+          foundedYear: f.foundedYear,
+          homeVenue: f.homeVenue,
+          primaryColor: f.primaryColor,
+          secondaryColor: f.secondaryColor,
+          logoUrl: f.logoUrl,
+          documentUrl: f.documentUrl,
+        }));
+      } else {
+        const newTeam: TeamItem = {
+          id: _nextTeamId++, championshipId: 1, name: f.name, shortname: f.shortname,
+          slug: dto.slug, logoUrl: f.logoUrl, documentUrl: f.documentUrl,
+          primaryColor: f.primaryColor, secondaryColor: f.secondaryColor, location: f.location,
+          foundedYear: f.foundedYear, homeVenue: f.homeVenue,
+          coachName: f.coachName, coachPhone: f.coachPhone, isActive: true, players: [],
+        };
+        this.teams.update(list => [...list, newTeam]);
+      }
+      this.teamModal.set(null);
+      this.dirty.emit();
+      this.emitTeamsChange();
+      this.snackBar.open('Equipo actualizado localmente', 'Cerrar', { duration: 2000 });
+      return;
     }
-    this.teamModal.set(null);
-    this.dirty.emit();
+
+    this.isSavingTeam.set(true);
+    if (f.id) {
+      const current = this.teams().find((team) => team.id === f.id);
+      const teamId = current?.backendId;
+      if (!teamId) {
+        this.isSavingTeam.set(false);
+        this.snackBar.open('No se pudo identificar el equipo en backend', 'Cerrar', { duration: 3000 });
+        return;
+      }
+
+      this.championshipSvc.updateTeam(teamId, dto)
+        .pipe(finalize(() => this.isSavingTeam.set(false)))
+        .subscribe({
+          next: (updated) => {
+            this.teams.update((list) => list.map((team) =>
+              team.id === f.id
+                ? { ...team, ...this.mapProfileToTeamItem(updated, team.id), players: team.players }
+                : team,
+            ));
+            this.snackBar.open('Equipo actualizado', 'Cerrar', { duration: 2000 });
+            this.teamModal.set(null);
+            this.dirty.emit();
+            this.emitTeamsChange();
+          },
+          error: () => {
+            this.snackBar.open('Error al actualizar el equipo', 'Cerrar', { duration: 3000 });
+          },
+        });
+      return;
+    }
+
+    this.championshipSvc.createTeam(dto)
+      .pipe(finalize(() => this.isSavingTeam.set(false)))
+      .subscribe({
+        next: (created) => {
+          const mapped = this.mapProfileToTeamItem(created);
+          this.teams.update((list) => [...list, mapped]);
+          this.snackBar.open(`Equipo "${f.name}" inscrito`, 'Cerrar', { duration: 2000 });
+          this.teamModal.set(null);
+          this.dirty.emit();
+          this.emitTeamsChange();
+        },
+        error: () => {
+          this.snackBar.open('Error al crear el equipo', 'Cerrar', { duration: 3000 });
+        },
+      });
   }
 
   onDocumentFileChanged(file: File | null): void {
@@ -1609,10 +1722,33 @@ export class ChampionshipTeamsComponent {
 
   removeTeam(id: number, event: Event): void {
     event.stopPropagation();
-    this.teams.update(list => list.filter(t => t.id !== id));
-    this.expandedTeams.update(s => { const n = new Set(s); n.delete(id); return n; });
-    this.snackBar.open('Equipo retirado del campeonato', 'Cerrar', { duration: 2000 });
-    this.dirty.emit();
+    const team = this.teams().find(t => t.id === id);
+    if (!team) return;
+
+    if (!team.backendId) {
+      this.teams.update(list => list.filter(t => t.id !== id));
+      this.expandedTeams.update(s => { const n = new Set(s); n.delete(id); return n; });
+      this.snackBar.open('Equipo retirado localmente', 'Cerrar', { duration: 2000 });
+      this.dirty.emit();
+      this.emitTeamsChange();
+      return;
+    }
+
+    this.markTeamDeletePending(id, true);
+    this.championshipSvc.deleteTeam(team.backendId)
+      .pipe(finalize(() => this.markTeamDeletePending(id, false)))
+      .subscribe({
+        next: () => {
+          this.teams.update(list => list.filter(t => t.id !== id));
+          this.expandedTeams.update(s => { const n = new Set(s); n.delete(id); return n; });
+          this.snackBar.open('Equipo retirado del campeonato', 'Cerrar', { duration: 2000 });
+          this.dirty.emit();
+          this.emitTeamsChange();
+        },
+        error: () => {
+          this.snackBar.open('Error al retirar equipo', 'Cerrar', { duration: 3000 });
+        },
+      });
   }
 
   // ── Player modal ──────────────────────────────────────────────
@@ -1631,7 +1767,7 @@ export class ChampionshipTeamsComponent {
     this.playerModal.set({
       teamId: team.id,
       player: {
-        id: player.id, teamId: player.teamId, positionId: player.positionId,
+        id: player.id, backendId: player.backendId, teamId: player.teamId, positionId: player.positionId,
         firstName: player.firstName, lastName: player.lastName,
         nickName: player.nickName ?? '', number: player.number,
         birthDate: player.birthDate ?? '', height: player.height,
@@ -1642,34 +1778,118 @@ export class ChampionshipTeamsComponent {
   }
 
   onPlayerSaved(data: PlayerFormData): void {
-    this.teams.update(list => list.map(t => {
-      if (t.id !== data.teamId) return t;
-      const isEdit = !!data.id;
-      const updated: TeamPlayer = {
-        id: data.id ?? _nextPlayerId++, teamId: data.teamId, positionId: data.positionId,
-        firstName: data.firstName, lastName: data.lastName, nickName: data.nickName || null,
-        number: data.number!, birthDate: data.birthDate || null,
-        height: data.height, weight: data.weight, status: data.status,
+    const team = this.teams().find(t => t.id === data.teamId);
+    if (!team) return;
+
+    const dto = {
+      teamId: team.backendId ?? String(data.teamId),
+      firstName: data.firstName,
+      lastName: data.lastName,
+      nickName: data.nickName || null,
+      number: data.number ?? 0,
+      birthDate: data.birthDate || null,
+      height: data.height,
+      weight: data.weight,
+      positionId: data.positionId,
+      status: data.status,
+      photoUrl: data.photoUrl || null,
+    };
+
+    const localUpsert = (player: TeamPlayer): void => {
+      this.teams.update(list => list.map(t => {
+        if (t.id !== data.teamId) return t;
+        const isEdit = !!data.id;
+        return {
+          ...t,
+          players: isEdit
+            ? t.players.map(p => p.id === player.id ? player : p)
+            : [...t.players, player],
+        };
+      }));
+      this.playerModal.set(null);
+      this.dirty.emit();
+      this.emitTeamsChange();
+    };
+
+    if (!team.backendId) {
+      const localPlayer: TeamPlayer = {
+        id: data.id ?? _nextPlayerId++,
+        teamId: data.teamId,
+        positionId: data.positionId,
+        firstName: data.firstName,
+        lastName: data.lastName,
+        nickName: data.nickName || null,
+        number: data.number!,
+        birthDate: data.birthDate || null,
+        height: data.height,
+        weight: data.weight,
+        status: data.status,
         photoUrl: data.photoUrl ?? null,
         photoFile: data.photoFile,
       };
-      return {
-        ...t, players: isEdit
-          ? t.players.map(p => p.id === updated.id ? updated : p)
-          : [...t.players, updated],
-      };
-    }));
-    this.playerModal.set(null);
-    this.dirty.emit();
+      localUpsert(localPlayer);
+      return;
+    }
+
+    const pendingId = data.id ?? -1;
+    this.markPlayerPending(pendingId, true);
+    const request$ = data.id && data.backendId
+      ? this.championshipSvc.updatePlayer(data.backendId, dto)
+      : this.championshipSvc.createPlayer(dto);
+
+    request$
+      .pipe(finalize(() => this.markPlayerPending(pendingId, false)))
+      .subscribe({
+        next: (saved) => {
+          const mapped: TeamPlayer = {
+            id: data.id ?? _nextPlayerId++,
+            backendId: String((saved as { id?: string | number }).id ?? data.backendId ?? ''),
+            teamId: data.teamId,
+            positionId: Number((saved as { positionId?: number }).positionId ?? data.positionId),
+            firstName: String((saved as { firstName?: string }).firstName ?? data.firstName),
+            lastName: String((saved as { lastName?: string }).lastName ?? data.lastName),
+            nickName: ((saved as { nickName?: string | null }).nickName ?? data.nickName) || null,
+            number: Number((saved as { number?: number }).number ?? data.number ?? 0),
+            birthDate: ((saved as { birthDate?: string | null }).birthDate ?? data.birthDate) || null,
+            height: (saved as { height?: number | null }).height ?? data.height,
+            weight: (saved as { weight?: number | null }).weight ?? data.weight,
+            status: ((saved as { status?: PlayerStatus }).status ?? data.status) as PlayerStatus,
+            photoUrl: ((saved as { photoUrl?: string | null }).photoUrl ?? data.photoUrl) || null,
+            photoFile: data.photoFile,
+          };
+          localUpsert(mapped);
+          this.snackBar.open(data.id ? 'Jugador actualizado' : 'Jugador inscrito', 'Cerrar', { duration: 2000 });
+        },
+        error: () => {
+          this.snackBar.open(data.id ? 'Error al actualizar jugador' : 'Error al crear jugador', 'Cerrar', { duration: 3000 });
+        },
+      });
   }
 
-  onPlayerDeleted(playerId: number): void {
-    this.teams.update(list => list.map(t => ({
-      ...t, players: t.players.filter(p => p.id !== playerId),
-    })));
-    this.playerModal.set(null);
-    this.snackBar.open('Jugador dado de baja', 'Cerrar', { duration: 2000 });
-    this.dirty.emit();
+  onPlayerDeleted(event: { numericId: number; backendId?: string }): void {
+    const applyLocalDelete = (): void => {
+      this.teams.update(list => list.map(t => ({
+        ...t,
+        players: t.players.filter(p => p.id !== event.numericId),
+      })));
+      this.playerModal.set(null);
+      this.snackBar.open('Jugador dado de baja', 'Cerrar', { duration: 2000 });
+      this.dirty.emit();
+      this.emitTeamsChange();
+    };
+
+    if (!event.backendId) {
+      applyLocalDelete();
+      return;
+    }
+
+    this.markPlayerPending(event.numericId, true);
+    this.championshipSvc.deletePlayer(event.backendId)
+      .pipe(finalize(() => this.markPlayerPending(event.numericId, false)))
+      .subscribe({
+        next: () => applyLocalDelete(),
+        error: () => this.snackBar.open('Error al eliminar jugador', 'Cerrar', { duration: 3000 }),
+      });
   }
 
   // ── Position helpers ──────────────────────────────────────────
@@ -1990,6 +2210,7 @@ export class ChampionshipTeamsComponent {
 
     // Agregar todos los equipos a la lista
     this.teams.update(t => [...t, ...newTeams]);
+    this.emitTeamsChange();
 
     // Limpiar estado
     this.cancelImport({ revokeObjectUrls: false });

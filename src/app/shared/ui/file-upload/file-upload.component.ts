@@ -18,13 +18,13 @@ function formatBytes(bytes: number): string {
 
       @if (selectedFile()) {
         <!-- State B: file selected -->
-        <div class="flex items-center gap-2.5 px-3 py-2.5 rounded-lg bg-blue-50
-                    border border-blue-200 text-[13px]">
-          <mat-icon class="!size-[18px] !text-[18px] text-blue-500 shrink-0">description</mat-icon>
-          <span class="flex-1 truncate text-gray-800 font-medium">{{ selectedFile()!.name }}</span>
-          <span class="text-[11px] text-gray-400 shrink-0">{{ selectedFileSize() }}</span>
+        <div class="flex items-center gap-2.5 px-3 py-2.5 rounded-lg
+                    bg-[var(--mat-sys-surface-container)] border border-[var(--mat-sys-outline-variant)] text-[13px]">
+          <mat-icon class="!size-[18px] !text-[18px] text-[var(--mat-sys-primary)] shrink-0">description</mat-icon>
+          <span class="flex-1 truncate text-[var(--mat-sys-on-surface)] font-medium">{{ selectedFile()!.name }}</span>
+          <span class="text-[11px] text-[var(--mat-sys-on-surface-variant)] shrink-0">{{ selectedFileSize() }}</span>
           <button
-            class="size-5 flex items-center justify-center rounded text-gray-400
+            class="size-5 flex items-center justify-center rounded text-[var(--mat-sys-on-surface-variant)]
                    bg-transparent border-none cursor-pointer hover:text-red-500 transition-colors"
             type="button"
             (click)="clear()"
@@ -36,19 +36,20 @@ function formatBytes(bytes: number): string {
 
       } @else if (currentUrl()) {
         <!-- State C: existing URL -->
-        <div class="flex items-center gap-2.5 px-3 py-2.5 rounded-lg bg-gray-50
-                    border border-gray-200 text-[13px]">
-          <mat-icon class="!size-[18px] !text-[18px] text-gray-400 shrink-0">description</mat-icon>
+        <div class="flex items-center gap-2.5 px-3 py-2.5 rounded-lg
+                    bg-[var(--mat-sys-surface-container)] border border-[var(--mat-sys-outline-variant)] text-[13px]">
+          <mat-icon class="!size-[18px] !text-[18px] text-[var(--mat-sys-on-surface-variant)] shrink-0">description</mat-icon>
           <a
             [href]="currentUrl()!"
             target="_blank"
             rel="noopener noreferrer"
-            class="flex-1 truncate text-blue-600 hover:underline font-medium"
+            class="flex-1 truncate text-[var(--mat-sys-primary)] hover:underline font-medium"
           >Ver documento actual</a>
           <button
-            class="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-white border
-                   border-gray-300 text-[11.5px] font-medium text-gray-600 cursor-pointer
-                   hover:bg-gray-100 transition-colors"
+            class="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-transparent border
+                   border-[var(--mat-sys-outline-variant)] text-[11.5px] font-medium
+                   text-[var(--mat-sys-on-surface)] cursor-pointer
+                   hover:bg-[var(--mat-sys-surface-container-high)] transition-colors"
             type="button"
             (click)="triggerFileInput()"
           >
@@ -60,10 +61,11 @@ function formatBytes(bytes: number): string {
       } @else {
         <!-- State A: empty -->
         <button
-          class="inline-flex items-center gap-2 px-3 py-2.5 rounded-lg bg-white
-                 border border-dashed border-gray-300 text-[13px] font-medium
-                 text-gray-600 cursor-pointer hover:border-blue-400 hover:bg-blue-50
-                 hover:text-blue-600 transition-colors w-full justify-center"
+          class="inline-flex items-center gap-2 px-3 py-2.5 rounded-lg
+                 bg-[var(--mat-sys-surface-container)] border border-dashed border-[var(--mat-sys-outline)]
+                 text-[13px] font-medium text-[var(--mat-sys-on-surface-variant)] cursor-pointer
+                 hover:border-[var(--mat-sys-primary)] hover:text-[var(--mat-sys-primary)]
+                 transition-colors w-full justify-center"
           type="button"
           (click)="triggerFileInput()"
         >
@@ -71,9 +73,9 @@ function formatBytes(bytes: number): string {
           Seleccionar {{ label() }}...
         </button>
         @if (hint()) {
-          <p class="m-0 text-[11px] text-gray-400 text-center">{{ hint() }}</p>
+          <p class="m-0 text-[11px] text-[var(--mat-sys-on-surface-variant)] text-center">{{ hint() }}</p>
         } @else {
-          <p class="m-0 text-[11px] text-gray-400 text-center">Máx {{ maxSizeMb() }} MB</p>
+          <p class="m-0 text-[11px] text-[var(--mat-sys-on-surface-variant)] text-center">{{ label().toUpperCase() }} · Máx {{ maxSizeMb() }} MB</p>
         }
       }
 

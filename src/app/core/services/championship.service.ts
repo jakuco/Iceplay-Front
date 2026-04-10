@@ -1,4 +1,4 @@
-import { Injectable, inject } from '@angular/core';
+import { Injectable, inject, signal } from '@angular/core';
 import { Observable, forkJoin, of, throwError } from 'rxjs';
 import { catchError, map, switchMap } from 'rxjs/operators';
 
@@ -7,88 +7,69 @@ import {
   Championship,
   ChampionshipApiResponse,
   ChampionshipDetail,
+  BackendChampionshipsPage,
+  BackendMatchRule,
+  BackendPhase,
   ChampionshipListItem,
   ChampionshipStatus,
   ChampionshipRulesResponse,
   CreateChampionshipDto,
   CreateChampionshipMatchRuleDto,
+  CreatePhaseApiDto,
   CreateSocialLinkDto,
   CreatePhaseDto,
   ChampionshipFiltersDto,
+  PatchPhaseApiDto,
   PaginatedChampionships,
   Phase,
   PhaseStatus,
+  PhaseSwissApiDto,
+  PhaseType,
   SocialLink,
   SocialNetwork,
+  SocialLinkUpsertPayload,
+  UpdatePhaseApiDto,
   UpdateChampionshipDto,
   UpdateChampionshipStatusDto,
 } from '../models/championship.model';
-import { CreateTeamDto, TeamProfile } from '../models/team.model';
-import type { Player } from '../models/player.model';
+import { TeamProfile, TeamUpsertDto } from '../models/team.model';
+import type { Player, PlayerUpsertDto } from '../models/player.model';
 import type { DbId } from '../models/db.types';
-
-// ─────────────────────────────────────────────────────────────
-// Local types (not in model)
-// ─────────────────────────────────────────────────────────────
-
-interface BackendChampionshipsPage {
-  championships: Championship[];
-  page: number;
-  limit: number;
-  total: number;
-  next: string | null;
-  prev: string | null;
-}
-
-// ─────────────────────────────────────────────────────────────
-// localStorage keys (mocks pendientes de backend)
-// ─────────────────────────────────────────────────────────────
-
-const LS_PHASES = 'iceplay_phases';
-const LS_RULES = 'iceplay_rules';
-const LS_TEAMS = 'iceplay_teams';
-const LS_SOCIAL_LINKS = 'iceplay_social_links';
-
-// ─────────────────────────────────────────────────────────────
-// Reglas por defecto por deporte (seed cuando no hay backend)
-// ─────────────────────────────────────────────────────────────
-
-type DefaultRule = ChampionshipRulesResponse['rules'][number];
-
-const FOOTBALL_RULES: DefaultRule[] = [
-  { matchRuleId: 1, name: 'max_players', defaultValue: 20, currentValue: 20, isOverridden: false },
-  { matchRuleId: 2, name: 'min_players', defaultValue: 12, currentValue: 12, isOverridden: false },
-  { matchRuleId: 3, name: 'max_substitutions', defaultValue: 5, currentValue: 5, isOverridden: false },
-  { matchRuleId: 4, name: 'match_duration', defaultValue: 45, currentValue: 45, isOverridden: false },
-  { matchRuleId: 5, name: 'yellow_cards_suspension', defaultValue: 3, currentValue: 3, isOverridden: false },
-  { matchRuleId: 6, name: 'red_card_suspension', defaultValue: 1, currentValue: 1, isOverridden: false },
-  { matchRuleId: 7, name: 'extra_time', defaultValue: 0, currentValue: 0, isOverridden: false },
-  { matchRuleId: 8, name: 'penalty_shootout', defaultValue: 0, currentValue: 0, isOverridden: false },
-  { matchRuleId: 9, name: 'allow_guest_players', defaultValue: 0, currentValue: 0, isOverridden: false },
-];
-
-const DEFAULT_RULES_BY_SPORT: Record<number, DefaultRule[]> = {
-  1: FOOTBALL_RULES,
-  2: FOOTBALL_RULES,
-  3: FOOTBALL_RULES,
-  4: FOOTBALL_RULES,
-  5: FOOTBALL_RULES,
-};
-
-const SOCIAL_NETWORKS: SocialNetwork[] = [
-  { id: 1, name: 'Facebook', icon: 'thumb_up' },
-  { id: 2, name: 'Instagram', icon: 'photo_camera' },
-  { id: 3, name: 'X', icon: 'close' },
-  { id: 4, name: 'TikTok', icon: 'music_note' },
-  { id: 5, name: 'YouTube', icon: 'smart_display' },
-];
 
 @Injectable({ providedIn: 'root' })
 export class ChampionshipService {
   private api = inject(ApiService);
 
-  // ── CRUD base ──────────────────────────────────────────────────────────
+  private _socialNetworks = signal<SocialNetwork[]>([]);
+  private _loadingSocialNetworks = signal(false);
 
+  readonly socialNetworks = this._socialNetworks.asReadonly();
+  readonly loadingSocialNetworks = this._loadingSocialNetworks.asReadonly();
+
+  private loaded = { socialNetworks: false };
+
+  // ── Championship CRUD ──────────────────────────────────────────────────
+
+
+  /**
+   * Lista paginada de campeonatos.
+   *
+   * Contrato real:
+   * GET /championships?page=1&limit=10
+   *
+   * Respuesta backend:
+   * {
+   *   page: number,
+   *   limit: number,
+   *   total: number,
+   *   next: number | null,
+   *   prev: number | null,
+   *   championships: Championship[]
+   * }
+   *
+   * Este método adapta esa respuesta a `PaginatedChampionships`
+   * y calcula `totalPages` en cliente. Devuelve solo isActive=true
+   */
   getAll(filters?: ChampionshipFiltersDto): Observable<PaginatedChampionships> {
     const params: Record<string, unknown> = {};
     if (filters?.organizationId !== undefined) params['organizationId'] = filters.organizationId;
@@ -109,23 +90,23 @@ export class ChampionshipService {
     );
   }
 
-  // ── HTTP API (integración rama cup) ─────────────────────────────────────
-
   /**
-   * Devuelve la lista plana de campeonatos filtrando por organización.
+   * Lista completa de campeonatos (sin paginacion).
    *
-   * ⚠️ Contrato real: GET /championships devuelve
-   *   `{ championships, page, limit, total }`.
-   * Se extrae `championships` del envoltorio de paginación.
-   * Para acceder a los metadatos de paginación, usar `getAll()`.
+   * Contrato real:
+   * GET /championships/all
+   *
+   * Respuesta backend:
+   * Championship[]
+   *
+   * Cada item incluye:
+   * id, organizationId, sportId, name, slug, description, season,
+   * logo, status, registrationStartDate, registrationEndDate,
+   * startDate, endDate, maxTeams, maxPlayersPerTeam,
+   * createdAt, updatedAt, isActive.
+   * 
+   * Devuelve solo isActive=true
    */
-  getChampionships(organizationId?: string): Observable<Championship[]> {
-    const params = organizationId ? { organizationId } : {};
-    return this.api.get<BackendChampionshipsPage>('championships', params).pipe(
-      map((response) => response.championships.map((c) => this.parseChampionshipDates(c))),
-      catchError((error) => this.handleError('Error fetching championships', error)),
-    );
-  }
 
   getAllChampionships(): Observable<Championship[]> {
     return this.api.get<Championship[]>('championships/all').pipe(
@@ -135,44 +116,31 @@ export class ChampionshipService {
   }
 
   /**
-   * Obtiene el detalle de un campeonato por su UUID.
-   *
-   * ⚠️ Contrato real: GET /championships/:id devuelve SOLO
-   *   `{ id, name, status, season }` — no el objeto Championship completo.
-   * Los campos extra (fechas, etc.) llegarán como undefined.
-   */
-  getChampionshipDetail(id: string): Observable<Championship> {
-    return this.api.get<Championship>(`championships/${id}`).pipe(
-      map((championship) => this.parseChampionshipDates(championship)),
-      catchError((error) => this.handleError('Error fetching championship details', error)),
-    );
-  }
-
-  /**
-   * Devuelve campeonatos activos.
-   *
-   * ⚠️ El backend NO garantiza filtrado por `status` en GET /championships.
-   * Se aplica filtro en cliente como salvaguarda.
-   * Para paginación correcta, usar `getAll({ status: ChampionshipStatus.Active })`.
-   */
-  getActiveChampionships(): Observable<Championship[]> {
-    return this.api.get<BackendChampionshipsPage>('championships', { status: ChampionshipStatus.Active }).pipe(
-      map((response) =>
-        response.championships
-          .map((c) => this.parseChampionshipDates(c))
-          .filter((c) => c.status === ChampionshipStatus.Active),
-      ),
-      catchError((error) => this.handleError('Error fetching active championships', error)),
-    );
-  }
-
-  /**
    * Obtiene un campeonato por UUID.
    *
-   * ⚠️ Contrato real: GET /championships/:id devuelve SOLO
-   *   `{ id, name, status, season }` — no el modelo Championship completo.
-   * Los campos extra llegarán como undefined. Para el flujo principal
-   * de detalle, usar `getById()`.
+    * Contrato real actualizado: GET /championships/:id 
+    * 
+    * Ejemplo real:
+    * {
+    *   "id": "019d76ac-db7f-7a5c-9497-4b23e5139497",
+    *   "organizationId": "019d3202-48c9-7c79-8236-cf46657fbb23",
+    *   "sportId": 1,
+    *   "name": "no se que hacer",
+    *   "slug": "no-se-que-hacer",
+    *   "description": null,
+    *   "season": "2024-2025",
+    *   "logo": null,
+    *   "status": 0,
+    *   "registrationStartDate": "2026-04-11T00:00:00.000Z",
+    *   "registrationEndDate": "2026-04-13T00:00:00.000Z",
+    *   "startDate": "2026-04-10T00:00:00.000Z",
+    *   "endDate": "2026-04-30T00:00:00.000Z",
+    *   "maxTeams": 12,
+    *   "maxPlayersPerTeam": 12,
+    *   "createdAt": "2026-04-10T09:15:33.118Z",
+    *   "updatedAt": "2026-04-10T09:37:02.004Z",
+    *   "isActive": true
+    * }
    */
   getChampionshipById(id: string): Observable<Championship> {
     return this.api.get<Championship>(`championships/${id}`).pipe(
@@ -181,41 +149,34 @@ export class ChampionshipService {
     );
   }
 
-  createChampionship(championship: Partial<Championship>): Observable<Championship> {
-    return this.api.post<Championship>('championships', championship).pipe(
-      map((c) => this.parseChampionshipDates(c)),
-      catchError((error) => this.handleError('Error creating championship', error)),
-    );
-  }
 
   /**
-   * Actualiza un campeonato.
+   * Crea un campeonato.
    *
-   * ⚠️ El backend solo expone PUT /championships/:id — no PATCH.
-   * Se usa `api.put()` para coincidir con el método HTTP correcto.
-   * Para actualizaciones parciales del frontend, enviar solo los campos
-   * que cambian; el backend acepta Partial gracias a Zod.
+   * Contrato real:
+   * POST /championships
+   *
+   * Body esperado:
+   * {
+   *   "organizationId": "{{organizationId}}",
+   *   "sportId": {{sportId}},
+   *   "name": "Torneo Apertura 2026",
+   *   "slug": "torneo-apertura-2026",
+   *   "season": "2026",
+   *   "status": 0,
+   *   "maxTeams": 16,
+   *   "maxPlayersPerTeam": 25,
+   *   "isActive": true
+   * }
+   *
+   * Respuesta real:
+   * {
+   *   "id": "019d782f-852e-70ca-9a03-c01c6940762f",
+   *   "name": "Torneo Apertura 2026",
+   *   "status": 0,
+   *   "season": "2026"
+   * }
    */
-  updateChampionship(id: string, championship: Partial<Championship>): Observable<Championship> {
-    return this.api.put<Championship>(`championships/${id}`, championship).pipe(
-      map((c) => this.parseChampionshipDates(c)),
-      catchError((error) => this.handleError('Error updating championship', error)),
-    );
-  }
-
-  deleteChampionship(id: string): Observable<void> {
-    return this.api
-      .delete<void>(`championships/${id}`)
-      .pipe(catchError((error) => this.handleError('Error deleting championship', error)));
-  }
-
-  getById(id: string): Observable<ChampionshipDetail> {
-    return this.api.get<ChampionshipDetail>(`championships/${id}/detail`).pipe(
-      map(c => ({ ...c, ...this.parseChampionshipDates(c) })),
-      catchError(e => this.handleError('Error fetching championship', e)),
-    );
-  }
-
   create(dto: CreateChampionshipDto): Observable<Championship> {
     return this.api.post<Championship>('championships', dto).pipe(
       map(c => this.parseChampionshipDates(c)),
@@ -223,6 +184,13 @@ export class ChampionshipService {
     );
   }
 
+  /**
+   * Update tipado del campeonato.
+   *
+   * Usa el mismo contrato de UPDATE (PUT):
+   * PUT /championships/:id
+   * Respuesta real corta: `{ id, name, status, season }`.
+   */
   update(id: string, dto: UpdateChampionshipDto): Observable<Championship> {
     return this.api.put<Championship>(`championships/${id}`, dto).pipe(
       map(c => this.parseChampionshipDates(c)),
@@ -231,114 +199,232 @@ export class ChampionshipService {
   }
 
   /**
-   * Cambia el estado de un campeonato.
+    * Actualiza parcialmente un campeonato.
    *
-   * ⚠️ CONTRATO REAL: PUT /championships/:id devuelve SOLO
-   *   `{ id, name, status: number, season }`.
-   * Callers NO deben reemplazar un Championship completo con esta respuesta.
-   * Solo actualizar el campo `status` en el modelo local.
+   * Contrato real:
+    * PATCH /championships/:id
+   *
+   * Body esperado (ejemplo):
+   * {
+    *   "name": "Torneo Apertura 2026 - Patch",
+    *   "maxTeams": 18
+   * }
+   *
+   * Respuesta real:
+   * {
+   *   "id": "019d76ac-db7f-7a5c-9497-4b23e5139497",
+    *   "name": "Torneo Apertura 2026 - Patch",
+   *   "status": 0,
+   *   "season": "2024-2025"
+   * }
    */
-  updateStatus(id: string, dto: UpdateChampionshipStatusDto): Observable<ChampionshipApiResponse> {
-    return this.api.put<ChampionshipApiResponse>(`championships/${id}`, dto).pipe(
-      catchError(e => this.handleError('Error updating championship status', e)),
+  patch(id: string, championship: Partial<Championship>): Observable<Championship> {
+    return this.api.patch<Championship>(`championships/${id}`, championship).pipe(
+      map((c) => this.parseChampionshipDates(c)),
+      catchError((error) => this.handleError('Error updating championship', error)),
     );
   }
 
+
+
+  /**
+   * Elimina (soft-delete) un campeonato.
+   *
+   * Contrato real:
+   * DELETE /championships/:id
+   *
+   * Respuesta real:
+   * {
+   *   "message": "Championship deactivated successfully",
+   *   "id": "019d76ac-db7f-7a5c-9497-4b23e5139497",
+   *   "mode": "soft-delete"
+   * }
+   */
   delete(id: string): Observable<void> {
     return this.api.delete<void>(`championships/${id}`).pipe(
       catchError(e => this.handleError('Error deleting championship', e)),
     );
   }
 
-  // ── Sub-recursos ───────────────────────────────────────────────────────
+  // ── Phase CRUD ─────────────────────────────────────────────────────────
 
+  /**
+   * Lista fases de un campeonato.
+   *
+   * Contrato real:
+   * GET /championships/:championshipId/phases
+   *
+   * Respuesta real:
+   * [
+   *   {
+   *     "id": 9,
+   *     "championshipId": "019d7662-8584-7b73-8917-cdabb53e4bc5",
+   *     "name": "Fase Suiza",
+   *     "phaseType": "swiss",
+   *     "phaseOrder": 1,
+   *     "status": "pending",
+   *     "isActive": true,
+   *     "configuration": null
+   *   }
+   * ]
+   */
   getPhases(championshipId: string): Observable<Phase[]> {
-    return this.getById(championshipId).pipe(
-      map(detail => detail.phases ?? []),
-      catchError(e => this.handleError('Error fetching phases', e)),
+    return this.api.get<unknown>(`championships/${championshipId}/phases`).pipe(
+      map((response) => this.extractCollection(response, 'phases') as BackendPhase[]),
+      map((items) => items.map((item) => this.mapBackendPhase(item))),
+      catchError((error) => this.handleError('Error fetching phases', error)),
+    );
+  }
+
+  getPhaseById(id: number): Observable<Phase> {
+    return this.api.get<BackendPhase>(`phases/${id}`).pipe(
+      map((phase) => this.mapBackendPhase(phase)),
+      catchError((error) => this.handleError('Error fetching phase', error)),
     );
   }
 
   savePhases(championshipId: string, phases: CreatePhaseDto[]): Observable<Phase[]> {
-    // ⚠️ NO BACKEND ENDPOINT — las fases solo se pueden configurar en /setup al crear.
-    // Los cambios de fases en modo edición se guardan solo localmente (mock).
-    const saved: Phase[] = phases.map((dto, i) => ({
-      id: i + 1,
-      championshipId: +championshipId,
-      name: dto.name,
-      phaseType: dto.phaseType,
-      phaseOrder: dto.phaseOrder,
-      status: dto.status ?? PhaseStatus.Pending,
-      leagueConfig: dto.leagueConfig ? { id: i + 1, phaseId: i + 1, ...dto.leagueConfig } : undefined,
-      knockoutConfig: dto.knockoutConfig ? { id: i + 1, phaseId: i + 1, ...dto.knockoutConfig } : undefined,
-      groupsConfig: dto.groupsConfig ? { id: i + 1, phaseId: i + 1, ...dto.groupsConfig } : undefined,
-      swissConfig: dto.swissConfig ? { id: i + 1, phaseId: i + 1, ...dto.swissConfig } : undefined,
-    }));
-    const record = this.readRecord<Phase[]>(LS_PHASES);
-    record[championshipId] = saved;
-    this.writeRecord(LS_PHASES, record);
-    return of(saved);
+    return this.replaceSwissPhases(championshipId, phases);
+  }
+
+  createPhase(dto: CreatePhaseApiDto): Observable<Phase> {
+    return this.api.post<BackendPhase>('phases', dto).pipe(
+      map((phase) => this.mapBackendPhase(phase)),
+      catchError((error) => this.handleError('Error creating phase', error)),
+    );
+  }
+
+  createPhaseSwiss(id: number, dto: PhaseSwissApiDto): Observable<unknown> {
+    return this.api.post<unknown>(`phases/${id}/swiss`, dto).pipe(
+      catchError((error) => this.handleError('Error creating swiss phase config', error)),
+    );
+  }
+
+  updatePhase(id: number, dto: UpdatePhaseApiDto): Observable<Phase> {
+    return this.api.put<BackendPhase>(`phases/${id}`, dto).pipe(
+      map((phase) => this.mapBackendPhase(phase)),
+      catchError((error) => this.handleError('Error updating phase', error)),
+    );
+  }
+
+  patchPhase(id: number, dto: PatchPhaseApiDto): Observable<Phase> {
+    return this.api.patch<BackendPhase>(`phases/${id}`, dto).pipe(
+      map((phase) => this.mapBackendPhase(phase)),
+      catchError((error) => this.handleError('Error patching phase', error)),
+    );
+  }
+
+  updatePhaseSwiss(id: number, dto: PhaseSwissApiDto): Observable<unknown> {
+    return this.api.put<unknown>(`phases/${id}/swiss`, dto).pipe(
+      catchError((error) => this.handleError('Error updating swiss phase config', error)),
+    );
+  }
+
+  deletePhase(id: number): Observable<void> {
+    return this.api.delete<void>(`phases/${id}`).pipe(
+      catchError((error) => this.handleError('Error deleting phase', error)),
+    );
+  }
+
+  deletePhaseSwiss(id: number): Observable<void> {
+    return this.api.delete<void>(`phases/${id}/swiss`).pipe(
+      catchError((error) => this.handleError('Error deleting swiss phase config', error)),
+    );
+  }
+
+  // ── Rules CRUD ─────────────────────────────────────────────────────────
+
+  getDefaultRules(sportId: number): Observable<ChampionshipRulesResponse> {
+    return this.api.get<unknown>('match-rules/all', { sportId }).pipe(
+      map((response) => {
+        const rules = this.extractCollection(response, 'matchRules') as BackendMatchRule[];
+
+        return {
+          championshipId: 0,
+          sportId,
+          rules: rules.map((rule) => {
+            const base = this.toNumeric(rule.defaultValue ?? rule.value ?? 0, 0);
+            return {
+              matchRuleId: rule.id,
+              name: rule.name,
+              defaultValue: base,
+              currentValue: base,
+              isOverridden: false,
+            };
+          }),
+        };
+      }),
+      catchError((error) => this.handleError('Error fetching default rules', error)),
+    );
   }
 
   getRules(championshipId: string): Observable<ChampionshipRulesResponse> {
-    // 🔴 MOCK — pendiente endpoint GET /championships/:id/rules
-    const record = this.readRecord<ChampionshipRulesResponse>(LS_RULES);
-    const stored = record[championshipId];
-    if (stored) return of(stored);
-    return of({ championshipId: +championshipId, sportId: 1, rules: [] });
+    return this.getChampionshipById(championshipId).pipe(
+      switchMap((detail) => {
+        const sportId = Number(detail.sportId);
+        return forkJoin({
+          defaults: this.getDefaultRules(sportId),
+          overrides: this.api.get<unknown>('match-rules-championship-sports', { championshipId, sportId }).pipe(
+            map((r) => this.extractCollection(r, 'items') as { matchRulesId: number; value: number }[]),
+            catchError(() => of([] as { matchRulesId: number; value: number }[])),
+          ),
+        }).pipe(
+          map(({ defaults, overrides }) => {
+            const overrideMap = new Map(overrides.map(o => [Number(o.matchRulesId), Number(o.value)]));
+            return {
+              ...defaults,
+              championshipId,
+              rules: defaults.rules.map(rule => {
+                const overrideValue = overrideMap.get(Number(rule.matchRuleId));
+                if (overrideValue === undefined) return rule;
+                return { ...rule, currentValue: overrideValue, isOverridden: overrideValue !== rule.defaultValue };
+              }),
+            };
+          }),
+        );
+      }),
+      catchError((error) => this.handleError('Error fetching rules', error)),
+    );
   }
 
   updateRules(
     championshipId: string,
     patches: CreateChampionshipMatchRuleDto[],
   ): Observable<ChampionshipRulesResponse> {
-    // 🔴 MOCK — pendiente endpoint PATCH /championships/:id/rules
-    const record = this.readRecord<ChampionshipRulesResponse>(LS_RULES);
-    const current = record[championshipId] ?? {
-      championshipId: +championshipId,
-      sportId: patches[0]?.sportId ?? 1,
-      rules: [],
+    const body = {
+      rules: patches.map(p => ({
+        matchRulesId: p.matchRuleId,  // backend usa matchRulesId (con s)
+        sportId: p.sportId,
+        value: p.value,
+      })),
     };
-    for (const patch of patches) {
-      const rule = current.rules.find(r => r.matchRuleId === patch.matchRuleId);
-      if (rule) {
-        rule.currentValue = patch.value;
-        rule.isOverridden = patch.value !== rule.defaultValue;
-      } else {
-        current.rules.push({
-          matchRuleId: patch.matchRuleId,
-          name: `Regla ${patch.matchRuleId}`,
-          defaultValue: patch.value,
-          currentValue: patch.value,
-          isOverridden: false,
-        });
-      }
-    }
-    record[championshipId] = current;
-    this.writeRecord(LS_RULES, record);
-    return of(current);
+    return this.api.patch<{ championshipId: string; updated: number; rules: unknown[] }>(
+      `championships/${championshipId}/rules`,
+      body,
+    ).pipe(
+      map(response => ({
+        championshipId,
+        sportId: patches[0]?.sportId ?? 1,
+        rules: (response.rules ?? []).map((r: any) => ({
+          matchRuleId: r.matchRulesId ?? r.matchRuleId ?? r.id,
+          name: r.name ?? `Regla ${r.matchRulesId ?? r.id}`,
+          defaultValue: Number(r.defaultValue ?? r.value ?? 0),
+          currentValue: Number(r.value ?? r.currentValue ?? 0),
+          isOverridden: true,
+        })),
+      })),
+      catchError((error) => this.handleError('Error updating rules', error)),
+    );
   }
 
-  /** Reglas por defecto del deporte — usadas al crear un campeonato nuevo */
-  getDefaultRules(sportId: number): Observable<ChampionshipRulesResponse> {
-    // 🔴 MOCK — pendiente endpoint GET /sports/:sportId/default-rules
-    const key = `iceplay_default_rules_sport_${sportId}`;
-    const raw = localStorage.getItem(key);
-    if (raw) {
-      try { return of(JSON.parse(raw) as ChampionshipRulesResponse); } catch { /* fall through */ }
-    }
-    const defaults = DEFAULT_RULES_BY_SPORT[sportId] ?? DEFAULT_RULES_BY_SPORT[1];
-    const response: ChampionshipRulesResponse = { championshipId: 0, sportId, rules: defaults };
-    localStorage.setItem(key, JSON.stringify(response));
-    return of(response);
-  }
+  // ── Team CRUD ──────────────────────────────────────────────────────────
 
   getTeams(championshipId: string): Observable<TeamProfile[]> {
-    return this.api.get<unknown>('teams', { championshipId }).pipe(
+    return this.api.get<unknown>('teams/all', { championshipId }).pipe(
       map((response) => this.extractCollection(response, 'teams')),
       switchMap((teams) => {
         if (teams.length === 0) {
-          return of([]);
+          return of([] as TeamProfile[]);
         }
 
         return forkJoin(
@@ -355,71 +441,267 @@ export class ChampionshipService {
           }),
         );
       }),
-      catchError(() => {
-        // Fallback local para no bloquear edición si el endpoint falla temporalmente.
-        const teams = this.readRecord<TeamProfile[]>(LS_TEAMS)[championshipId] ?? [];
-        return of(teams);
+      catchError((error) => this.handleError('Error fetching teams', error)),
+    );
+  }
+
+  saveTeams(championshipId: string, teams: ({ name: string; shortname: string; slug: string; logoUrl?: string; documentUrl?: string; primaryColor?: string; secondaryColor?: string; foundedYear?: number; homeVenue?: string; location?: string; coachName?: string; coachPhone?: string; players?: any[] })[]): Observable<TeamProfile[]> {
+    if (teams.length === 0) return of([]);
+
+    // POST /teams acepta players[] inline — no hace falta POST /players por separado
+    type TeamResult = { profile: TeamProfile | null; isDuplicate: boolean };
+
+    const creates = teams.map(t =>
+      this.api.post<Record<string, unknown>>('teams', { ...t, championshipId }).pipe(
+        map(saved => ({
+          profile: this.normalizeTeamProfile(saved, championshipId),
+          isDuplicate: false,
+        } as TeamResult)),
+        catchError(e => {
+          const status = (e as { status?: number }).status;
+          const msg = String((e as Error).message ?? '').toLowerCase();
+          const isDuplicate = status === 409 || msg.includes('exist') || msg.includes('duplicate') || msg.includes('already');
+          return of<TeamResult>({ profile: null, isDuplicate });
+        }),
+      ),
+    );
+
+    return forkJoin(creates).pipe(
+      switchMap(results => {
+        const saved = results.filter(r => r.profile !== null).map(r => r.profile!);
+        const hasDuplicates = results.some(r => r.isDuplicate);
+        if (hasDuplicates) {
+          return throwError(() => new Error('Some teams could not be saved: duplicate 409'));
+        }
+        return of(saved);
       }),
     );
   }
 
+  createTeam(dto: TeamUpsertDto): Observable<TeamProfile> {
+    return this.api.post<unknown>('teams', dto).pipe(
+      map((response) => this.normalizeTeamProfile(response, dto.championshipId)),
+      catchError((error) => this.handleError('Error creating team', error)),
+    );
+  }
+
+  updateTeam(teamId: string, dto: Partial<TeamUpsertDto>): Observable<TeamProfile> {
+    return this.api.put<unknown>(`teams/${teamId}`, dto).pipe(
+      map((response) => this.normalizeTeamProfile(response, String(dto.championshipId ?? ''))),
+      catchError((error) => this.handleError('Error updating team', error)),
+    );
+  }
+
+  deactivateTeam(teamId: string): Observable<void> {
+    return this.api.patch<void>(`teams/${teamId}/deactivate`, {}).pipe(
+      catchError(e => this.handleError('Error deactivating team', e)),
+    );
+  }
+
+  deleteTeam(teamId: string): Observable<void> {
+    return this.api.delete<void>(`teams/${teamId}`).pipe(
+      catchError((error) => this.handleError('Error deleting team', error)),
+    );
+  }
+
+  // ── Player CRUD ────────────────────────────────────────────────────────
+
+  createPlayer(dto: PlayerUpsertDto): Observable<Player> {
+    return this.api.post<Player>('players', dto).pipe(
+      catchError((error) => this.handleError('Error creating player', error)),
+    );
+  }
+
+  updatePlayer(playerId: string, dto: Partial<PlayerUpsertDto>): Observable<Player> {
+    return this.api.put<Player>(`players/${playerId}`, dto).pipe(
+      catchError((error) => this.handleError('Error updating player', error)),
+    );
+  }
+
+  deletePlayer(playerId: string): Observable<void> {
+    return this.api.delete<void>(`players/${playerId}`).pipe(
+      catchError((error) => this.handleError('Error deleting player', error)),
+    );
+  }
+
+  // ── Social Links CRUD ──────────────────────────────────────────────────
+
+  loadSocialNetworks(): void {
+    if (this.loaded.socialNetworks) return;
+    this.loaded.socialNetworks = true;
+    this._loadingSocialNetworks.set(true);
+
+    this.api.get<SocialNetwork[]>('social-networks').subscribe({
+      next: data => {
+        this._socialNetworks.set(data);
+        this._loadingSocialNetworks.set(false);
+      },
+      error: () => {
+        this.loaded.socialNetworks = false; // permitir reintento
+        this._loadingSocialNetworks.set(false);
+      },
+    });
+  }
+
+  getSocialNetworks(): Observable<SocialNetwork[]> {
+    return this.api.get<SocialNetwork[]>('social-networks').pipe(
+      catchError(() => of([] as SocialNetwork[])),
+    );
+  }
+
   getSocialLinks(championshipId: string): Observable<SocialLink[]> {
-    // 🔴 MOCK — pendiente endpoint GET /championships/:id/social-links
-    return of(this.getStoredSocialLinks(championshipId));
+    const params = {
+      championshipId,
+      isActive: true,
+    };
+
+    return this.api.get<unknown>('social-links/all', params).pipe(
+      map((response) => this.extractCollection(response, 'socialLinks') as SocialLink[]),
+      catchError(() => of([] as SocialLink[])),
+    );
   }
 
   saveSocialLinks(championshipId: string, links: CreateSocialLinkDto[]): Observable<SocialLink[]> {
-    // 🔴 MOCK — pendiente endpoint PUT /championships/:id/social-links
+    return this.replaceSocialLinks(championshipId, links);
+  }
+
+  replaceSocialLinks(championshipId: string, links: CreateSocialLinkDto[]): Observable<SocialLink[]> {
     const uniqueByNetwork = new Map<DbId, CreateSocialLinkDto>();
     for (const link of links) {
-      if (!link.link?.trim()) continue;
+      const normalized = link.link.trim();
+      if (!normalized) continue;
       if (!uniqueByNetwork.has(link.socialNetworkId)) {
         uniqueByNetwork.set(link.socialNetworkId, {
           socialNetworkId: link.socialNetworkId,
-          link: link.link.trim(),
+          link: normalized,
         });
       }
     }
 
-    const saved: SocialLink[] = Array.from(uniqueByNetwork.values()).map((dto, index) => ({
-      id: index + 1,
-      championshipId: +championshipId,
-      socialNetworkId: dto.socialNetworkId,
-      link: dto.link,
-      socialNetwork: SOCIAL_NETWORKS.find(n => n.id === dto.socialNetworkId),
-    }));
+    const desired = Array.from(uniqueByNetwork.values());
 
-    const record = this.readRecord<SocialLink[]>(LS_SOCIAL_LINKS);
-    record[championshipId] = saved;
-    this.writeRecord(LS_SOCIAL_LINKS, record);
-    return of(saved);
-  }
+    return this.getSocialLinks(championshipId).pipe(
+      switchMap((existing) => {
+        // Normalizar a string para evitar fallos de lookup number vs string
+        const existingByNetwork = new Map<string, SocialLink>();
+        for (const item of existing) {
+          existingByNetwork.set(String(item.socialNetworkId), item);
+        }
 
-  saveTeams(championshipId: string, teams: (CreateTeamDto & { players?: any[] })[]): Observable<TeamProfile[]> {
-    return this.api.post<TeamProfile[]>(`championships/${championshipId}/teams`, { teams }).pipe(
-      catchError(e => this.handleError('Error saving teams', e)),
+        const toUpsert = desired.map((item) => {
+          const payload: SocialLinkUpsertPayload = {
+            championshipId,
+            socialNetworkId: item.socialNetworkId,
+            link: item.link,
+            isActive: true,
+          };
+          const existingItem = existingByNetwork.get(String(item.socialNetworkId));
+          if (existingItem) {
+            console.log("Updating social link", existingItem);
+            return this.api.put<SocialLink>(`social-links/${existingItem.id}`, {
+              socialNetworkId: item.socialNetworkId,
+              link: item.link,
+              isActive: true,
+            });
+          }
+          return this.api.post<SocialLink>('social-links', payload);
+        });
+
+        const desiredNetworks = new Set(desired.map((item) => String(item.socialNetworkId)));
+        const toDelete = existing
+          .filter((item) => !desiredNetworks.has(String(item.socialNetworkId)))
+          .map((item) => this.api.delete<void>(`social-links/${item.id}`));
+
+        const operations: Observable<unknown>[] = [...toUpsert, ...toDelete];
+        if (operations.length === 0) {
+          return of([] as SocialLink[]);
+        }
+
+        return forkJoin(operations).pipe(
+          switchMap(() => this.getSocialLinks(championshipId)),
+        );
+      }),
+      catchError((error) => this.handleError('Error replacing social links', error)),
     );
   }
 
   // ── Privados ────────────────────────────────────────────────────────────
 
-  private readRecord<T>(key: string): Record<string, T> {
-    const raw = localStorage.getItem(key);
-    if (!raw) return {};
-    try { return JSON.parse(raw) as Record<string, T>; } catch { return {}; }
+  private replaceSwissPhases(championshipId: DbId, phases: CreatePhaseDto[]): Observable<Phase[]> {
+    return this.getPhases(String(championshipId)).pipe(
+      switchMap((existing) => {
+        const deletions = existing.map((phase) => this.deletePhase(Number(phase.id)).pipe(catchError(() => of(void 0))));
+        const afterDelete$ = deletions.length > 0 ? forkJoin(deletions).pipe(map(() => void 0)) : of(void 0);
+
+        return afterDelete$.pipe(
+          switchMap(() => {
+            const creates = phases.map((phase, index) => this.createSwissPhase(championshipId, phase, index + 1));
+            return creates.length > 0 ? forkJoin(creates) : of([] as Phase[]);
+          }),
+        );
+      }),
+      catchError((error) => this.handleError('Error saving phases', error)),
+    );
   }
 
-  private writeRecord(key: string, data: Record<string, unknown>): void {
-    localStorage.setItem(key, JSON.stringify(data));
+  private createSwissPhase(championshipId: DbId, phase: CreatePhaseDto, fallbackOrder: number): Observable<Phase> {
+    const createPayload: CreatePhaseApiDto = {
+      championshipId,
+      name: phase.name,
+      phaseType: phase.phaseType ?? 'swiss',
+      phaseOrder: phase.phaseOrder || fallbackOrder,
+      status: phase.status ?? PhaseStatus.Pending,
+      isActive: true,
+    };
+
+    return this.api.post<BackendPhase>('phases', createPayload).pipe(
+      map((created) => this.mapBackendPhase(created)),
+    );
   }
 
-  private getStoredSocialLinks(championshipId: string): SocialLink[] {
-    const stored = this.readRecord<SocialLink[]>(LS_SOCIAL_LINKS)[championshipId] ?? [];
-    return stored.map(link => ({
-      ...link,
-      championshipId: +championshipId,
-      socialNetwork: SOCIAL_NETWORKS.find(n => n.id === link.socialNetworkId),
-    }));
+  private mapBackendPhase(phase: BackendPhase): Phase {
+    const normalizedType = this.normalizePhaseType(phase.phaseType);
+    const swiss = (phase.swissConfig ?? phase.swiss ?? phase.configuration) as
+      | Record<string, unknown>
+      | null
+      | undefined;
+    return {
+      id: phase.id,
+      championshipId: phase.championshipId,
+      name: phase.name,
+      phaseType: normalizedType,
+      phaseOrder: Number(phase.phaseOrder) || 1,
+      status: this.normalizePhaseStatus(phase.status),
+      isActive: Boolean(phase.isActive ?? true),
+      swissConfig: normalizedType === PhaseType.Swiss && swiss
+        ? {
+          id: Number(swiss['id'] ?? phase.id),
+          phaseId: Number(swiss['phaseId'] ?? phase.id),
+          numRounds: Number(swiss['numRounds'] ?? 1),
+          pairingSystem: String(swiss['pairingSystem'] ?? 'dutch'),
+          firstRound: String(swiss['firstRound'] ?? 'random'),
+          allowRematch: Boolean(swiss['allowRematch'] ?? false),
+          tiebreakOrder: String(swiss['tiebreakOrder'] ?? ''),
+          directAdvancedCount: Number(swiss['directAdvancedCount'] ?? 0),
+          playoffCount: Number(swiss['playoffCount'] ?? 0),
+        }
+        : undefined,
+    };
+  }
+
+  private normalizePhaseType(value: string): PhaseType {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === PhaseType.League) return PhaseType.League;
+    if (normalized === PhaseType.Knockout) return PhaseType.Knockout;
+    if (normalized === PhaseType.Groups) return PhaseType.Groups;
+    return PhaseType.Swiss;
+  }
+
+  private normalizePhaseStatus(value: string): PhaseStatus {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === PhaseStatus.Active) return PhaseStatus.Active;
+    if (normalized === PhaseStatus.Finished) return PhaseStatus.Finished;
+    return PhaseStatus.Pending;
   }
 
   private normalizeTeamProfile(team: unknown, championshipId: string): TeamProfile {
@@ -470,7 +752,7 @@ export class ChampionshipService {
   }
 
   private getPlayersByTeamId(teamId: string): Observable<Player[]> {
-    return this.api.get<unknown>('players', { teamId }).pipe(
+    return this.api.get<unknown>('players/all', { teamId }).pipe(
       map((response) => this.extractCollection(response, 'players') as Player[]),
       catchError(() => of([])),
     );
@@ -483,9 +765,12 @@ export class ChampionshipService {
 
     if (response && typeof response === 'object') {
       const boxed = response as Record<string, unknown>;
-      const value = boxed[key];
-      if (Array.isArray(value)) {
-        return value;
+      // Intentar la clave específica primero, luego 'items' como fallback genérico
+      for (const k of [key, 'items']) {
+        const value = boxed[k];
+        if (Array.isArray(value)) {
+          return value;
+        }
       }
     }
 
@@ -530,6 +815,11 @@ export class ChampionshipService {
     };
 
     return byName[normalized] ?? ChampionshipStatus.Draft;
+  }
+
+  private toNumeric(value: unknown, fallback: number): number {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : fallback;
   }
 
   private handleError(message: string, error: unknown): Observable<never> {

@@ -126,6 +126,21 @@ export interface UpdatePlayerApiDto {
   suspensionReason?: string;
 }
 
+/** Payload operativo del frontend para crear/actualizar jugadores. */
+export interface PlayerUpsertDto {
+  teamId: string;
+  firstName: string;
+  lastName: string;
+  nickName?: string | null;
+  number: number;
+  birthDate?: string | null;
+  height?: number | null;
+  weight?: number | null;
+  positionId: number;
+  status: string;
+  photoUrl?: string | null;
+}
+
 
 // ─────────────────────────────────────────────────────────────
 // ENUMS

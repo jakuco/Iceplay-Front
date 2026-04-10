@@ -1,0 +1,120 @@
+{
+  "formats": {
+    "league": {
+      "phases": [
+        {
+          "name": "Fase de Liga",
+          "phaseType": "league",
+          "status": "pending",
+          "isBase": true,
+          "league": {
+            "winsPoints": 3,
+            "drawPoints": 1,
+            "lossPoints": 0,
+            "totalRounds": 10,
+            "legs": 1,
+            "tiebreakOrder": "points,goal_difference,goals_for,h2h,fair_play,draw",
+            "advanceCount": 4
+          }
+        }
+      ]
+    },
+    "groups_knockout": {
+      "phases": [
+        {
+          "name": "Fase de Grupos",
+          "phaseType": "groups",
+          "status": "pending",
+          "isBase": true,
+          "groups": {
+            "numGroups": 4,
+            "teamsPerGroup": 4,
+            "legs": 1,
+            "advancePerGroup": 2,
+            "advanceBestThirds": 0,
+            "tiebreakOrder": "points,diff,gf,h2h,random"
+          }
+        },
+        {
+          "name": "Fase Eliminatoria",
+          "phaseType": "knockout",
+          "status": "pending",
+          "isBase": true,
+          "knockout": {
+            "legs": 1,
+            "bracketSize": 8,
+            "thirdPlaceMatch": true,
+            "seeding": "ranking",
+            "awayGoalsRule": false,
+            "tieBreak": "penalties"
+          }
+        }
+      ]
+    },
+    "knockout": {
+      "phases": [
+        {
+          "name": "Fase Eliminatoria",
+          "phaseType": "knockout",
+          "status": "pending",
+          "isBase": true,
+          "knockout": {
+            "legs": 1,
+            "bracketSize": 8,
+            "thirdPlaceMatch": true,
+            "seeding": "ranking",
+            "awayGoalsRule": false,
+            "tieBreak": "penalties"
+          }
+        }
+      ]
+    },
+    "swiss_playoff": {
+      "phases": [
+        {
+          "name": "Fase Suiza",
+          "phaseType": "swiss",
+          "status": "pending",
+          "isBase": true,
+          "swiss": {
+            "numRounds": 7,
+            "pairingSystem": "random",
+            "firstRound": "random",
+            "allowRematch": false,
+            "tiebreakOrder": "points,goal_difference,goals_for,h2h,fair_play,draw",
+            "directAdvancedCount": 2,
+            "playoffCount": 4
+          }
+        },
+        {
+          "name": "Playoff",
+          "phaseType": "knockout",
+          "status": "pending",
+          "isBase": true,
+          "knockout": {
+            "legs": 1,
+            "bracketSize": 4,
+            "thirdPlaceMatch": false,
+            "seeding": "ranking",
+            "awayGoalsRule": false,
+            "tieBreak": "penalties"
+          }
+        },
+        {
+          "name": "Fase Eliminatoria",
+          "phaseType": "knockout",
+          "status": "pending",
+          "isBase": true,
+          "knockout": {
+            "legs": 1,
+            "bracketSize": 2,
+            "thirdPlaceMatch": false,
+            "seeding": "ranking",
+            "awayGoalsRule": false,
+            "tieBreak": "penalties"
+          }
+        }
+      ]
+    }
+  }
+}

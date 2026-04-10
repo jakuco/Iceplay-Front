@@ -1,5 +1,3 @@
-import { G } from "@angular/cdk/keycodes";
-
 const AUTH_BASE = "auth";
 // Backend confirmado: rutas montadas en plural (presentation/routes.ts)
 //   router.use('/api/players', ...), router.use('/api/teams', ...), router.use('/api/matches', ...)
@@ -9,6 +7,7 @@ const ORGANIZATIONS_BASE = "organizations";
 const SPORTS_BASE = "sports";
 const MATCHES_BASE = "matches";
 const CHAMPIONSHIPS_BASE = "championships";
+const PHASES_BASE = "phases";
 const FILES_BASE = "files";
 const STATISTICS_BASE = "statistics";
 
@@ -38,7 +37,7 @@ export const ApiEndpoints = {
      * ⚠️ Warning: Not implemented
      */
     BASE: ORGANIZATIONS_BASE,
-    BY_ID: (id: string) => {throw new Error('Not implemented') /*return `${ORGANIZATIONS_BASE}/${id}`*/}
+    BY_ID: (id: string) => { throw new Error('Not implemented') /*return `${ORGANIZATIONS_BASE}/${id}`*/ }
   },
 
   SPORTS: {
@@ -46,8 +45,8 @@ export const ApiEndpoints = {
      * ⚠️ Warning: Not implemented
      */
     BASE: SPORTS_BASE,
-    BY_ID: (id: string) => {throw new Error('Not implemented') /*return `${SPORTS_BASE}/${id}`*/},
-    DEFAULT_RULES: (id: string) => {throw new Error('Not implemented') /*return `${SPORTS_BASE}/${id}/default-rules`*/}
+    BY_ID: (id: string) => { throw new Error('Not implemented') /*return `${SPORTS_BASE}/${id}`*/ },
+    DEFAULT_RULES: (id: string) => { throw new Error('Not implemented') /*return `${SPORTS_BASE}/${id}/default-rules`*/ }
   },
 
   MATCHES: {
@@ -64,7 +63,6 @@ export const ApiEndpoints = {
   CHAMPIONSHIPS: {
     BASE: CHAMPIONSHIPS_BASE,
     ALL: `${CHAMPIONSHIPS_BASE}/all`,
-    SETUP: `${CHAMPIONSHIPS_BASE}/setup`,
     BY_ID: (id: string) => `${CHAMPIONSHIPS_BASE}/${id}`,
     DETAIL: (id: string) => `${CHAMPIONSHIPS_BASE}/${id}/detail`,
     TEAMS: (id: string) => `${CHAMPIONSHIPS_BASE}/${id}/teams`,
@@ -73,10 +71,16 @@ export const ApiEndpoints = {
 
     // Found these in some comments. No idea if they're actually needed or not.
     // Leaving them in as a unimplemented placeholder for now.
-    STATUS: (id: string) => {throw new Error('Not implemented') /*return `${CHAMPIONSHIPS_BASE}/${id}/status`*/},
-    PHASES: (id: string) => {throw new Error('Not implemented') /*return `${CHAMPIONSHIPS_BASE}/${id}/phases`*/},
-    RULES: (id: string) => {throw new Error('Not implemented') /*return `${CHAMPIONSHIPS_BASE}/${id}/rules`*/},
-    SOCIAL_LINKS: (id: string) => {throw new Error('Not implemented') /*return `${CHAMPIONSHIPS_BASE}/${id}/social-links`*/},
+    STATUS: (id: string) => { throw new Error('Not implemented') /*return `${CHAMPIONSHIPS_BASE}/${id}/status`*/ },
+    PHASES: (id: string) => { throw new Error('Not implemented') /*return `${CHAMPIONSHIPS_BASE}/${id}/phases`*/ },
+    RULES: (id: string) => { throw new Error('Not implemented') /*return `${CHAMPIONSHIPS_BASE}/${id}/rules`*/ },
+    SOCIAL_LINKS: (id: string) => { throw new Error('Not implemented') /*return `${CHAMPIONSHIPS_BASE}/${id}/social-links`*/ },
+  },
+
+  PHASES: {
+    BASE: PHASES_BASE,
+    BY_ID: (id: number | string) => `${PHASES_BASE}/${id}`,
+    SWISS: (id: number | string) => `${PHASES_BASE}/${id}/swiss`,
   },
 
   FILES: {
@@ -106,7 +110,7 @@ export const ApiEndpoints = {
     BASE: STATISTICS_BASE,
     TEAMS: {
       GENERAL: `${STATISTICS_BASE}/teams/general`,
-      HISTORY: (id: string) => {throw new Error('Not implemented') /*return `${STATISTICS_BASE}/teams/history/${id}`*/}
+      HISTORY: (id: string) => { throw new Error('Not implemented') /*return `${STATISTICS_BASE}/teams/history/${id}`*/ }
     },
     PLAYERS: {
       SCORERS: `${STATISTICS_BASE}/players/scorers`,
