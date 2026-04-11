@@ -32,6 +32,7 @@ import {
   UpdateChampionshipDto,
   UpdateChampionshipStatusDto,
 } from '../models/championship.model';
+import type { Position } from '../models/sport-config.model';
 import { TeamProfile, TeamUpsertDto } from '../models/team.model';
 import type { Player, PlayerUpsertDto } from '../models/player.model';
 import type { DbId } from '../models/db.types';
@@ -42,11 +43,18 @@ export class ChampionshipService {
 
   private _socialNetworks = signal<SocialNetwork[]>([]);
   private _loadingSocialNetworks = signal(false);
+  private _positions = signal<Position[]>([]);
+  private _loadingPositions = signal(false);
 
   readonly socialNetworks = this._socialNetworks.asReadonly();
   readonly loadingSocialNetworks = this._loadingSocialNetworks.asReadonly();
+  readonly positions = this._positions.asReadonly();
+  readonly loadingPositions = this._loadingPositions.asReadonly();
 
-  private loaded = { socialNetworks: false };
+  private loaded = {
+    socialNetworks: false,
+    positionsBySport: new Set<number>(),
+  };
 
   // ── Championship CRUD ──────────────────────────────────────────────────
 
@@ -269,34 +277,51 @@ export class ChampionshipService {
    * ]
    */
   getPhases(championshipId: string): Observable<Phase[]> {
-    return this.api.get<unknown>(`championships/${championshipId}/phases`).pipe(
+    return this.api.get<unknown>('phases/all/', { championshipId }).pipe(
       map((response) => this.extractCollection(response, 'phases') as BackendPhase[]),
       map((items) => items.map((item) => this.mapBackendPhase(item))),
       catchError((error) => this.handleError('Error fetching phases', error)),
     );
   }
 
-  getPhaseById(id: number): Observable<Phase> {
-    return this.api.get<BackendPhase>(`phases/${id}`).pipe(
-      map((phase) => this.mapBackendPhase(phase)),
-      catchError((error) => this.handleError('Error fetching phase', error)),
-    );
-  }
-
+  /**
+   * Crea fases en bloque para un campeonato.
+   *
+   * Contrato real:
+   * POST /phases/championship/:championshipId/bulk
+   *
+   * Body esperado:
+   * [
+   *   {
+   *     name: string,
+   *     phaseType: string,
+   *     phaseOrder: number,
+   *     status: string,
+   *     isActive: boolean,
+   *     config: Record<string, unknown>
+   *   }
+   * ]
+   *
+   * Nota: este método es BULK CREATE (agrega nuevas fases).
+   * No reemplaza ni elimina fases existentes.
+   */
   savePhases(championshipId: string, phases: CreatePhaseDto[]): Observable<Phase[]> {
-    return this.replaceSwissPhases(championshipId, phases);
+    const payload = phases.map((phase, index) => this.toPhaseBulkCreatePayload(phase, index + 1));
+
+    return this.api.post<BackendPhase[] | { phases: BackendPhase[] }>(
+      `phases/championship/${championshipId}/bulk`,
+      payload,
+    ).pipe(
+      map((response) => Array.isArray(response) ? response : response.phases ?? []),
+      map((items) => items.map((item) => this.mapBackendPhase(item))),
+      catchError((error) => this.handleError('Error bulk creating phases', error)),
+    );
   }
 
   createPhase(dto: CreatePhaseApiDto): Observable<Phase> {
     return this.api.post<BackendPhase>('phases', dto).pipe(
       map((phase) => this.mapBackendPhase(phase)),
       catchError((error) => this.handleError('Error creating phase', error)),
-    );
-  }
-
-  createPhaseSwiss(id: number, dto: PhaseSwissApiDto): Observable<unknown> {
-    return this.api.post<unknown>(`phases/${id}/swiss`, dto).pipe(
-      catchError((error) => this.handleError('Error creating swiss phase config', error)),
     );
   }
 
@@ -314,21 +339,9 @@ export class ChampionshipService {
     );
   }
 
-  updatePhaseSwiss(id: number, dto: PhaseSwissApiDto): Observable<unknown> {
-    return this.api.put<unknown>(`phases/${id}/swiss`, dto).pipe(
-      catchError((error) => this.handleError('Error updating swiss phase config', error)),
-    );
-  }
-
   deletePhase(id: number): Observable<void> {
     return this.api.delete<void>(`phases/${id}`).pipe(
       catchError((error) => this.handleError('Error deleting phase', error)),
-    );
-  }
-
-  deletePhaseSwiss(id: number): Observable<void> {
-    return this.api.delete<void>(`phases/${id}/swiss`).pipe(
-      catchError((error) => this.handleError('Error deleting swiss phase config', error)),
     );
   }
 
@@ -549,6 +562,42 @@ export class ChampionshipService {
     );
   }
 
+  /**
+   * Carga en memoria el catálogo de posiciones por deporte.
+   *
+   * Contrato real:
+   * GET /positions?sportId=:sportId
+   */
+  loadPositions(sportId: number): void {
+    const normalizedSportId = Number(sportId);
+    if (!Number.isFinite(normalizedSportId) || normalizedSportId <= 0) return;
+    if (this.loaded.positionsBySport.has(normalizedSportId)) return;
+
+    this.loaded.positionsBySport.add(normalizedSportId);
+    this._loadingPositions.set(true);
+
+    this.getPositions(normalizedSportId).subscribe({
+      next: (data) => {
+        this._positions.set(data);
+        this._loadingPositions.set(false);
+      },
+      error: () => {
+        this.loaded.positionsBySport.delete(normalizedSportId); // permitir reintento
+        this._loadingPositions.set(false);
+      },
+    });
+  }
+
+  getPositions(sportId: number): Observable<Position[]> {
+    return this.api.get<unknown>('positions', { sportId }).pipe(
+      map((response) => {
+        const items = this.extractCollection(response, 'positions');
+        return items.map((item) => item as Position);
+      }),
+      catchError(() => of([] as Position[])),
+    );
+  }
+
   getSocialLinks(championshipId: string): Observable<SocialLink[]> {
     const params = {
       championshipId,
@@ -627,36 +676,45 @@ export class ChampionshipService {
 
   // ── Privados ────────────────────────────────────────────────────────────
 
-  private replaceSwissPhases(championshipId: DbId, phases: CreatePhaseDto[]): Observable<Phase[]> {
-    return this.getPhases(String(championshipId)).pipe(
-      switchMap((existing) => {
-        const deletions = existing.map((phase) => this.deletePhase(Number(phase.id)).pipe(catchError(() => of(void 0))));
-        const afterDelete$ = deletions.length > 0 ? forkJoin(deletions).pipe(map(() => void 0)) : of(void 0);
+  /**
+   * Adapta el DTO interno al payload de bulk create requerido por backend.
+   */
+  private toPhaseBulkCreatePayload(phase: CreatePhaseDto, fallbackOrder: number): {
+    name: string;
+    phaseType: string;
+    phaseOrder: number;
+    status: string;
+    isActive: boolean;
+    config: Record<string, unknown>;
+  } {
+    const phaseType = String(phase.phaseType ?? PhaseType.Swiss).toLowerCase();
 
-        return afterDelete$.pipe(
-          switchMap(() => {
-            const creates = phases.map((phase, index) => this.createSwissPhase(championshipId, phase, index + 1));
-            return creates.length > 0 ? forkJoin(creates) : of([] as Phase[]);
-          }),
-        );
-      }),
-      catchError((error) => this.handleError('Error saving phases', error)),
-    );
-  }
-
-  private createSwissPhase(championshipId: DbId, phase: CreatePhaseDto, fallbackOrder: number): Observable<Phase> {
-    const createPayload: CreatePhaseApiDto = {
-      championshipId,
+    return {
       name: phase.name,
-      phaseType: phase.phaseType ?? 'swiss',
+      phaseType,
       phaseOrder: phase.phaseOrder || fallbackOrder,
       status: phase.status ?? PhaseStatus.Pending,
       isActive: true,
+      config: this.getPhaseBulkConfig(phase, phaseType),
     };
+  }
 
-    return this.api.post<BackendPhase>('phases', createPayload).pipe(
-      map((created) => this.mapBackendPhase(created)),
-    );
+  /**
+   * Deriva config según tipo de fase.
+   * Acepta "playoff" como alias de knockout para compatibilidad.
+   */
+  private getPhaseBulkConfig(phase: CreatePhaseDto, phaseType: string): Record<string, unknown> {
+    if (phaseType === PhaseType.Knockout || phaseType === 'playoff') {
+      return { ...(phase.knockoutConfig ?? {}) };
+    }
+    if (phaseType === PhaseType.Groups) {
+      return { ...(phase.groupsConfig ?? {}) };
+    }
+    if (phaseType === PhaseType.League) {
+      return { ...(phase.leagueConfig ?? {}) };
+    }
+
+    return { ...(phase.swissConfig ?? {}) };
   }
 
   private mapBackendPhase(phase: BackendPhase): Phase {

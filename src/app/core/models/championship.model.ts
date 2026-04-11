@@ -250,6 +250,7 @@ export interface CreateSocialLinkDto {
 
 /** UC: Crear fase */
 export interface CreatePhaseDto {
+  id?: DbId;  // solo para API endpoint PUT /phases/:id
   name: string;
   phaseType: PhaseType;
   phaseOrder: number;

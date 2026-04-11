@@ -89,7 +89,7 @@ interface NavTab { id: string; label: string; icon: string; count: number | null
 <div class="min-h-screen flex flex-col bg-[var(--mat-sys-surface)]">
 
   <!-- ══ TOPBAR ══════════════════════════════════════════════ -->
-  <mat-toolbar class="sticky top-0 z-50 !h-[52px] !px-7 !bg-[var(--mat-sys-surface-container-highest)]
+  <mat-toolbar class="sticky top-0 !h-[52px] !px-7 !bg-[var(--mat-sys-surface-container-highest)]
                       border-b border-[var(--mat-sys-outline-variant)] justify-between">
 
     <a class="inline-flex items-center gap-1.5 text-[13px] font-medium
@@ -151,7 +151,7 @@ interface NavTab { id: string; label: string; icon: string; count: number | null
 
   <!-- ══ NAV TABS ════════════════════════════════════════════ -->
   <mat-tab-group
-    class="championship-tabs flex-1"
+    class="championship-tabs flex-1 relative z-[1]"
     [selectedIndex]="activeTabIndex()"
     (selectedIndexChange)="onTabChange($event)"
     animationDuration="150ms"
@@ -724,10 +724,9 @@ export default class ChampionshipFormPage implements OnInit {
         // Cargar equipos del campeonato
         this.championshipSvc.getTeams(id).subscribe(profiles => {
           console.log('Teams loaded from backend:', profiles);
-          const mapped: TeamItem[] = profiles.map((p, teamIndex) => ({
-            id: this.toStableNumericId(p.id, teamIndex + 1),
-            backendId: String(p.id),
-            championshipId: this.toStableNumericId(p.championshipId, 0),
+          const mapped: TeamItem[] = profiles.map((p) => ({
+            id: p.id,
+            championshipId: p.championshipId,
             name: p.name,
             shortname: p.shortname,
             slug: p.slug,
@@ -736,24 +735,29 @@ export default class ChampionshipFormPage implements OnInit {
             primaryColor: p.primaryColor ?? '#1a56db',
             secondaryColor: p.secondaryColor ?? '#e5e7eb',
             location: p.location ?? '',
-            foundedYear: (p as any).foundedYear ?? null,
-            homeVenue: (p as any).homeVenue ?? '',
+            foundedYear: p.foundedYear ?? null,
+            homeVenue: p.homeVenue ?? '',
             coachName: p.coachName ?? '',
             coachPhone: p.coachPhone ?? '',
             isActive: p.isActive,
-            players: (p.players ?? []).map((pl, playerIndex) => ({
-              id: this.toStableNumericId(pl.id, (teamIndex + 1) * 1000 + playerIndex + 1),
-              teamId: this.toStableNumericId(pl.teamId, teamIndex + 1),
-              positionId: this.toStableNumericId(pl.positionId, 1),
+            players: (p.players ?? []).map((pl) => ({
+              id: pl.id,
+              teamId: pl.teamId,
+              positionId: pl.positionId,
               firstName: pl.firstName,
               lastName: pl.lastName,
               nickName: pl.nickName ?? null,
               number: pl.number,
-              birthDate: pl.birthDate ? String(pl.birthDate) : null,
+              birthDate: pl.birthDate,
               height: pl.height ?? null,
               weight: pl.weight ?? null,
               status: (pl.status as TeamItem['players'][number]['status']) ?? 'active',
-              photoUrl: (pl as any).photoUrl ?? null,
+              photoUrl: pl.photoUrl ?? null,
+              suspensionEndDate: pl.suspensionEndDate ?? null,
+              suspensionReason: pl.suspensionReason ?? null,
+              isActive: pl.isActive ?? true,
+              createdAt: pl.createdAt ?? new Date(),
+              updatedAt: pl.updatedAt ?? new Date(),
             })),
           }));
           this.teamsData.set(mapped);
@@ -846,29 +850,6 @@ export default class ChampionshipFormPage implements OnInit {
     if (category === 'players') return 'Jugadores';
     if (category === 'match') return 'Partido';
     return 'Opciones Adicionales';
-  }
-
-  private toStableNumericId(value: unknown, fallback: number): number {
-    if (typeof value === 'number' && Number.isFinite(value)) {
-      return value;
-    }
-
-    const asNumber = Number(value);
-    if (Number.isFinite(asNumber)) {
-      return asNumber;
-    }
-
-    const text = String(value ?? '').trim();
-    if (!text) {
-      return fallback;
-    }
-
-    // Deterministic 32-bit hash for UUID/string ids to keep UI keys stable.
-    let hash = 0;
-    for (let i = 0; i < text.length; i++) {
-      hash = ((hash << 5) - hash + text.charCodeAt(i)) | 0;
-    }
-    return Math.abs(hash) || fallback;
   }
 
   private isHttpsUrl(value: string): boolean {

@@ -73,16 +73,40 @@ export interface PhaseCardData {
 // ─────────────────────────────────────────────────────────────
 
 const TYPE_META: Record<PhaseType, { label: string; tw: string }> = {
-  [PhaseType.League]: { label: 'Liga', tw: 'bg-blue-100  text-blue-700' },
-  [PhaseType.Knockout]: { label: 'Eliminatoria', tw: 'bg-orange-100 text-orange-700' },
-  [PhaseType.Groups]: { label: 'Grupos', tw: 'bg-purple-100 text-purple-700' },
-  [PhaseType.Swiss]: { label: 'Suizo', tw: 'bg-emerald-100 text-emerald-700' },
+  [PhaseType.League]: {
+    label: 'Liga',
+    tw: 'bg-[var(--mat-sys-surface-container-high)] text-[var(--mat-sys-primary)]',
+  },
+  [PhaseType.Knockout]: {
+    label: 'Eliminatoria',
+    tw: 'bg-[var(--mat-sys-surface-container-high)] text-[var(--mat-sys-on-surface)]',
+  },
+  [PhaseType.Groups]: {
+    label: 'Grupos',
+    tw: 'bg-[var(--mat-sys-surface-container-high)] text-[var(--mat-sys-primary)]',
+  },
+  [PhaseType.Swiss]: {
+    label: 'Suizo',
+    tw: 'bg-[var(--mat-sys-surface-container-high)] text-[var(--mat-sys-primary)]',
+  },
 };
 
 const STATUS_META: Record<PhaseStatus, { label: string; dotTw: string; pillTw: string }> = {
-  [PhaseStatus.Active]: { label: 'En Curso', dotTw: 'bg-green-500', pillTw: 'bg-green-50  text-green-700  ring-green-200' },
-  [PhaseStatus.Pending]: { label: 'Pendiente', dotTw: 'bg-amber-400', pillTw: 'bg-amber-50  text-amber-700  ring-amber-200' },
-  [PhaseStatus.Finished]: { label: 'Finalizado', dotTw: 'bg-slate-400', pillTw: 'bg-slate-100 text-slate-600  ring-slate-200' },
+  [PhaseStatus.Active]: {
+    label: 'En Curso',
+    dotTw: 'bg-[var(--mat-sys-primary)]',
+    pillTw: 'bg-[var(--mat-sys-surface-container-high)] text-[var(--mat-sys-primary)] ring-[var(--mat-sys-outline-variant)]',
+  },
+  [PhaseStatus.Pending]: {
+    label: 'Pendiente',
+    dotTw: 'bg-[var(--mat-sys-outline)]',
+    pillTw: 'bg-[var(--mat-sys-surface-container-high)] text-[var(--mat-sys-on-surface-variant)] ring-[var(--mat-sys-outline-variant)]',
+  },
+  [PhaseStatus.Finished]: {
+    label: 'Finalizado',
+    dotTw: 'bg-[var(--mat-sys-outline)]',
+    pillTw: 'bg-[var(--mat-sys-surface-container-high)] text-[var(--mat-sys-on-surface-variant)] ring-[var(--mat-sys-outline-variant)]',
+  },
 };
 
 function knockoutRounds(bracketSize: number): string {
@@ -255,14 +279,20 @@ export class PhaseCardComponent {
 
   activeBorderClass(): string {
     const s = this.phase().status;
-    if (s === PhaseStatus.Active) return 'border-blue-300 shadow-[inset_3px_0_0_0_#3b82f6]';
+    if (s === PhaseStatus.Active) {
+      return 'border-[var(--mat-sys-outline)] shadow-[inset_3px_0_0_0_var(--mat-sys-primary)]';
+    }
     return 'border-[var(--mat-sys-outline-variant)]';
   }
 
   orderBadgeClass(): string {
     const s = this.phase().status;
-    if (s === PhaseStatus.Active) return 'border-[var(--mat-sys-outline-variant)] bg-blue-50  text-blue-500';
-    if (s === PhaseStatus.Pending) return 'border-[var(--mat-sys-outline-variant)] bg-amber-50 text-amber-500';
+    if (s === PhaseStatus.Active) {
+      return 'border-[var(--mat-sys-outline-variant)] bg-[var(--mat-sys-surface-container-high)] text-[var(--mat-sys-primary)]';
+    }
+    if (s === PhaseStatus.Pending) {
+      return 'border-[var(--mat-sys-outline-variant)] bg-[var(--mat-sys-surface-container-high)] text-[var(--mat-sys-on-surface-variant)]';
+    }
     return 'border-[var(--mat-sys-outline-variant)] bg-[var(--mat-sys-surface-container-low)] text-[var(--mat-sys-on-surface-variant)]';
   }
 }

@@ -165,7 +165,7 @@ export interface Team {
 
   // Estado operacional
   isActive: boolean;
-  hasActiveMatches: boolean;
+  hasActiveMatches?: boolean;
   isTeamActive?: boolean;
 
   /**
@@ -173,13 +173,14 @@ export interface Team {
    * El service los sintetiza con `new Date()` al construir TeamProfile.
    * No se puede confiar en su valor real.
    */
-  createdAt: Date;
-  updatedAt: Date;
+  createdAt?: Date;
+  updatedAt?: Date;
 
   // Relaciones opcionales
   championship?: Pick<Championship, 'id' | 'name' | 'slug' | 'maxPlayersPerTeam'>;
   players?: Player[];
   groups?: TeamGroupTeam[];
+
 }
 
 

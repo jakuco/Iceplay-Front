@@ -346,7 +346,7 @@ const DDMMYYYY_FORMATS = {
 <!-- ══ HEADER ════════════════════════════════════════════════ -->
 <header
   class="relative flex gap-5 items-start px-7 pt-6 pb-5"
-  style="background: radial-gradient(ellipse 55% 90% at 90% 10%, rgba(56,110,229,0.1) 0%, transparent 70%), linear-gradient(165deg, #0c1526 0%, #0f1d35 50%, #0c1728 100%);"
+  style="background: radial-gradient(ellipse 55% 90% at 90% 10%, color-mix(in srgb, var(--mat-sys-primary) 20%, transparent) 0%, transparent 72%), linear-gradient(165deg, color-mix(in srgb, var(--mat-sys-surface-container-highest) 82%, black) 0%, color-mix(in srgb, var(--mat-sys-surface-container-high) 74%, black) 52%, color-mix(in srgb, var(--mat-sys-surface-container) 78%, black) 100%);"
 >
 
   <!-- ── Logo ──────────────────────────────────────────────── -->
@@ -454,9 +454,9 @@ const DDMMYYYY_FORMATS = {
     </div>
 
     <!-- Row 1.5 — Social links compactos (debajo del titulo) -->
-    <div class="flex flex-wrap items-center gap-1.5">
+    <div class="flex flex-wrap items-center gap-2">
       @for (link of socialLinksView(); track link.socialNetworkId) {
-        <div class="relative">
+        <div class="relative pr-3">
           <a
             [href]="link.link"
             target="_blank"
@@ -472,24 +472,28 @@ const DDMMYYYY_FORMATS = {
           </a>
 
           @if (editable()) {
-            <button
-              matIconButton
-              type="button"
-              class="!absolute !-top-1 !-right-1 !size-3.5 !min-w-0 !min-h-0 !p-0"
-              (click)="startEditSocialLink(link)"
-              aria-label="Editar red social"
-            >
-              <mat-icon class="!size-[9px] !text-[9px] text-white/80">edit</mat-icon>
-            </button>
-            <button
-              matIconButton
-              type="button"
-              class="!absolute !-bottom-1 !-right-1 !size-3.5 !min-w-0 !min-h-0 !p-0"
-              (click)="removeSocialLink(link.socialNetworkId)"
-              aria-label="Eliminar red social"
-            >
-              <mat-icon class="!size-[9px] !text-[9px] text-red-200">close</mat-icon>
-            </button>
+            <div class="absolute right-0 top-1/2 -translate-y-1/2 flex flex-col gap-1">
+              <button
+                type="button"
+                class="size-4.5 rounded-md border border-white/30 bg-black/35 text-white/90
+                       flex items-center justify-center transition-colors hover:bg-black/55 hover:text-white"
+                (click)="startEditSocialLink(link)"
+                matTooltip="Editar enlace"
+                aria-label="Editar red social"
+              >
+                <mat-icon class="!size-[10px] !text-[10px]">edit</mat-icon>
+              </button>
+              <button
+                type="button"
+                class="size-4.5 rounded-md border border-red-300/70 bg-red-500/25 text-red-100
+                       flex items-center justify-center transition-colors hover:bg-red-500/45 hover:text-white"
+                (click)="removeSocialLink(link.socialNetworkId)"
+                matTooltip="Eliminar enlace"
+                aria-label="Eliminar red social"
+              >
+                <mat-icon class="!size-[10px] !text-[10px]">close</mat-icon>
+              </button>
+            </div>
           }
         </div>
       }

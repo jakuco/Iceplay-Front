@@ -18,54 +18,55 @@ import {
 import { FormsModule } from '@angular/forms';
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
+import { ChampionshipService } from '@core/services/championship.service';
+import { DbId, Position } from '@core/models';
 
 // ─── Types ───────────────────────────────────────────────────
 
 export interface PositionOption {
-  id:           number;
-  code:         string;
-  label:        string;
+  id: number;
+  code: string;
+  label: string;
   abbreviation: string;
 }
 
 export interface PlayerFormData {
-  id?:          number;   // undefined = nuevo jugador
-  /** UUID del backend — presente cuando el jugador ya existe en la BD. */
-  backendId?:   string;
-  teamId:       number;
-  positionId:   number;
-  firstName:    string;
-  lastName:     string;
-  nickName:     string;
-  number:       number | null;
-  birthDate:    string;  // YYYY-MM-DD
-  height:       number | null;
-  weight:       number | null;
-  status:       'active' | 'suspended' | 'injured' | 'inactive';
-  photoUrl?:    string | null;  // URL persistida (viene del backend)
-  photoFile?:   File;           // transient — solo para upload/preview
+  /** Backend UUID o prefijo 'temp-' para jugadores locales. undefined = nuevo jugador. */
+  id?: string;
+  teamId: DbId;
+  positionId: number;
+  firstName: string;
+  lastName: string;
+  nickName: string;
+  number: number | null;
+  birthDate: string;  // YYYY-MM-DD
+  height: number | null;
+  weight: number | null;
+  status: 'active' | 'suspended' | 'injured' | 'inactive';
+  photoUrl?: string | null;  // URL persistida (viene del backend)
+  photoFile?: File;           // transient — solo para upload/preview
 }
 
 // ⚠️ MOCK — reemplazar con GET /sports/:sportId/positions
 export const MOCK_POSITIONS: PositionOption[] = [
-  { id: 1, code: 'GK',  label: 'Portero',       abbreviation: 'POR' },
-  { id: 2, code: 'DF',  label: 'Defensa',        abbreviation: 'DEF' },
-  { id: 3, code: 'MF',  label: 'Mediocampista',  abbreviation: 'MED' },
-  { id: 4, code: 'FW',  label: 'Delantero',      abbreviation: 'DEL' },
+  { id: 1, code: 'GK', label: 'Portero', abbreviation: 'POR' },
+  { id: 2, code: 'DF', label: 'Defensa', abbreviation: 'DEF' },
+  { id: 3, code: 'MF', label: 'Mediocampista', abbreviation: 'MED' },
+  { id: 4, code: 'FW', label: 'Delantero', abbreviation: 'DEL' },
 ];
 
-const DEFAULT_FORM = (teamId: number): PlayerFormData => ({
+const DEFAULT_FORM = (teamId: DbId): PlayerFormData => ({
   teamId,
   positionId: 1,
-  firstName:  '',
-  lastName:   '',
-  nickName:   '',
-  number:     null,
-  birthDate:  '',
-  height:     null,
-  weight:     null,
-  status:     'active',
-  photoUrl:   null,
+  firstName: '',
+  lastName: '',
+  nickName: '',
+  number: null,
+  birthDate: '',
+  height: null,
+  weight: null,
+  status: 'active',
+  photoUrl: null,
 });
 
 // ─────────────────────────────────────────────────────────────
@@ -75,7 +76,6 @@ const DEFAULT_FORM = (teamId: number): PlayerFormData => ({
 @Component({
   selector: 'app-player-modal',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  standalone: true,
   imports: [FormsModule, MatIconModule, MatButtonModule],
   template: `
 <!-- Backdrop -->
@@ -205,7 +205,7 @@ const DEFAULT_FORM = (teamId: number): PlayerFormData => ({
             type="number"
             [(ngModel)]="form.number"
             placeholder="Ej: 10"
-            min="1" max="99"
+            min="0" max="99"
           />
         </div>
       </div>
@@ -334,29 +334,31 @@ export class PlayerModalComponent implements OnInit {
 
   // ── Inputs ────────────────────────────────────────────────────
   /** Si se pasa un jugador existente → modo edición. Si no → modo creación. */
-  readonly player    = input<PlayerFormData | null>(null);
-  readonly teamId    = input.required<number>();
-  readonly positions = input<PositionOption[]>(MOCK_POSITIONS);
+  readonly player = input<PlayerFormData | null>(null);
+  readonly teamId = input.required<DbId>();
 
   // ── Outputs ───────────────────────────────────────────────────
-  readonly saved   = output<PlayerFormData>();
-  readonly deleted = output<{ numericId: number; backendId?: string }>();
+  readonly saved = output<PlayerFormData>();
+  readonly deleted = output<{ id: string | undefined }>();
   readonly dismiss = output<void>();
 
   // ── Services ──────────────────────────────────────────────────
   private cdr = inject(ChangeDetectorRef);
+  private championshipSvc = inject(ChampionshipService);
 
   // ── State ─────────────────────────────────────────────────────
   form: PlayerFormData = DEFAULT_FORM(0);
   showErrors = signal(false);
-  photoUrl   = signal<string | null>(null);
+  photoUrl = signal<string | null>(null);
 
   isEdit = computed(() => !!this.player()?.id);
+
+  positions = signal<Position[]>(this.championshipSvc.positions());
 
   get isValid(): boolean {
     return (
       this.form.firstName.trim().length > 0 &&
-      this.form.lastName.trim().length > 0  &&
+      this.form.lastName.trim().length > 0 &&
       this.form.number !== null
     );
   }
@@ -389,9 +391,7 @@ export class PlayerModalComponent implements OnInit {
   }
 
   onDelete(): void {
-    if (this.form.id !== undefined) {
-      this.deleted.emit({ numericId: this.form.id, backendId: this.form.backendId });
-    }
+    this.deleted.emit({ id: this.form.id });
   }
 
   onBackdropClick(e: MouseEvent): void {
