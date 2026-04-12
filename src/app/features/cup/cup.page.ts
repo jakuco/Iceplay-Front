@@ -811,7 +811,7 @@ export default class CupPage {
             }
 
             return this.championshipService
-              .getChampionshipDetail(String(championshipId))
+              .getChampionshipById(String(championshipId))
               .pipe(map((detail: unknown) => this.toChampionshipDetailResponse(detail)));
           }),
         ),

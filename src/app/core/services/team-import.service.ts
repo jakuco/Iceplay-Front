@@ -227,7 +227,7 @@ export class TeamImportService {
       const lastName = this.getStringByAliases(row, PLAYER_LAST_NAME_ALIASES);
       const firstName = this.getStringByAliases(row, PLAYER_FIRST_NAME_ALIASES);
 
-      if (isNaN(number) || number < 1 || number > 99) {
+      if (isNaN(number) || number < 0 || number > 99) {
         pErrors.push({ row: rowNum, field: 'numero', message: `Número de camiseta inválido: "${numRaw}"` });
       }
       if (!firstName) {

@@ -342,7 +342,7 @@ export default class ChampionshipsListPage {
   }
 
   updateChampionshipStatus(championshipId: number, newStatus: ChampionshipStatus): void {
-    this.championshipService.updateStatus(String(championshipId), { status: newStatus }).subscribe({
+    this.championshipService.patch(String(championshipId), { status: newStatus }).subscribe({
       next: (updatedChampionship) => {
         // El backend devuelve solo { id, name, status, season } — parcheamos
         // únicamente el campo status en el objeto existente de la lista.

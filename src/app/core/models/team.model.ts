@@ -110,6 +110,24 @@ export interface UpdateTeamApiDto {
   isActive?: boolean;
 }
 
+/** Payload operativo del frontend para crear/actualizar equipos. */
+export interface TeamUpsertDto {
+  championshipId: string;
+  name: string;
+  shortname: string;
+  slug: string;
+  logoUrl?: string | null;
+  documentUrl?: string | null;
+  primaryColor?: string | null;
+  secondaryColor?: string | null;
+  foundedYear?: number | null;
+  homeVenue?: string | null;
+  location?: string | null;
+  coachName?: string | null;
+  coachPhone?: string | null;
+  isActive?: boolean;
+}
+
 
 // ─────────────────────────────────────────────────────────────
 // ENTIDAD PRINCIPAL (tipo frontend)
@@ -149,7 +167,7 @@ export interface Team {
 
   // Estado operacional
   isActive: boolean;
-  hasActiveMatches: boolean;
+  hasActiveMatches?: boolean;
   isTeamActive?: boolean;
 
   /**
@@ -157,13 +175,14 @@ export interface Team {
    * El service los sintetiza con `new Date()` al construir TeamProfile.
    * No se puede confiar en su valor real.
    */
-  createdAt: Date;
-  updatedAt: Date;
+  createdAt?: Date;
+  updatedAt?: Date;
 
   // Relaciones opcionales
   championship?: Pick<Championship, 'id' | 'name' | 'slug' | 'maxPlayersPerTeam'>;
   players?: Player[];
   groups?: TeamGroupTeam[];
+
 }
 
 

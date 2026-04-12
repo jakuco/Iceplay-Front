@@ -22,9 +22,15 @@ import {
   signal,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { forkJoin, of } from 'rxjs';
+import { finalize } from 'rxjs/operators';
 import { MatIconModule } from '@angular/material/icon';
+import { MatButtonModule } from '@angular/material/button';
+import { MatCheckboxModule } from '@angular/material/checkbox';
+import { MAT_DIALOG_DATA, MatDialog, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { PhaseCardComponent, PhaseCardData, PhaseType, PhaseStatus } from './phase-card.component';
+import { ChampionshipService } from '../../../../../core/services/championship.service';
 
 // ─────────────────────────────────────────────────────────────
 // TYPES
@@ -44,6 +50,19 @@ interface FormatOption {
   description: string;
   icon: string;
   phases: string[];   // resumen de fases que genera
+}
+
+type PhaseTemplate = Omit<PhaseCardData, 'id' | 'phaseOrder'> & {
+  phaseOrder?: number;
+};
+
+interface PhaseTemplatesJson {
+  formats?: Partial<Record<ChampionshipFormat, { phases?: PhaseTemplate[] }>>;
+}
+
+interface SavePhaseDialogData {
+  phaseName: string;
+  withConfig: boolean;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -93,44 +112,90 @@ const COMMON_TIEBREAK_LABELS = [
   'Sorteo',
 ];
 
-const BASE_PHASES: Record<ChampionshipFormat, () => PhaseCardData[]> = {
-  league: () => [{
-    id: 1, name: 'Fase de Liga', phaseType: PhaseType.League,
-    phaseOrder: 1, status: PhaseStatus.Pending, isBase: true,
+const PHASE_TEMPLATES_URL = '/championship-phase-templates.json';
+
+const DEFAULT_PHASE_TEMPLATES: Record<ChampionshipFormat, PhaseTemplate[]> = {
+  league: [{
+    name: 'Fase de Liga',
+    phaseType: PhaseType.League,
+    status: PhaseStatus.Pending,
+    isBase: true,
     league: { winsPoints: 3, drawPoints: 1, lossPoints: 0, totalRounds: 10, legs: 1, tiebreakOrder: LEAGUE_TIEBREAK_ORDER, advanceCount: 4 },
   }],
-  groups_knockout: () => [
+  groups_knockout: [
     {
-      id: 1, name: 'Fase de Grupos', phaseType: PhaseType.Groups,
-      phaseOrder: 1, status: PhaseStatus.Pending, isBase: true,
+      name: 'Fase de Grupos',
+      phaseType: PhaseType.Groups,
+      status: PhaseStatus.Pending,
+      isBase: true,
       groups: { numGroups: 4, teamsPerGroup: 4, legs: 1, advancePerGroup: 2, advanceBestThirds: 0, tiebreakOrder: 'points,diff,gf,h2h,random' },
     },
     {
-      id: 2, name: 'Fase Eliminatoria', phaseType: PhaseType.Knockout,
-      phaseOrder: 2, status: PhaseStatus.Pending, isBase: true,
+      name: 'Fase Eliminatoria',
+      phaseType: PhaseType.Knockout,
+      status: PhaseStatus.Pending,
+      isBase: true,
       knockout: { legs: 1, bracketSize: 8, thirdPlaceMatch: true, seeding: 'ranking', awayGoalsRule: false, tieBreak: 'penalties' },
     },
   ],
-  knockout: () => [{
-    id: 1, name: 'Fase Eliminatoria', phaseType: PhaseType.Knockout,
-    phaseOrder: 1, status: PhaseStatus.Pending, isBase: true,
+  knockout: [{
+    name: 'Fase Eliminatoria',
+    phaseType: PhaseType.Knockout,
+    status: PhaseStatus.Pending,
+    isBase: true,
     knockout: { legs: 1, bracketSize: 8, thirdPlaceMatch: true, seeding: 'ranking', awayGoalsRule: false, tieBreak: 'penalties' },
   }],
-  swiss_playoff: () => [
+  swiss_playoff: [
     {
-      id: 1, name: 'Fase Suiza', phaseType: PhaseType.Swiss,
-      phaseOrder: 1, status: PhaseStatus.Pending, isBase: true,
+      name: 'Fase Suiza',
+      phaseType: PhaseType.Swiss,
+      status: PhaseStatus.Pending,
+      isBase: true,
       swiss: { numRounds: 7, pairingSystem: SWISS_PAIRING_SYSTEM, firstRound: 'random', allowRematch: false, tiebreakOrder: SWISS_TIEBREAK_ORDER, directAdvancedCount: 2, playoffCount: 4 },
     },
     {
-      id: 2, name: 'Playoff', phaseType: PhaseType.Knockout,
-      phaseOrder: 2, status: PhaseStatus.Pending, isBase: true,
+      name: 'Playoff',
+      phaseType: PhaseType.Knockout,
+      status: PhaseStatus.Pending,
+      isBase: true,
       knockout: { legs: 1, bracketSize: 4, thirdPlaceMatch: false, seeding: 'ranking', awayGoalsRule: false, tieBreak: 'penalties' },
     },
   ],
 };
 
 let _nextPhaseId = 100;
+
+@Component({
+  selector: 'app-save-phase-dialog',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [MatDialogModule, MatButtonModule],
+  template: `
+    <h2 mat-dialog-title>Confirmar guardado</h2>
+    <mat-dialog-content>
+      <p class="m-0 text-[14px] text-[var(--mat-sys-on-surface)]">
+        Se guardará la fase "{{ data.phaseName }}"
+        {{ data.withConfig ? 'con configuración.' : 'sin configuración.' }}
+      </p>
+      @if (!data.withConfig) {
+        <p class="m-0 mt-2 text-[12px] text-[var(--mat-sys-on-surface-variant)]">
+          Podrás completar su configuración más adelante.
+        </p>
+      }
+    </mat-dialog-content>
+    <mat-dialog-actions align="end">
+      <button matButton (click)="close(false)" type="button">Cancelar</button>
+      <button matButton="filled" (click)="close(true)" type="button">Guardar</button>
+    </mat-dialog-actions>
+  `,
+})
+export class SavePhaseDialogComponent {
+  readonly data = inject<SavePhaseDialogData>(MAT_DIALOG_DATA);
+  private readonly dialogRef = inject(MatDialogRef<SavePhaseDialogComponent, boolean>);
+
+  close(confirmed: boolean): void {
+    this.dialogRef.close(confirmed);
+  }
+}
 
 // ─────────────────────────────────────────────────────────────
 // COMPONENT
@@ -140,7 +205,7 @@ let _nextPhaseId = 100;
   selector: 'app-championship-phases',
   changeDetection: ChangeDetectionStrategy.OnPush,
   standalone: true,
-  imports: [FormsModule, MatIconModule, PhaseCardComponent],
+  imports: [FormsModule, MatIconModule, MatButtonModule, MatCheckboxModule, PhaseCardComponent],
   template: `
 <div class="max-w-[960px] mx-auto px-7 pt-7 pb-8">
 
@@ -149,10 +214,10 @@ let _nextPhaseId = 100;
     <div class="flex flex-col gap-6">
 
       <div>
-        <h2 class="text-[1.05rem] font-bold text-gray-900 m-0 mb-1">
+        <h2 class="text-[1.05rem] font-bold text-[var(--mat-sys-on-surface)] m-0 mb-1">
           Selecciona el formato del campeonato
         </h2>
-        <p class="text-[13px] text-gray-500 m-0">
+        <p class="text-[13px] text-[var(--mat-sys-on-surface-variant)] m-0">
           Esto define las fases base. Puedes agregar fases adicionales después.
         </p>
       </div>
@@ -161,11 +226,12 @@ let _nextPhaseId = 100;
         @for (fmt of formatOptions; track fmt.id) {
           <button
             class="flex flex-col gap-3 p-5 rounded-xl border-2 text-left cursor-pointer
-                   transition-all hover:border-blue-300 hover:bg-blue-50/50 group"
+                   transition-all group"
             [class.border-blue-500]="selectedFormat() === fmt.id"
-            [class.bg-blue-50]="selectedFormat() === fmt.id"
-            [class.border-gray-200]="selectedFormat() !== fmt.id"
-            [class.bg-white]="selectedFormat() !== fmt.id"
+            [style.border-color]="selectedFormat() !== fmt.id ? 'var(--mat-sys-outline-variant)' : ''"
+            [style.background]="selectedFormat() === fmt.id
+              ? 'rgba(59,130,246,0.1)'
+              : 'var(--mat-sys-surface-container)'"
             (click)="selectedFormat.set(fmt.id)"
             type="button"
           >
@@ -174,26 +240,27 @@ let _nextPhaseId = 100;
                 class="size-9 rounded-lg flex items-center justify-center shrink-0 transition-colors"
                 [class.bg-blue-500]="selectedFormat() === fmt.id"
                 [class.text-white]="selectedFormat() === fmt.id"
-                [class.bg-gray-100]="selectedFormat() !== fmt.id"
-                [class.text-gray-500]="selectedFormat() !== fmt.id"
+                [style.background]="selectedFormat() !== fmt.id ? 'var(--mat-sys-surface-container-high)' : ''"
+                [style.color]="selectedFormat() !== fmt.id ? 'var(--mat-sys-on-surface-variant)' : ''"
               >
                 <mat-icon class="!size-[18px] !text-[18px]">{{ fmt.icon }}</mat-icon>
               </div>
-              <span class="text-[14px] font-bold text-gray-900">{{ fmt.label }}</span>
+              <span class="text-[14px] font-bold text-[var(--mat-sys-on-surface)]">{{ fmt.label }}</span>
               @if (selectedFormat() === fmt.id) {
                 <mat-icon class="!size-4 !text-[16px] text-blue-500 ml-auto">check_circle</mat-icon>
               }
             </div>
 
-            <p class="m-0 text-[12.5px] text-gray-500 leading-relaxed">{{ fmt.description }}</p>
+            <p class="m-0 text-[12.5px] text-[var(--mat-sys-on-surface-variant)] leading-relaxed">{{ fmt.description }}</p>
 
             <!-- Phase preview chips -->
             <div class="flex flex-wrap gap-1.5">
-              @for (ph of fmt.phases; track ph) {
-                <span class="text-[10.5px] font-semibold px-2 py-0.5 rounded-full
-                             bg-gray-100 text-gray-600">
-                  {{ ph }}
-                </span>
+              @for (ph of formatPreview(fmt.id); track ph) {
+                <span
+                  class="text-[10.5px] font-semibold px-2 py-0.5 rounded-full"
+                  [style.background]="selectedFormat() === fmt.id ? 'rgba(59,130,246,0.2)' : 'var(--mat-sys-surface-container-high)'"
+                  [style.color]="selectedFormat() === fmt.id ? '#1d4ed8' : 'var(--mat-sys-on-surface-variant)'"
+                >{{ ph }}</span>
               }
             </div>
           </button>
@@ -201,15 +268,8 @@ let _nextPhaseId = 100;
       </div>
 
       <div class="flex justify-end gap-2.5">
-        <button
-          class="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-lg bg-blue-500
-                 text-white text-[13px] font-semibold border-none cursor-pointer
-                 hover:bg-blue-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-          [disabled]="!selectedFormat()"
-          (click)="applyFormat()"
-          type="button"
-        >
-          <mat-icon class="!size-4 !text-[16px]">check</mat-icon>
+        <button matButton="filled" [disabled]="!selectedFormat()" (click)="applyFormat()" type="button">
+          <mat-icon>check</mat-icon>
           Confirmar formato
         </button>
       </div>
@@ -225,7 +285,7 @@ let _nextPhaseId = 100;
       <div class="flex items-start justify-between gap-4">
         <div>
           <div class="flex items-center gap-2.5">
-            <h2 class="text-[1rem] font-bold text-gray-900 m-0">Flujo de Competición</h2>
+            <h2 class="text-[1rem] font-bold text-[var(--mat-sys-on-surface)] m-0">Flujo de Competición</h2>
             <!-- Format badge -->
             <span class="inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1
                          rounded-full bg-blue-100 text-blue-700 border border-blue-200">
@@ -233,26 +293,21 @@ let _nextPhaseId = 100;
               {{ formatLabel() }}
             </span>
             <button
-              class="text-[11px] text-gray-400 underline cursor-pointer bg-transparent
-                     border-none hover:text-gray-600 transition-colors"
+              class="text-[11px] text-[var(--mat-sys-on-surface-variant)] underline cursor-pointer bg-transparent
+                     border-none hover:text-[var(--mat-sys-on-surface)] transition-colors"
               (click)="changeFormat()"
               type="button"
               title="Cambiar formato resetea las fases base"
             >Cambiar formato</button>
           </div>
-          <p class="text-[13px] text-gray-500 m-0 mt-0.5">
+          <p class="text-[13px] text-[var(--mat-sys-on-surface-variant)] m-0 mt-0.5">
             Arrastra las fases para reordenarlas. Las fases base
-            <mat-icon class="!size-3 !text-[12px] text-gray-400 inline-block align-middle">lock</mat-icon>
+            <mat-icon class="!size-3 !text-[12px] text-[var(--mat-sys-on-surface-variant)] inline-block align-middle">lock</mat-icon>
             no se pueden eliminar.
           </p>
         </div>
-        <button
-          class="inline-flex items-center gap-1.5 px-[18px] py-2 rounded-lg
-                 bg-blue-500 text-white text-[13px] font-semibold border-none
-                 cursor-pointer hover:bg-blue-600 transition-colors shrink-0"
-          (click)="addPhase()"
-        >
-          <mat-icon class="!size-4 !text-[16px]">add</mat-icon>
+        <button matButton="filled" (click)="addPhase()">
+          <mat-icon>add</mat-icon>
           Agregar Fase
         </button>
       </div>
@@ -277,13 +332,13 @@ let _nextPhaseId = 100;
             @if (ph.isBase) {
               <div class="absolute -left-6 top-1/2 -translate-y-1/2 flex flex-col items-center
                           gap-0.5 pointer-events-none">
-                <div class="w-px flex-1 bg-gray-300"></div>
+                <div class="w-px flex-1 bg-[var(--mat-sys-outline)]"></div>
                 <mat-icon
-                  class="!size-3.5 !text-[14px] text-gray-300"
+                  class="!size-3.5 !text-[14px] text-[var(--mat-sys-outline)]"
                   [title]="'Fase base del formato ' + formatLabel() + ' — no se puede eliminar'"
                 >lock</mat-icon>
                 @if (idx < phases().length - 1) {
-                  <div class="w-px h-3 bg-gray-300"></div>
+                  <div class="w-px h-3 bg-[var(--mat-sys-outline)]"></div>
                 }
               </div>
             }
@@ -292,8 +347,8 @@ let _nextPhaseId = 100;
             <div class="flex items-start gap-2">
               @if (!ph.isBase) {
                 <div
-                  class="mt-4 cursor-grab active:cursor-grabbing text-gray-300
-                         hover:text-gray-500 transition-colors select-none shrink-0 py-1"
+                  class="mt-4 cursor-grab active:cursor-grabbing text-[var(--mat-sys-outline)]
+                         hover:text-[var(--mat-sys-on-surface-variant)] transition-colors select-none shrink-0 py-1"
                   title="Arrastra para reordenar"
                 >
                   <mat-icon class="!size-5 !text-[20px]">drag_indicator</mat-icon>
@@ -322,23 +377,8 @@ let _nextPhaseId = 100;
       </div>
 
       <!-- Footer -->
-      <div class="flex justify-end gap-2.5 pt-4 border-t border-gray-200">
-        <button
-          class="inline-flex items-center gap-1.5 px-[18px] py-2 rounded-lg
-                 bg-white text-gray-700 text-[13px] font-medium border border-gray-300
-                 cursor-pointer hover:bg-gray-50"
-          (click)="cancel.emit()"
-        >Cancelar</button>
-        <button
-          class="inline-flex items-center gap-1.5 px-[18px] py-2 rounded-lg
-                 bg-blue-500 text-white text-[13px] font-semibold border-none
-                 cursor-pointer hover:bg-blue-600 disabled:opacity-40 disabled:cursor-not-allowed"
-          [disabled]="!hasUnsavedChanges()"
-          (click)="saveAll()"
-        >
-          <mat-icon class="!size-4 !text-[16px]">save</mat-icon>
-          Guardar todos los cambios
-        </button>
+      <div class="flex justify-end gap-2.5 pt-4 border-t border-[var(--mat-sys-outline-variant)]">
+        <button matButton (click)="cancel.emit()">Cancelar</button>
       </div>
     </div>
   }
@@ -350,15 +390,15 @@ let _nextPhaseId = 100;
       <!-- Breadcrumb -->
       <div class="flex items-center gap-2.5 flex-wrap">
         <button
-          class="inline-flex items-center gap-1 text-[13px] font-medium text-gray-600
+          class="inline-flex items-center gap-1 text-[13px] font-medium text-[var(--mat-sys-on-surface-variant)]
                  bg-transparent border-none cursor-pointer px-2 py-1 rounded-md
-                 hover:bg-gray-100 transition-colors"
+                 hover:bg-[var(--mat-sys-surface-container-high)] transition-colors"
           (click)="cancelEdit()"
         >
           <mat-icon class="!size-4 !text-[16px]">arrow_back</mat-icon>
           Todas las fases
         </button>
-        <span class="text-[15px] font-semibold text-gray-900">
+        <span class="text-[15px] font-semibold text-[var(--mat-sys-on-surface)]">
           {{ phaseForm.name || 'Nueva Fase' }}
         </span>
         <span class="rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide"
@@ -379,7 +419,7 @@ let _nextPhaseId = 100;
         }
         @if (editingPhaseIsBase()) {
           <div class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px]
-                      font-medium text-gray-400 bg-gray-100 border border-gray-200">
+                      font-medium text-[var(--mat-sys-on-surface-variant)] bg-[var(--mat-sys-surface-container-high)] border border-[var(--mat-sys-outline-variant)]">
             <mat-icon class="!size-[14px] !text-[14px]">lock</mat-icon>
             Fase base · no eliminable
           </div>
@@ -387,16 +427,16 @@ let _nextPhaseId = 100;
       </div>
 
       <!-- Edit card -->
-      <div class="bg-white border border-gray-200 rounded-xl overflow-hidden">
+      <div class="bg-[var(--mat-sys-surface-container)] border border-[var(--mat-sys-outline-variant)] rounded-xl overflow-hidden">
 
         <!-- Card preview header -->
-        <div class="flex items-center gap-2.5 px-4 py-3 border-b border-gray-100 bg-gray-50">
-          <span class="text-gray-300 text-base select-none">⠿</span>
+        <div class="flex items-center gap-2.5 px-4 py-3 border-b border-[var(--mat-sys-outline-variant)] bg-[var(--mat-sys-surface-container-low)]">
+          <span class="text-[var(--mat-sys-outline)] text-base select-none">⠿</span>
           <div class="size-[26px] rounded-full flex items-center justify-center shrink-0
-                      text-[12px] font-bold border-2 border-gray-300 text-gray-500">
+                      text-[12px] font-bold border-2 border-[var(--mat-sys-outline)] text-[var(--mat-sys-on-surface-variant)]">
             {{ phaseForm.phaseOrder }}
           </div>
-          <span class="text-[14px] font-semibold text-gray-900">
+          <span class="text-[14px] font-semibold text-[var(--mat-sys-on-surface)]">
             {{ phaseForm.name || 'Nueva Fase' }}
           </span>
           <span class="rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide"
@@ -408,8 +448,8 @@ let _nextPhaseId = 100;
                 [class.text-green-700]="phaseForm.status === 'active'"
                 [class.bg-amber-50]="phaseForm.status === 'pending'"
                 [class.text-amber-700]="phaseForm.status === 'pending'"
-                [class.bg-gray-100]="phaseForm.status === 'finished'"
-                [class.text-gray-600]="phaseForm.status === 'finished'">
+                [style.background]="phaseForm.status === 'finished' ? 'var(--mat-sys-surface-container-high)' : ''"
+                [style.color]="phaseForm.status === 'finished' ? 'var(--mat-sys-on-surface-variant)' : ''">
             {{ phaseStatusLabel(phaseForm.status) }}
           </span>
         </div>
@@ -420,24 +460,24 @@ let _nextPhaseId = 100;
           <!-- Name + Type -->
           <div class="grid grid-cols-2 gap-4">
             <div class="flex flex-col gap-1.5">
-              <label class="text-[12.5px] font-semibold text-gray-700">Nombre de la Fase</label>
+              <label class="text-[12.5px] font-semibold text-[var(--mat-sys-on-surface)]">Nombre de la Fase</label>
               <input class="ph-field" [(ngModel)]="phaseForm.name" placeholder="Ej: Fase de Liga" />
             </div>
             <div class="flex flex-col gap-1.5">
-              <label class="text-[12.5px] font-semibold text-gray-700">Tipo de Fase</label>
+              <label class="text-[12.5px] font-semibold text-[var(--mat-sys-on-surface)]">Tipo de Fase</label>
               <select class="ph-field" [ngModel]="phaseFormType()" (ngModelChange)="onTypeChange($event)">
                 <option value="league">Liga</option>
                 <option value="knockout">Eliminatoria</option>
                 <option value="groups">Grupos</option>
                 <option value="swiss">Suizo</option>
               </select>
-              <small class="text-[11.5px] text-gray-400">El cambio de tipo reinicia la configuración</small>
+              <small class="text-[11.5px] text-[var(--mat-sys-on-surface-variant)]">El cambio de tipo reinicia la configuración</small>
             </div>
           </div>
 
           <!-- Status -->
           <div class="flex flex-col gap-1.5 max-w-[320px]">
-            <label class="text-[12.5px] font-semibold text-gray-700">Estado</label>
+            <label class="text-[12.5px] font-semibold text-[var(--mat-sys-on-surface)]">Estado</label>
             <select class="ph-field" [(ngModel)]="phaseForm.status">
               <option value="pending">Pendiente</option>
               <option value="active">En Curso</option>
@@ -446,6 +486,19 @@ let _nextPhaseId = 100;
           </div>
 
           <!-- Type-specific config -->
+          <div class="flex items-center gap-3">
+            <mat-checkbox
+              [ngModel]="saveWithoutConfig()"
+              (ngModelChange)="saveWithoutConfig.set(!!$event)"
+            >Guardar fase sin configuración</mat-checkbox>
+            @if (saveWithoutConfig()) {
+              <span class="text-[12px] text-[var(--mat-sys-on-surface-variant)]">
+                Solo se guardarán nombre, tipo, estado y orden.
+              </span>
+            }
+          </div>
+
+          @if (!saveWithoutConfig()) {
           @switch (phaseFormType()) {
 
             @case ('league') {
@@ -483,7 +536,7 @@ let _nextPhaseId = 100;
               </div>
               <div class="flex flex-col gap-1.5">
                 <label class="ph-label">Criterio de Desempate</label>
-                <div class="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-[13px] text-gray-700">
+                <div class="rounded-lg border border-[var(--mat-sys-outline-variant)] bg-[var(--mat-sys-surface-container-low)] px-3 py-2 text-[13px] text-[var(--mat-sys-on-surface)]">
                   @for (rule of leagueTiebreakCriteria(); track rule) {
                     <div>{{ $index + 1 }}. {{ rule }}</div>
                   }
@@ -505,7 +558,7 @@ let _nextPhaseId = 100;
                     <option [value]="4">4 equipos</option><option [value]="8">8 equipos</option>
                     <option [value]="16">16 equipos</option><option [value]="32">32 equipos</option>
                   </select>
-                  <small class="text-[11.5px] text-gray-400">{{ knockoutRoundsLabel(phaseForm.bracketSize) }}</small>
+                  <small class="text-[11.5px] text-[var(--mat-sys-on-surface-variant)]">{{ knockoutRoundsLabel(phaseForm.bracketSize) }}</small>
                 </div>
               </div>
               <div class="grid grid-cols-2 gap-4">
@@ -598,8 +651,8 @@ let _nextPhaseId = 100;
                 </div>
                 <div class="flex flex-col gap-1.5">
                   <label class="ph-label">Sistema de Emparejamiento</label>
-                  <div class="ph-field bg-gray-50 text-gray-700">Aleatorio </div>
-                  <small class="text-[11.5px] text-gray-400">No es configurable</small>
+                  <div class="ph-field bg-[var(--mat-sys-surface-container-low)] text-[var(--mat-sys-on-surface)]">Aleatorio </div>
+                  <small class="text-[11.5px] text-[var(--mat-sys-on-surface-variant)]">No es configurable</small>
                 </div>
               </div>
               <div class="grid grid-cols-2 gap-4">
@@ -612,7 +665,7 @@ let _nextPhaseId = 100;
                 </div>
                 <div class="flex flex-col gap-1.5">
                   <label class="ph-label">Criterio de Desempate</label>
-                  <div class="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-[13px] text-gray-700">
+                  <div class="rounded-lg border border-[var(--mat-sys-outline-variant)] bg-[var(--mat-sys-surface-container-low)] px-3 py-2 text-[13px] text-[var(--mat-sys-on-surface)]">
                     @for (rule of swissTiebreakCriteria(); track rule) {
                       <div>{{ $index + 1 }}. {{ rule }}</div>
                     }
@@ -638,19 +691,13 @@ let _nextPhaseId = 100;
               </div>
             }
           }
+          }
 
           <!-- Form footer -->
           <div class="flex justify-end gap-2.5 pt-1.5">
-            <button class="btn-ghost-sm" (click)="cancelEdit()" type="button">Cancelar</button>
-            <button
-              class="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-blue-500
-                     text-white text-[13px] font-semibold border-none cursor-pointer
-                     hover:bg-blue-600 disabled:opacity-40 disabled:cursor-not-allowed"
-              [disabled]="!phaseForm.name.trim()"
-              (click)="savePhase()"
-              type="button"
-            >
-              <mat-icon class="!size-4 !text-[16px]">save</mat-icon>
+            <button matButton (click)="cancelEdit()" type="button">Cancelar</button>
+            <button matButton="filled" [disabled]="!phaseForm.name.trim() || pendingPhaseOps() > 0" (click)="savePhase()" type="button">
+              <mat-icon>save</mat-icon>
               Guardar Fase
             </button>
           </div>
@@ -658,19 +705,8 @@ let _nextPhaseId = 100;
       </div>
 
       <!-- Panel footer -->
-      <div class="flex justify-end gap-2.5 pt-4 border-t border-gray-200">
-        <button class="btn-ghost-sm" (click)="cancel.emit()" type="button">Cancelar</button>
-        <button
-          class="inline-flex items-center gap-1.5 px-[18px] py-2 rounded-lg bg-blue-500
-                 text-white text-[13px] font-semibold border-none cursor-pointer
-                 hover:bg-blue-600 disabled:opacity-40 disabled:cursor-not-allowed"
-          [disabled]="!hasUnsavedChanges()"
-          (click)="saveAll()"
-          type="button"
-        >
-          <mat-icon class="!size-4 !text-[16px]">save</mat-icon>
-          Guardar todos los cambios
-        </button>
+      <div class="flex justify-end gap-2.5 pt-4 border-t border-[var(--mat-sys-outline-variant)]">
+        <button matButton (click)="cancel.emit()" type="button">Cancelar</button>
       </div>
     </div>
   }
@@ -680,11 +716,11 @@ let _nextPhaseId = 100;
   styles: `
     :host { display: block; }
 
-    .ph-label { font-size: 12.5px; font-weight: 600; color: #374151; }
+    .ph-label { font-size: 12.5px; font-weight: 600; color: var(--mat-sys-on-surface); }
 
     .ph-field {
-      padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 8px;
-      font-size: 14px; color: #111827; background: #fff; font-family: inherit;
+      padding: 8px 12px; border: 1px solid var(--mat-sys-outline-variant); border-radius: 8px;
+      font-size: 14px; color: var(--mat-sys-on-surface); background: var(--mat-sys-surface-container); font-family: inherit;
       outline: none; transition: border-color .15s; width: 100%; box-sizing: border-box;
       appearance: auto;
       &:focus { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,0.1); }
@@ -700,32 +736,35 @@ let _nextPhaseId = 100;
     }
 
     .btn-ghost-sm {
-      padding: 8px 18px; border-radius: 8px; background: #fff; color: #374151;
-      font-size: 13px; font-weight: 500; border: 1px solid #d1d5db; cursor: pointer;
+      padding: 8px 18px; border-radius: 8px; background: var(--mat-sys-surface-container); color: var(--mat-sys-on-surface);
+      font-size: 13px; font-weight: 500; border: 1px solid var(--mat-sys-outline-variant); cursor: pointer;
       transition: background .15s;
-      &:hover { background: #f9fafb; }
+      &:hover { background: var(--mat-sys-surface-container-high); }
     }
   `,
 })
 export class ChampionshipPhasesComponent {
 
   // ── Inputs / Outputs ──────────────────────────────────────────
+  readonly championshipId = input<string | null>(null);
   /** Fases pre-existentes (modo edición — viene del backend) */
   readonly initialPhases = input<PhaseCardData[]>([]);
   readonly initialFormat = input<ChampionshipFormat | null>(null);
 
   readonly phasesChange = output<PhaseCardData[]>();
   readonly cancel = output<void>();
-  readonly save = output<PhaseCardData[]>();
 
   // ── Services ──────────────────────────────────────────────────
   private snackBar = inject(MatSnackBar);
   private cdr = inject(ChangeDetectorRef);
+  private championshipSvc = inject(ChampionshipService);
+  private dialog = inject(MatDialog);
 
   // ── Static ────────────────────────────────────────────────────
   readonly formatOptions = FORMAT_OPTIONS;
   readonly leagueTiebreakCriteria = () => COMMON_TIEBREAK_LABELS;
   readonly swissTiebreakCriteria = () => COMMON_TIEBREAK_LABELS;
+  readonly phaseTemplates = signal<Record<ChampionshipFormat, PhaseTemplate[]>>(DEFAULT_PHASE_TEMPLATES);
 
   // ── State ─────────────────────────────────────────────────────
   viewMode = signal<PhaseViewMode>('format-picker');
@@ -736,6 +775,8 @@ export class ChampionshipPhasesComponent {
   editingPhaseId = signal<number | null>(null);
   phaseFormType = signal<PhaseType>(PhaseType.League);
   hasUnsavedChanges = signal(false);
+  pendingPhaseOps = signal(0);
+  saveWithoutConfig = signal(false);
   private hasLoadedInitialData = false;
 
   // Drag state (plain object — not signal, updated via CD)
@@ -769,6 +810,8 @@ export class ChampionshipPhasesComponent {
 
   // ── Lifecycle ─────────────────────────────────────────────────
   constructor() {
+    void this.loadTemplatesFromJson();
+
     effect(() => {
       const existing = this.initialPhases();
       if (existing.length === 0) {
@@ -808,7 +851,7 @@ export class ChampionshipPhasesComponent {
     const fmt = this.selectedFormat();
     if (!fmt) return;
     this.activeFormat.set(fmt);
-    const base = BASE_PHASES[fmt]();
+    const base = this.buildBasePhasesFromTemplate(fmt);
     this.phases.set(base);
     this.originalPhases.set(base.map(p => ({ ...p })));
     this.hasUnsavedChanges.set(true);
@@ -840,6 +883,8 @@ export class ChampionshipPhasesComponent {
     if (phase.knockout) Object.assign(this.phaseForm, { knockoutLegs: phase.knockout.legs, bracketSize: phase.knockout.bracketSize, thirdPlaceMatch: phase.knockout.thirdPlaceMatch, seeding: phase.knockout.seeding, awayGoalsRule: phase.knockout.awayGoalsRule, tieBreak: phase.knockout.tieBreak });
     if (phase.groups) Object.assign(this.phaseForm, { numGroups: phase.groups.numGroups, teamsPerGroup: phase.groups.teamsPerGroup, groupLegs: phase.groups.legs, advancePerGroup: phase.groups.advancePerGroup, advanceBestThirds: phase.groups.advanceBestThirds, groupTiebreakOrder: phase.groups.tiebreakOrder });
     if (phase.swiss) Object.assign(this.phaseForm, { numRounds: phase.swiss.numRounds, pairingSystem: SWISS_PAIRING_SYSTEM, firstRound: phase.swiss.firstRound, allowRematch: phase.swiss.allowRematch, swissTiebreakOrder: SWISS_TIEBREAK_ORDER, directAdvancedCount: phase.swiss.directAdvancedCount, playoffCount: phase.swiss.playoffCount });
+    const hasConfig = Boolean(phase.league || phase.knockout || phase.groups || phase.swiss);
+    this.saveWithoutConfig.set(!hasConfig);
     this.viewMode.set('detail');
   }
 
@@ -852,13 +897,70 @@ export class ChampionshipPhasesComponent {
       winsPoints: 3, drawPoints: 1, lossPoints: 0, totalRounds: 10, legs: 1,
       tiebreakOrder: LEAGUE_TIEBREAK_ORDER, advanceCount: 4,
     });
+    this.saveWithoutConfig.set(false);
     this.viewMode.set('detail');
   }
 
+  private getChampionshipId(): string | null {
+    const raw = this.championshipId();
+    return raw && raw.trim().length > 0 ? raw : null;
+  }
+
+  private persistReorder(list: PhaseCardData[]): void {
+    const championshipId = this.getChampionshipId();
+    if (championshipId === null) return;
+
+    const updates = list
+      .filter((phase) => phase.backendId !== undefined)
+      .map((phase) => this.championshipSvc.updatePhase(phase.backendId!, {
+        id: phase.backendId!,
+        championshipId,
+        name: phase.name,
+        phaseType: phase.phaseType as 'swiss',
+        phaseOrder: phase.phaseOrder,
+        status: phase.status,
+        isActive: true,
+      } as any));
+
+    if (updates.length === 0) return;
+
+    this.pendingPhaseOps.update((v) => v + 1);
+    forkJoin(updates)
+      .pipe(finalize(() => this.pendingPhaseOps.update((v) => Math.max(0, v - 1))))
+      .subscribe({
+        error: () => {
+          this.snackBar.open('No se pudo persistir el nuevo orden de fases', 'Cerrar', { duration: 3000 });
+        },
+      });
+  }
+
   savePhase(): void {
+    const phaseName = this.phaseForm.name.trim();
+    if (!phaseName) return;
+
+    // Only require confirmation when the phase will be saved without configuration.
+    if (!this.saveWithoutConfig()) {
+      this.savePhaseConfirmed();
+      return;
+    }
+
+    this.dialog.open<SavePhaseDialogComponent, SavePhaseDialogData, boolean>(SavePhaseDialogComponent, {
+      data: {
+        phaseName,
+        withConfig: false,
+      },
+      width: '420px',
+    }).afterClosed().subscribe((confirmed) => {
+      if (!confirmed) return;
+      this.savePhaseConfirmed();
+    });
+  }
+
+  private savePhaseConfirmed(): void {
     if (!this.phaseForm.name.trim()) return;
     const t = this.phaseFormType();
     const existing = this.phases().find(p => p.id === this.phaseForm.phaseId);
+    const withConfig = !this.saveWithoutConfig();
     const phase: PhaseCardData = {
       id: existing?.id ?? (_nextPhaseId++),
       name: this.phaseForm.name,
@@ -866,18 +968,55 @@ export class ChampionshipPhasesComponent {
       phaseOrder: this.phaseForm.phaseOrder,
       status: this.phaseForm.status as PhaseStatus,
       isBase: existing?.isBase ?? false,
-      ...(t === PhaseType.League && { league: { winsPoints: this.phaseForm.winsPoints, drawPoints: this.phaseForm.drawPoints, lossPoints: this.phaseForm.lossPoints, totalRounds: this.phaseForm.totalRounds, legs: this.phaseForm.legs, tiebreakOrder: LEAGUE_TIEBREAK_ORDER, advanceCount: this.phaseForm.advanceCount } }),
-      ...(t === PhaseType.Knockout && { knockout: { legs: this.phaseForm.knockoutLegs, bracketSize: this.phaseForm.bracketSize, thirdPlaceMatch: this.phaseForm.thirdPlaceMatch, seeding: this.phaseForm.seeding, awayGoalsRule: this.phaseForm.awayGoalsRule, tieBreak: this.phaseForm.tieBreak } }),
-      ...(t === PhaseType.Groups && { groups: { numGroups: this.phaseForm.numGroups, teamsPerGroup: this.phaseForm.teamsPerGroup, legs: this.phaseForm.groupLegs, advancePerGroup: this.phaseForm.advancePerGroup, advanceBestThirds: this.phaseForm.advanceBestThirds, tiebreakOrder: this.phaseForm.groupTiebreakOrder } }),
-      ...(t === PhaseType.Swiss && { swiss: { numRounds: this.phaseForm.numRounds, pairingSystem: SWISS_PAIRING_SYSTEM, firstRound: this.phaseForm.firstRound, allowRematch: this.phaseForm.allowRematch, tiebreakOrder: SWISS_TIEBREAK_ORDER, directAdvancedCount: this.phaseForm.directAdvancedCount, playoffCount: this.phaseForm.playoffCount } }),
+      ...(withConfig && t === PhaseType.League && { league: { winsPoints: this.phaseForm.winsPoints, drawPoints: this.phaseForm.drawPoints, lossPoints: this.phaseForm.lossPoints, totalRounds: this.phaseForm.totalRounds, legs: this.phaseForm.legs, tiebreakOrder: LEAGUE_TIEBREAK_ORDER, advanceCount: this.phaseForm.advanceCount } }),
+      ...(withConfig && t === PhaseType.Knockout && { knockout: { legs: this.phaseForm.knockoutLegs, bracketSize: this.phaseForm.bracketSize, thirdPlaceMatch: this.phaseForm.thirdPlaceMatch, seeding: this.phaseForm.seeding, awayGoalsRule: this.phaseForm.awayGoalsRule, tieBreak: this.phaseForm.tieBreak } }),
+      ...(withConfig && t === PhaseType.Groups && { groups: { numGroups: this.phaseForm.numGroups, teamsPerGroup: this.phaseForm.teamsPerGroup, legs: this.phaseForm.groupLegs, advancePerGroup: this.phaseForm.advancePerGroup, advanceBestThirds: this.phaseForm.advanceBestThirds, tiebreakOrder: this.phaseForm.groupTiebreakOrder } }),
+      ...(withConfig && t === PhaseType.Swiss && { swiss: { numRounds: this.phaseForm.numRounds, pairingSystem: SWISS_PAIRING_SYSTEM, firstRound: this.phaseForm.firstRound, allowRematch: this.phaseForm.allowRematch, tiebreakOrder: SWISS_TIEBREAK_ORDER, directAdvancedCount: this.phaseForm.directAdvancedCount, playoffCount: this.phaseForm.playoffCount } }),
     };
-    this.phases.update(list =>
-      existing ? list.map(p => p.id === phase.id ? phase : p) : [...list, phase]
-    );
-    this.hasUnsavedChanges.set(true);
-    this.phasesChange.emit(this.phases());
-    this.viewMode.set('list');
-    this.snackBar.open(`Fase "${phase.name}" guardada`, 'Cerrar', { duration: 2000 });
+    const applyLocal = (nextPhase: PhaseCardData): void => {
+      this.phases.update(list =>
+        existing ? list.map(p => p.id === nextPhase.id ? nextPhase : p) : [...list, nextPhase],
+      );
+      this.hasUnsavedChanges.set(true);
+      this.phasesChange.emit(this.phases());
+      this.viewMode.set('list');
+      this.snackBar.open(`Fase "${nextPhase.name}" guardada`, 'Cerrar', { duration: 2000 });
+    };
+
+    const championshipId = this.getChampionshipId();
+    if (championshipId === null) {
+      applyLocal(phase);
+      return;
+    }
+
+    const dto = {
+      championshipId,
+      name: phase.name,
+      phaseType: phase.phaseType as 'swiss',
+      phaseOrder: phase.phaseOrder,
+      status: phase.status,
+      isActive: true,
+    };
+
+    const request$ = existing?.backendId
+      ? this.championshipSvc.updatePhase(existing.backendId, dto as any)
+      : this.championshipSvc.createPhase(dto as any);
+
+    this.pendingPhaseOps.update((v) => v + 1);
+    request$
+      .pipe(finalize(() => this.pendingPhaseOps.update((v) => Math.max(0, v - 1))))
+      .subscribe({
+        next: (saved) => {
+          applyLocal({
+            ...phase,
+            backendId: existing?.backendId ?? Number(saved.id),
+          });
+        },
+        error: () => {
+          applyLocal(phase);
+          this.snackBar.open('No se pudo persistir en backend. Se guardo localmente.', 'Cerrar', { duration: 3500 });
+        },
+      });
   }
 
   deletePhase(id: number): void {
@@ -886,22 +1025,30 @@ export class ChampionshipPhasesComponent {
       this.snackBar.open('Las fases base del formato no se pueden eliminar', 'Cerrar', { duration: 3000 });
       return;
     }
-    this.phases.update(list =>
-      list.filter(p => p.id !== id).map((p, i) => ({ ...p, phaseOrder: i + 1 }))
-    );
-    this.hasUnsavedChanges.set(true);
-    this.phasesChange.emit(this.phases());
-    if (this.viewMode() === 'detail') this.viewMode.set('list');
+    const applyLocalDelete = (): void => {
+      this.phases.update(list =>
+        list.filter(p => p.id !== id).map((p, i) => ({ ...p, phaseOrder: i + 1 })),
+      );
+      this.hasUnsavedChanges.set(true);
+      this.phasesChange.emit(this.phases());
+      if (this.viewMode() === 'detail') this.viewMode.set('list');
+    };
+
+    if (phase?.backendId === undefined) {
+      applyLocalDelete();
+      return;
+    }
+
+    this.pendingPhaseOps.update((v) => v + 1);
+    this.championshipSvc.deletePhase(phase.backendId)
+      .pipe(finalize(() => this.pendingPhaseOps.update((v) => Math.max(0, v - 1))))
+      .subscribe({
+        next: () => applyLocalDelete(),
+        error: () => this.snackBar.open('No se pudo eliminar la fase en el servidor', 'Cerrar', { duration: 3500 }),
+      });
   }
 
   cancelEdit(): void { this.viewMode.set('list'); }
-
-  saveAll(): void {
-    this.save.emit(this.phases());
-    this.originalPhases.set(this.phases().map(p => ({ ...p })));
-    this.hasUnsavedChanges.set(false);
-    this.snackBar.open('Cambios guardados', 'Cerrar', { duration: 2500 });
-  }
 
   // ── Type change ───────────────────────────────────────────────
   onTypeChange(type: PhaseType): void {
@@ -963,6 +1110,7 @@ export class ChampionshipPhasesComponent {
     this.phases.set(reordered);
     this.hasUnsavedChanges.set(true);
     this.phasesChange.emit(reordered);
+    this.persistReorder(reordered);
     this.cdr.markForCheck();
   }
 
@@ -986,5 +1134,81 @@ export class ChampionshipPhasesComponent {
     const r: string[] = []; let n = size;
     while (n >= 2) { if (map[n]) r.push(map[n]); n = Math.floor(n / 2); }
     return r.join(', ');
+  }
+
+  private buildBasePhasesFromTemplate(format: ChampionshipFormat): PhaseCardData[] {
+    const templates = this.phaseTemplates()[format] ?? DEFAULT_PHASE_TEMPLATES[format];
+
+    return templates.map((template, index) => {
+      const phase = structuredClone(template);
+      return {
+        ...phase,
+        id: index + 1,
+        phaseOrder: phase.phaseOrder ?? index + 1,
+        status: phase.status ?? PhaseStatus.Pending,
+        isBase: phase.isBase ?? true,
+      };
+    });
+  }
+
+  formatPreview(format: ChampionshipFormat): string[] {
+    const templates = this.phaseTemplates()[format] ?? DEFAULT_PHASE_TEMPLATES[format];
+    if (!templates.length) {
+      return FORMAT_OPTIONS.find((item) => item.id === format)?.phases ?? [];
+    }
+    return templates.map((template) => template.name);
+  }
+
+  private async loadTemplatesFromJson(): Promise<void> {
+    try {
+      const response = await fetch(PHASE_TEMPLATES_URL, { cache: 'no-store' });
+      if (!response.ok) {
+        return;
+      }
+
+      const payload = (await response.json()) as PhaseTemplatesJson;
+      const parsed = this.parseTemplatesJson(payload);
+      if (!parsed) {
+        return;
+      }
+
+      this.phaseTemplates.set(parsed);
+      this.cdr.markForCheck();
+    } catch {
+      // Keep defaults when JSON file is not available.
+    }
+  }
+
+  private parseTemplatesJson(payload: PhaseTemplatesJson): Record<ChampionshipFormat, PhaseTemplate[]> | null {
+    if (!payload || typeof payload !== 'object' || !payload.formats) {
+      return null;
+    }
+
+    const merged = structuredClone(DEFAULT_PHASE_TEMPLATES);
+    for (const option of FORMAT_OPTIONS) {
+      const rawTemplates = payload.formats[option.id]?.phases;
+      if (!Array.isArray(rawTemplates) || rawTemplates.length === 0) {
+        continue;
+      }
+
+      const valid = rawTemplates.filter((item) => this.isValidTemplate(item));
+      if (valid.length > 0) {
+        merged[option.id] = valid;
+      }
+    }
+
+    return merged;
+  }
+
+  private isValidTemplate(template: PhaseTemplate): boolean {
+    if (!template || typeof template !== 'object') {
+      return false;
+    }
+
+    if (!template.name || typeof template.name !== 'string') {
+      return false;
+    }
+
+    return Object.values(PhaseType).includes(template.phaseType);
   }
 }

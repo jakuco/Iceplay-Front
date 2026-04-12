@@ -10,15 +10,22 @@ import {
   HostListener,
   inject,
   input,
-  model,
   output,
   signal,
   viewChild,
   computed,
+  ViewEncapsulation,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
+import { MatButtonModule } from '@angular/material/button';
+import { MatMenuModule } from '@angular/material/menu';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatInputModule } from '@angular/material/input';
+import { MatDatepickerModule } from '@angular/material/datepicker';
+import { MatNativeDateModule, MAT_DATE_LOCALE, MAT_DATE_FORMATS } from '@angular/material/core';
+import { MatDialog, MatDialogModule, MatDialogRef, MAT_DIALOG_DATA } from '@angular/material/dialog';
 
 // ─── Types ───────────────────────────────────────────────────
 
@@ -28,6 +35,12 @@ export interface SportOption {
   id: number;
   label: string;
   icon: string;
+}
+
+export interface SocialNetworkOption {
+  id: number;
+  name: string;
+  icon?: string | null;
 }
 
 export interface ChampionshipHeaderData {
@@ -80,70 +93,260 @@ const STATUS_BY_VALUE: Record<string, keyof typeof STATUS_META> = {
   cancelled: 'cancelled',
 };
 
-const SOCIAL_NETWORK_OPTIONS: Array<{
+const SOCIAL_BRAND_PALETTE = [
+  { bg: '#1d4ed8', border: '#3b82f6' },
+  { bg: '#be185d', border: '#ec4899' },
+  { bg: '#0f766e', border: '#14b8a6' },
+  { bg: '#7c2d12', border: '#ea580c' },
+  { bg: '#3f3f46', border: '#71717a' },
+];
+
+type ResolvedSocialNetworkOption = {
   id: number;
   name: string;
   icon: string;
   placeholder: string;
   brandBg: string;
   brandBorder: string;
-}> = [
-    {
-      id: 1,
-      name: 'Facebook',
-      icon: 'thumb_up',
-      placeholder: 'https://facebook.com/tu-pagina',
-      brandBg: '#1877F2',
-      brandBorder: '#3B82F6',
-    },
-    {
-      id: 2,
-      name: 'Instagram',
-      icon: 'photo_camera',
-      placeholder: 'https://instagram.com/tu-cuenta',
-      brandBg: 'linear-gradient(135deg, #F58529, #DD2A7B 45%, #8134AF 75%, #515BD4)',
-      brandBorder: '#DD2A7B',
-    },
-    {
-      id: 3,
-      name: 'X',
-      icon: 'close',
-      placeholder: 'https://x.com/tu-cuenta',
-      brandBg: '#111827',
-      brandBorder: '#374151',
-    },
-    {
-      id: 4,
-      name: 'TikTok',
-      icon: 'music_note',
-      placeholder: 'https://tiktok.com/@tu-cuenta',
-      brandBg: '#111827',
-      brandBorder: '#14B8A6',
-    },
-    {
-      id: 5,
-      name: 'YouTube',
-      icon: 'smart_display',
-      placeholder: 'https://youtube.com/@tu-canal',
-      brandBg: '#FF0000',
-      brandBorder: '#EF4444',
-    },
-  ];
+};
+
+// ─────────────────────────────────────────────────────────────
+// Social link dialog
+// ─────────────────────────────────────────────────────────────
+
+interface SocialLinkDialogData {
+  networkOptions: ResolvedSocialNetworkOption[];
+  editingNetworkId: number | null;
+  initialUrl: string;
+}
+
+export interface SocialLinkDialogResult {
+  socialNetworkId: number;
+  link: string;
+}
+
+@Component({
+  selector: 'app-social-link-dialog',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  encapsulation: ViewEncapsulation.None,
+  imports: [
+    FormsModule,
+    MatButtonModule,
+    MatIconModule,
+    MatFormFieldModule,
+    MatInputModule,
+    MatDialogModule,
+    MatTooltipModule,
+  ],
+  styles: `
+    .social-link-dialog-field {
+      --mdc-outlined-text-field-outline-color: rgba(99,139,246,0.25);
+      --mdc-outlined-text-field-hover-outline-color: rgba(99,139,246,0.45);
+      --mdc-outlined-text-field-focus-outline-color: rgba(99,139,246,0.7);
+      --mdc-outlined-text-field-input-text-color: rgba(255,255,255,0.88);
+      --mdc-outlined-text-field-label-text-color: rgba(147,197,253,0.7);
+      --mdc-outlined-text-field-focus-label-text-color: rgba(147,197,253,0.9);
+      --mdc-outlined-text-field-container-shape: 6px;
+      --mat-form-field-container-text-size: 13px;
+    }
+    .social-link-dialog-field .mat-mdc-text-field-wrapper {
+      background: rgba(15,29,53,0.8) !important;
+    }
+  `,
+  template: `
+    <h2 mat-dialog-title>{{ data.editingNetworkId ? 'Editar' : 'Agregar' }} red social</h2>
+
+    <mat-dialog-content>
+      <p class="mat-body-2" style="opacity:.55; margin-bottom: 12px;">
+        Selecciona la plataforma e ingresa la URL completa.
+      </p>
+
+      <div style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:16px;">
+        @for (opt of data.networkOptions; track opt.id) {
+          <button
+            type="button"
+            style="display:inline-flex; align-items:center; justify-content:center;
+                   width:34px; height:34px; border-radius:8px; border-width:1px;
+                   border-style:solid; color:white; cursor:pointer; transition:opacity .15s;"
+            [style.background]="selectedNetworkId() === opt.id ? opt.brandBg : '#1a2742'"
+            [style.border-color]="selectedNetworkId() === opt.id ? opt.brandBorder : 'rgba(255,255,255,0.18)'"
+            [style.opacity]="selectedNetworkId() === opt.id ? '1' : '0.6'"
+            (click)="selectNetwork(opt.id)"
+            [matTooltip]="opt.name"
+            [attr.aria-label]="'Seleccionar ' + opt.name"
+          >
+            <mat-icon style="font-size:16px; width:16px; height:16px;">{{ opt.icon }}</mat-icon>
+          </button>
+        }
+      </div>
+
+      <mat-form-field appearance="outline" class="social-link-dialog-field" style="width:100%;">
+        <mat-label>URL</mat-label>
+        <input matInput
+          [(ngModel)]="urlDraft"
+          [placeholder]="urlPlaceholder()"
+          inputmode="url"
+          autocomplete="off"
+        />
+        @if (urlError()) {
+          <mat-error>{{ urlError() }}</mat-error>
+        }
+      </mat-form-field>
+    </mat-dialog-content>
+
+    <mat-dialog-actions align="end">
+      <button matButton mat-dialog-close type="button">Cancelar</button>
+      <button matButton="filled" type="button"
+        [disabled]="!canSave()"
+        (click)="save()"
+      >Guardar</button>
+    </mat-dialog-actions>
+  `,
+})
+export class SocialLinkDialogComponent {
+  readonly data = inject<SocialLinkDialogData>(MAT_DIALOG_DATA);
+  private readonly dialogRef = inject(MatDialogRef<SocialLinkDialogComponent>);
+
+  selectedNetworkId = signal(this.data.editingNetworkId ?? this.data.networkOptions[0]?.id ?? 1);
+  urlDraft = this.data.initialUrl;
+  urlError = signal('');
+
+  urlPlaceholder = computed(() =>
+    this.data.networkOptions.find(o => o.id === this.selectedNetworkId())?.placeholder ?? 'https://'
+  );
+
+  selectNetwork(id: number): void {
+    this.selectedNetworkId.set(id);
+    this.urlError.set('');
+  }
+
+  canSave(): boolean {
+    try {
+      return new URL(this.urlDraft.trim()).protocol === 'https:';
+    } catch {
+      return false;
+    }
+  }
+
+  save(): void {
+    const url = this.urlDraft.trim();
+    try {
+      if (new URL(url).protocol !== 'https:') throw new Error();
+    } catch {
+      this.urlError.set('La URL debe ser válida y comenzar con https://');
+      return;
+    }
+    this.dialogRef.close({ socialNetworkId: this.selectedNetworkId(), link: url } satisfies SocialLinkDialogResult);
+  }
+}
 
 // ─────────────────────────────────────────────────────────────
 // Component
 // ─────────────────────────────────────────────────────────────
 
+const DDMMYYYY_FORMATS = {
+  parse: { dateInput: { day: 'numeric', month: 'numeric', year: 'numeric' } },
+  display: {
+    dateInput: { day: '2-digit', month: '2-digit', year: 'numeric' },
+    monthYearLabel: { year: 'numeric', month: 'short' },
+    dateA11yLabel: { year: 'numeric', month: 'long', day: 'numeric' },
+    monthYearA11yLabel: { year: 'numeric', month: 'long' },
+  },
+};
+
 @Component({
   selector: 'app-championship-header',
   changeDetection: ChangeDetectionStrategy.OnPush,
   standalone: true,
-  imports: [FormsModule, MatIconModule, MatTooltipModule],
+  providers: [
+    { provide: MAT_DATE_LOCALE, useValue: 'es-CO' },
+    { provide: MAT_DATE_FORMATS, useValue: DDMMYYYY_FORMATS },
+  ],
+  imports: [
+    FormsModule,
+    MatIconModule,
+    MatTooltipModule,
+    MatButtonModule,
+    MatMenuModule,
+    MatFormFieldModule,
+    MatInputModule,
+    MatDatepickerModule,
+    MatNativeDateModule,
+    MatDialogModule,
+  ],
+  styles: `
+    /* ── Inline date chip trigger ── */
+    :host .date-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 2px;
+      background: transparent;
+      border: none;
+      border-bottom: 1px dashed rgba(255,255,255,0.25);
+      color: rgba(255,255,255,0.65);
+      font-size: 13px;
+      font-family: inherit;
+      padding: 2px 0 2px;
+      cursor: pointer;
+      transition: color 0.15s, border-color 0.15s;
+    }
+    :host .date-chip:hover {
+      color: rgba(255,255,255,0.9);
+      border-bottom-color: rgba(255,255,255,0.5);
+    }
+    :host .date-chip-icon {
+      font-size: 13px !important;
+      width: 13px !important;
+      height: 13px !important;
+      color: rgba(255,255,255,0.3);
+    }
+
+    /* ── Hidden mat-form-field that owns the datepicker input ── */
+    :host .date-field-hidden {
+      position: absolute !important;
+      width: 0 !important;
+      height: 0 !important;
+      overflow: hidden !important;
+      visibility: hidden !important;
+      pointer-events: none !important;
+      opacity: 0 !important;
+    }
+
+    /* ── Popover mat-form-field — dark theme ── */
+    :host .popover-field {
+      --mdc-outlined-text-field-outline-color: rgba(255,255,255,0.12);
+      --mdc-outlined-text-field-hover-outline-color: rgba(255,255,255,0.28);
+      --mdc-outlined-text-field-focus-outline-color: rgba(99,139,246,0.7);
+      --mdc-outlined-text-field-input-text-color: rgba(255,255,255,0.88);
+      --mdc-outlined-text-field-label-text-color: rgba(255,255,255,0.4);
+      --mdc-outlined-text-field-focus-label-text-color: rgba(255,255,255,0.6);
+      --mdc-outlined-text-field-container-shape: 8px;
+      --mat-form-field-container-text-size: 14px;
+    }
+    :host .popover-field .mat-mdc-text-field-wrapper {
+      background: rgba(255,255,255,0.05) !important;
+    }
+
+    /* ── Social editor mat-form-field — dark theme ── */
+    :host .social-field {
+      --mdc-outlined-text-field-outline-color: rgba(99,139,246,0.25);
+      --mdc-outlined-text-field-hover-outline-color: rgba(99,139,246,0.45);
+      --mdc-outlined-text-field-focus-outline-color: rgba(99,139,246,0.7);
+      --mdc-outlined-text-field-input-text-color: rgba(255,255,255,0.88);
+      --mdc-outlined-text-field-label-text-color: rgba(147,197,253,0.7);
+      --mdc-outlined-text-field-focus-label-text-color: rgba(147,197,253,0.9);
+      --mdc-outlined-text-field-container-shape: 6px;
+      --mat-form-field-container-text-size: 12.5px;
+    }
+    :host .social-field .mat-mdc-text-field-wrapper {
+      background: rgba(15,29,53,0.8) !important;
+    }
+  `,
   template: `
 <!-- ══ HEADER ════════════════════════════════════════════════ -->
 <header
   class="relative flex gap-5 items-start px-7 pt-6 pb-5"
-  style="background: radial-gradient(ellipse 55% 90% at 90% 10%, rgba(56,110,229,0.1) 0%, transparent 70%), linear-gradient(165deg, #0c1526 0%, #0f1d35 50%, #0c1728 100%);"
+  style="background: radial-gradient(ellipse 55% 90% at 90% 10%, color-mix(in srgb, var(--mat-sys-primary) 20%, transparent) 0%, transparent 72%), linear-gradient(165deg, color-mix(in srgb, var(--mat-sys-surface-container-highest) 82%, black) 0%, color-mix(in srgb, var(--mat-sys-surface-container-high) 74%, black) 52%, color-mix(in srgb, var(--mat-sys-surface-container) 78%, black) 100%);"
 >
 
   <!-- ── Logo ──────────────────────────────────────────────── -->
@@ -217,44 +420,31 @@ const SOCIAL_NETWORK_OPTIONS: Array<{
             Edita el nombre e información del campeonato
           </p>
 
-          <label class="text-[10.5px] font-semibold uppercase tracking-[.06em] text-white/45">
-            Nombre <span class="text-red-400">*</span>
-          </label>
-          <input
-            #nameInput
-            class="w-full rounded-lg border border-white/10 bg-white/6 px-3 py-2
-                   text-[15px] font-semibold text-white outline-none placeholder:text-white/20
-                   focus:border-blue-500/50 transition-colors"
-            [(ngModel)]="nameTemp"
-            placeholder="Ej: Liga Premier 2024"
-            maxlength="100"
-            (keydown.enter)="applyPopover()"
-            (keydown.escape)="closePopover()"
-          />
+          <mat-form-field appearance="outline" class="popover-field w-full">
+            <mat-label>Nombre *</mat-label>
+            <input matInput #nameInput
+              [(ngModel)]="nameTemp"
+              placeholder="Ej: Liga Premier 2024"
+              maxlength="100"
+              (keydown.enter)="applyPopover()"
+              (keydown.escape)="closePopover()"
+            />
+          </mat-form-field>
 
-          <label class="text-[10.5px] font-semibold uppercase tracking-[.06em] text-white/45">
-            Descripción
-            <span class="ml-1 normal-case text-[10px] font-normal text-white/30">(opcional)</span>
-          </label>
-          <textarea
-            class="w-full resize-y rounded-lg border border-white/10 bg-white/6 px-3 py-2
-                   text-[14px] text-white outline-none placeholder:text-white/20
-                   focus:border-blue-500/50 transition-colors"
-            [(ngModel)]="descriptionTemp"
-            placeholder="Describe brevemente el campeonato..."
-            rows="3"
-            (keydown.escape)="closePopover()"
-          ></textarea>
+          <mat-form-field appearance="outline" class="popover-field w-full">
+            <mat-label>Descripción (opcional)</mat-label>
+            <textarea matInput
+              [(ngModel)]="descriptionTemp"
+              placeholder="Describe brevemente el campeonato..."
+              rows="3"
+              (keydown.escape)="closePopover()"
+            ></textarea>
+          </mat-form-field>
 
           <div class="flex justify-end gap-2 mt-1">
-            <button
-              class="rounded-md bg-white/7 px-4 py-1.5 text-[13px] font-medium
-                     text-white/65 transition-colors hover:bg-white/12"
-              (click)="closePopover()" type="button"
+            <button matButton (click)="closePopover()" type="button"
             >Cancelar</button>
-            <button
-              class="rounded-md bg-blue-500 px-4 py-1.5 text-[13px] font-medium text-white
-                     transition-colors hover:bg-blue-600 disabled:opacity-40 disabled:cursor-not-allowed"
+            <button matButton="filled"
               [disabled]="!nameTemp.trim()"
               (click)="applyPopover()" type="button"
             >Aplicar</button>
@@ -264,9 +454,9 @@ const SOCIAL_NETWORK_OPTIONS: Array<{
     </div>
 
     <!-- Row 1.5 — Social links compactos (debajo del titulo) -->
-    <div class="flex flex-wrap items-center gap-1.5">
+    <div class="flex flex-wrap items-center gap-2">
       @for (link of socialLinksView(); track link.socialNetworkId) {
-        <div class="relative">
+        <div class="relative pr-3">
           <a
             [href]="link.link"
             target="_blank"
@@ -282,34 +472,37 @@ const SOCIAL_NETWORK_OPTIONS: Array<{
           </a>
 
           @if (editable()) {
-            <button
-              type="button"
-              class="absolute -top-1 -right-1 inline-flex size-3.5 items-center justify-center
-                     rounded-full border border-white/30 bg-[#0f1d35] text-white/80 hover:text-white"
-              (click)="startEditSocialLink(link)"
-              aria-label="Editar red social"
-            >
-              <mat-icon class="!size-[9px] !text-[9px]">edit</mat-icon>
-            </button>
-            <button
-              type="button"
-              class="absolute -bottom-1 -right-1 inline-flex size-3.5 items-center justify-center
-                     rounded-full border border-red-300/45 bg-[#2b1520] text-red-200 hover:bg-red-500/20"
-              (click)="removeSocialLink(link.socialNetworkId)"
-              aria-label="Eliminar red social"
-            >
-              <mat-icon class="!size-[9px] !text-[9px]">close</mat-icon>
-            </button>
+            <div class="absolute right-0 top-1/2 -translate-y-1/2 flex flex-col gap-1">
+              <button
+                type="button"
+                class="size-4.5 rounded-md border border-white/30 bg-black/35 text-white/90
+                       flex items-center justify-center transition-colors hover:bg-black/55 hover:text-white"
+                (click)="startEditSocialLink(link)"
+                matTooltip="Editar enlace"
+                aria-label="Editar red social"
+              >
+                <mat-icon class="!size-[10px] !text-[10px]">edit</mat-icon>
+              </button>
+              <button
+                type="button"
+                class="size-4.5 rounded-md border border-red-300/70 bg-red-500/25 text-red-100
+                       flex items-center justify-center transition-colors hover:bg-red-500/45 hover:text-white"
+                (click)="removeSocialLink(link.socialNetworkId)"
+                matTooltip="Eliminar enlace"
+                aria-label="Eliminar red social"
+              >
+                <mat-icon class="!size-[10px] !text-[10px]">close</mat-icon>
+              </button>
+            </div>
           }
         </div>
       }
 
       @if (editable()) {
         <button
+          matButton="outlined"
           type="button"
-          class="inline-flex size-8 items-center justify-center rounded-lg border border-dashed border-white/40
-                 bg-transparent text-white/75 transition-colors hover:bg-white/8 hover:text-white
-                 disabled:opacity-35 disabled:cursor-not-allowed"
+          class="!size-8 !min-w-0 !p-0 border-dashed border-white/40 text-white/75"
           [disabled]="availableNetworkOptions().length === 0"
           (click)="startAddSocialLink()"
           matTooltip="Agregar red social"
@@ -320,108 +513,35 @@ const SOCIAL_NETWORK_OPTIONS: Array<{
       }
     </div>
 
-    @if (editable() && socialEditorOpen()) {
-      <div class="rounded-lg border border-blue-400/25 bg-blue-500/10 p-2">
-        <div class="flex flex-wrap items-center gap-1.5">
-          @for (opt of editorNetworkOptions(); track opt.id) {
-            <button
-              type="button"
-              class="inline-flex size-8 items-center justify-center rounded-lg border text-white transition-colors"
-              [style.background]="opt.id === socialNetworkDraft ? opt.brandBg : '#0f1d35'"
-              [style.border-color]="opt.id === socialNetworkDraft ? opt.brandBorder : 'rgba(255,255,255,0.2)'"
-              [style.opacity]="opt.id === socialNetworkDraft ? '1' : '0.75'"
-              (click)="socialNetworkDraft = opt.id"
-              [matTooltip]="opt.name"
-              [attr.aria-label]="'Seleccionar ' + opt.name"
-            >
-              <mat-icon class="!size-[16px] !text-[16px]">{{ opt.icon }}</mat-icon>
-            </button>
-          }
-        </div>
 
-        <label class="mt-2 flex flex-col gap-1">
-          <span class="text-[11px] font-semibold uppercase tracking-[.05em] text-blue-200/85">URL</span>
-          <input
-            class="rounded-md border border-white/20 bg-[#0f1d35] px-2 py-1.5 text-[12.5px] text-white
-                   outline-none placeholder:text-white/30 focus:border-blue-300"
-            [(ngModel)]="socialUrlDraft"
-            [placeholder]="socialUrlPlaceholder()"
-            inputmode="url"
-            autocomplete="off"
-          />
-        </label>
-
-        @if (socialEditorError()) {
-          <p class="m-0 mt-1 text-[11.5px] text-red-200">{{ socialEditorError() }}</p>
-        }
-
-        <div class="mt-2 flex items-center justify-end gap-1.5">
-          <button
-            type="button"
-            class="rounded-md border border-white/16 bg-white/7 px-2.5 py-1.5 text-[12px] text-white/75
-                   transition-colors hover:bg-white/12"
-            (click)="cancelSocialEditor()"
-          >Cancelar</button>
-          <button
-            type="button"
-            class="rounded-md bg-blue-500 px-2.5 py-1.5 text-[12px] font-semibold text-white
-                   transition-colors hover:bg-blue-600 disabled:opacity-40 disabled:cursor-not-allowed"
-            [disabled]="!canSaveSocialDraft()"
-            (click)="saveSocialDraft()"
-          >Guardar</button>
-        </div>
-      </div>
-    }
 
     <!-- Row 2 — Sport · Season -->
     <div class="flex items-center gap-2 text-[14px] text-white/55">
       @if (editable()) {
 
-        <!-- Sport custom dropdown -->
-        <div class="relative" #sportWrap>
-          <button
-            class="inline-flex items-center gap-1.5 rounded-md border border-transparent
-                   bg-transparent px-2 py-1 font-medium text-white/70
-                   transition-colors hover:border-white/12 hover:bg-white/7 hover:text-white"
-            type="button"
-            (click)="sportDropOpen.set(!sportDropOpen())"
-          >
-            <mat-icon class="!size-4 !text-[16px] text-white/40">{{ currentSportIcon() }}</mat-icon>
-            {{ currentSportLabel() }}
-            <mat-icon
-              class="!size-4 !text-[16px] text-white/35 transition-transform"
-              [class.rotate-180]="sportDropOpen()"
-            >expand_more</mat-icon>
-          </button>
+        <!-- Sport mat-menu dropdown -->
+        <button
+          matButton
+          type="button"
+          class="!text-white/70 !font-medium"
+          [matMenuTriggerFor]="sportMenu"
+        >
+          <mat-icon class="!size-4 !text-[16px] text-white/40">{{ currentSportIcon() }}</mat-icon>
+          {{ currentSportLabel() }}
+          <mat-icon class="!size-4 !text-[16px] text-white/35">expand_more</mat-icon>
+        </button>
 
-          @if (sportDropOpen()) {
-            <div
-              class="absolute left-0 top-[calc(100%+6px)] z-50 min-w-[200px]
-                     rounded-xl border border-white/10 bg-[#1a2742]
-                     p-1 shadow-[0_16px_48px_rgba(0,0,0,0.55)]"
-            >
-              @for (s of sports(); track s.id) {
-                <button
-                  class="flex w-full items-center gap-2.5 rounded-lg px-3 py-2
-                         text-[13px] text-white/65 transition-colors
-                         hover:bg-white/7 hover:text-white"
-                  [class.bg-blue-500/12]="data().sportId === s.id"
-                  [class.text-blue-300]="data().sportId === s.id"
-                  [class.font-medium]="data().sportId === s.id"
-                  type="button"
-                  (click)="selectSport(s)"
-                >
-                  <mat-icon class="!size-4 !text-[16px] text-white/35"
-                            [class.text-blue-400]="data().sportId === s.id">{{ s.icon }}</mat-icon>
-                  {{ s.label }}
-                  @if (data().sportId === s.id) {
-                    <mat-icon class="ml-auto !size-3.5 !text-[14px] text-blue-400">check</mat-icon>
-                  }
-                </button>
+        <mat-menu #sportMenu="matMenu">
+          @for (s of sports(); track s.id) {
+            <button mat-menu-item type="button" (click)="selectSport(s)">
+              <mat-icon>{{ s.icon }}</mat-icon>
+              {{ s.label }}
+              @if (data().sportId === s.id) {
+                <mat-icon class="ml-auto !size-3.5 !text-[14px]">check</mat-icon>
               }
-            </div>
+            </button>
           }
-        </div>
+        </mat-menu>
 
         <span class="text-white/22">·</span>
 
@@ -535,17 +655,27 @@ const SOCIAL_NETWORK_OPTIONS: Array<{
       <div class="inline-flex items-center gap-1.5">
         <mat-icon class="!size-3.5 !text-[14px] text-white/28">calendar_today</mat-icon>
         @if (editable()) {
-          <input
-            class="bg-transparent border-b border-dashed border-white/22 text-[13px]
-                   text-white/65 outline-none focus:border-white/55 [color-scheme:dark] w-30"
-            type="date" [(ngModel)]="startDateModel" title="Fecha inicio"
-          />
-          <span class="text-white/28 mx-0.5">→</span>
-          <input
-            class="bg-transparent border-b border-dashed border-white/22 text-[13px]
-                   text-white/65 outline-none focus:border-white/55 [color-scheme:dark] w-30"
-            type="date" [(ngModel)]="endDateModel" title="Fecha fin"
-          />
+          <button type="button" class="date-chip" (click)="startPicker.open()" aria-label="Fecha de inicio">
+            {{ formatDate(startDateValue()) }}
+            <mat-icon class="date-chip-icon">expand_more</mat-icon>
+          </button>
+          <mat-form-field class="date-field-hidden">
+            <input matInput [matDatepicker]="startPicker" [value]="startDateValue()"
+                   (dateChange)="onStartDateChange($event.value)" />
+            <mat-datepicker #startPicker />
+          </mat-form-field>
+
+          <span class="text-white/22 mx-0.5">→</span>
+
+          <button type="button" class="date-chip" (click)="endPicker.open()" aria-label="Fecha de fin">
+            {{ formatDate(endDateValue()) }}
+            <mat-icon class="date-chip-icon">expand_more</mat-icon>
+          </button>
+          <mat-form-field class="date-field-hidden">
+            <input matInput [matDatepicker]="endPicker" [value]="endDateValue()"
+                   (dateChange)="onEndDateChange($event.value)" />
+            <mat-datepicker #endPicker />
+          </mat-form-field>
         } @else {
           <span>{{ dateRangeLabel() }}</span>
         }
@@ -560,19 +690,27 @@ const SOCIAL_NETWORK_OPTIONS: Array<{
           [class.text-white/28]="registrationStatus() === 'closed' || registrationStatus() === 'none'"
         >how_to_reg</mat-icon>
         @if (editable()) {
-          <input
-            class="bg-transparent border-b border-dashed border-white/22 text-[13px]
-                   text-white/65 outline-none focus:border-white/55 [color-scheme:dark] w-30"
-            type="date" [(ngModel)]="regStartModel" title="Inicio inscripciones"
-            aria-label="Inicio de inscripciones"
-          />
-          <span class="text-white/28 mx-0.5">→</span>
-          <input
-            class="bg-transparent border-b border-dashed border-white/22 text-[13px]
-                   text-white/65 outline-none focus:border-white/55 [color-scheme:dark] w-30"
-            type="date" [(ngModel)]="regEndModel" title="Fin inscripciones"
-            aria-label="Fin de inscripciones"
-          />
+          <button type="button" class="date-chip" (click)="regStartPicker.open()" aria-label="Inicio inscripciones">
+            {{ formatDate(regStartValue()) }}
+            <mat-icon class="date-chip-icon">expand_more</mat-icon>
+          </button>
+          <mat-form-field class="date-field-hidden">
+            <input matInput [matDatepicker]="regStartPicker" [value]="regStartValue()"
+                   (dateChange)="onRegStartChange($event.value)" />
+            <mat-datepicker #regStartPicker />
+          </mat-form-field>
+
+          <span class="text-white/22 mx-0.5">→</span>
+
+          <button type="button" class="date-chip" (click)="regEndPicker.open()" aria-label="Fin inscripciones">
+            {{ formatDate(regEndValue()) }}
+            <mat-icon class="date-chip-icon">expand_more</mat-icon>
+          </button>
+          <mat-form-field class="date-field-hidden">
+            <input matInput [matDatepicker]="regEndPicker" [value]="regEndValue()"
+                   (dateChange)="onRegEndChange($event.value)" />
+            <mat-datepicker #regEndPicker />
+          </mat-form-field>
         } @else {
           <span
             [class.text-green-400]="registrationStatus() === 'open'"
@@ -598,6 +736,7 @@ export class ChampionshipHeaderComponent {
   // ── Inputs ────────────────────────────────────────────────────
   readonly data = input.required<ChampionshipHeaderData>();
   readonly sports = input<SportOption[]>([]);
+  readonly socialNetworkOptions = input<SocialNetworkOption[]>([]);
   readonly editable = input(false);
 
   // ── Outputs ───────────────────────────────────────────────────
@@ -607,24 +746,19 @@ export class ChampionshipHeaderComponent {
   // ── Template refs ─────────────────────────────────────────────
   private fileInputRef = viewChild<ElementRef<HTMLInputElement>>('fileInput');
   private nameContainerRef = viewChild<ElementRef<HTMLElement>>('nameContainer');
-  private sportWrapRef = viewChild<ElementRef<HTMLElement>>('sportWrap');
   private nameInputRef = viewChild<ElementRef<HTMLInputElement>>('nameInput');
   private teamsInputRef = viewChild<ElementRef<HTMLInputElement>>('teamsInput');
   private playersInputRef = viewChild<ElementRef<HTMLInputElement>>('playersInput');
   private locationInputRef = viewChild<ElementRef<HTMLInputElement>>('locationInput');
 
+  private readonly dialog = inject(MatDialog);
+
   // ── UI state ──────────────────────────────────────────────────
   popoverOpen = signal(false);
-  sportDropOpen = signal(false);
   editingTeams = signal(false);
   editingPlayers = signal(false);
   editingLocation = signal(false);
   logoPreview = signal<string | null>(null);
-  socialEditorOpen = signal(false);
-  socialEditorError = signal('');
-  socialEditingNetworkId = signal<number | null>(null);
-  socialNetworkDraft = 1;
-  socialUrlDraft = '';
 
   // ── Editable field mirrors (ngModel) ──────────────────────────
   // Initialized from data() on first render; changes emitted via dataChange output
@@ -643,17 +777,33 @@ export class ChampionshipHeaderComponent {
   get locationModel(): string { return this.data().location; }
   set locationModel(v) { this.dataChange.emit({ location: v }); }
 
-  get startDateModel(): string { return this.data().startDate; }
-  set startDateModel(v) { this.dataChange.emit({ startDate: v }); }
+  // ── Date helpers ──────────────────────────────────────────────
+  formatDate(d: Date | null): string {
+    if (!d) return '—';
+    return new Intl.DateTimeFormat('es-CO', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(d);
+  }
 
-  get endDateModel(): string { return this.data().endDate; }
-  set endDateModel(v) { this.dataChange.emit({ endDate: v }); }
+  private toDate(s: string): Date | null {
+    if (!s) return null;
+    const [y, m, d] = s.split('-').map(Number);
+    return new Date(y, m - 1, d);
+  }
 
-  get regStartModel(): string { return this.data().registrationStartDate; }
-  set regStartModel(v: string) { this.dataChange.emit({ registrationStartDate: v }); }
+  private fromDate(d: Date | null): string {
+    if (!d) return '';
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  }
 
-  get regEndModel(): string { return this.data().registrationEndDate; }
-  set regEndModel(v: string) { this.dataChange.emit({ registrationEndDate: v }); }
+  startDateValue = computed(() => this.toDate(this.data().startDate));
+  endDateValue = computed(() => this.toDate(this.data().endDate));
+  regStartValue = computed(() => this.toDate(this.data().registrationStartDate));
+  regEndValue = computed(() => this.toDate(this.data().registrationEndDate));
+
+  onStartDateChange(d: Date | null) { this.dataChange.emit({ startDate: this.fromDate(d) }); }
+  onEndDateChange(d: Date | null) { this.dataChange.emit({ endDate: this.fromDate(d) }); }
+  onRegStartChange(d: Date | null) { this.dataChange.emit({ registrationStartDate: this.fromDate(d) }); }
+  onRegEndChange(d: Date | null) { this.dataChange.emit({ registrationEndDate: this.fromDate(d) }); }
 
   // ── Computed ──────────────────────────────────────────────────
   registrationStatus = computed((): 'open' | 'upcoming' | 'closed' | 'none' => {
@@ -683,9 +833,23 @@ export class ChampionshipHeaderComponent {
   currentSportIcon = computed(() =>
     this.sports().find(s => s.id === this.data().sportId)?.icon ?? 'sports'
   );
+  private resolvedSocialNetworkOptions = computed<ResolvedSocialNetworkOption[]>(() => {
+    return this.socialNetworkOptions().map((opt, index) => {
+      const brand = SOCIAL_BRAND_PALETTE[index % SOCIAL_BRAND_PALETTE.length];
+      return {
+        id: opt.id,
+        name: opt.name,
+        icon: this.normalizeSocialIcon(opt.icon, opt.name),
+        placeholder: 'https://tu-enlace.com/perfil',
+        brandBg: brand.bg,
+        brandBorder: brand.border,
+      };
+    });
+  });
+
   socialLinksView = computed(() => {
     return this.data().socialLinks.map(link => {
-      const meta = SOCIAL_NETWORK_OPTIONS.find(opt => opt.id === link.socialNetworkId);
+      const meta = this.resolvedSocialNetworkOptions().find(opt => opt.id === link.socialNetworkId);
       return {
         ...link,
         name: link.name ?? meta?.name ?? `Red ${link.socialNetworkId}`,
@@ -697,18 +861,7 @@ export class ChampionshipHeaderComponent {
   });
   availableNetworkOptions = computed(() => {
     const used = new Set(this.data().socialLinks.map(link => link.socialNetworkId));
-    return SOCIAL_NETWORK_OPTIONS.filter(opt => !used.has(opt.id));
-  });
-  editorNetworkOptions = computed(() => {
-    const editing = this.socialEditingNetworkId();
-    const used = new Set(this.data().socialLinks
-      .filter(link => link.socialNetworkId !== editing)
-      .map(link => link.socialNetworkId));
-    return SOCIAL_NETWORK_OPTIONS.filter(opt => !used.has(opt.id));
-  });
-  socialUrlPlaceholder = computed(() => {
-    const meta = SOCIAL_NETWORK_OPTIONS.find(opt => opt.id === this.socialNetworkDraft);
-    return meta?.placeholder ?? 'https://...';
+    return this.resolvedSocialNetworkOptions().filter(opt => !used.has(opt.id));
   });
   statusLabel() { return this.getStatusMeta().label; }
   statusDotClass() { return this.getStatusMeta().dot; }
@@ -721,10 +874,6 @@ export class ChampionshipHeaderComponent {
     if (this.popoverOpen()) {
       const c = this.nameContainerRef()?.nativeElement;
       if (c && !c.contains(t)) this.closePopover();
-    }
-    if (this.sportDropOpen()) {
-      const w = this.sportWrapRef()?.nativeElement;
-      if (w && !w.contains(t)) this.sportDropOpen.set(false);
     }
   }
 
@@ -763,7 +912,6 @@ export class ChampionshipHeaderComponent {
   // ── Sport dropdown ─────────────────────────────────────────────
   selectSport(sport: SportOption): void {
     this.dataChange.emit({ sportId: sport.id });
-    this.sportDropOpen.set(false);
   }
 
   // ── Inline editing ─────────────────────────────────────────────
@@ -785,30 +933,45 @@ export class ChampionshipHeaderComponent {
   // ── Social links ───────────────────────────────────────────────
   startAddSocialLink(): void {
     const options = this.availableNetworkOptions();
-    if (options.length === 0) {
-      this.socialEditorError.set('Ya agregaste todas las redes disponibles.');
-      return;
-    }
-    this.socialEditingNetworkId.set(null);
-    this.socialNetworkDraft = options[0].id;
-    this.socialUrlDraft = '';
-    this.socialEditorError.set('');
-    this.socialEditorOpen.set(true);
+    if (options.length === 0) return;
+    this.dialog.open<SocialLinkDialogComponent, SocialLinkDialogData, SocialLinkDialogResult>(
+      SocialLinkDialogComponent,
+      { data: { networkOptions: options, editingNetworkId: null, initialUrl: '' }, width: '380px' }
+    ).afterClosed().subscribe(result => {
+      if (!result) return;
+      this.applySocialResult(result, null);
+    });
   }
 
   startEditSocialLink(link: ChampionshipHeaderSocialLink): void {
-    this.socialEditingNetworkId.set(link.socialNetworkId);
-    this.socialNetworkDraft = link.socialNetworkId;
-    this.socialUrlDraft = link.link;
-    this.socialEditorError.set('');
-    this.socialEditorOpen.set(true);
+    const options = this.resolvedSocialNetworkOptions().filter(opt =>
+      !this.data().socialLinks.some(l => l.socialNetworkId === opt.id && l.socialNetworkId !== link.socialNetworkId)
+    );
+    this.dialog.open<SocialLinkDialogComponent, SocialLinkDialogData, SocialLinkDialogResult>(
+      SocialLinkDialogComponent,
+      { data: { networkOptions: options, editingNetworkId: link.socialNetworkId, initialUrl: link.link }, width: '380px' }
+    ).afterClosed().subscribe(result => {
+      if (!result) return;
+      this.applySocialResult(result, link.socialNetworkId);
+    });
   }
 
-  cancelSocialEditor(): void {
-    this.socialEditorOpen.set(false);
-    this.socialEditorError.set('');
-    this.socialEditingNetworkId.set(null);
-    this.socialUrlDraft = '';
+  private applySocialResult(result: SocialLinkDialogResult, editingNetworkId: number | null): void {
+    const meta = this.resolvedSocialNetworkOptions().find(opt => opt.id === result.socialNetworkId);
+    const payload: ChampionshipHeaderSocialLink = {
+      socialNetworkId: result.socialNetworkId,
+      link: result.link,
+      name: meta?.name,
+      icon: meta?.icon,
+    };
+    const next = [...this.data().socialLinks];
+    const idx = next.findIndex(l => l.socialNetworkId === editingNetworkId);
+    if (idx >= 0) {
+      next[idx] = { ...next[idx], ...payload };
+    } else {
+      next.push({ ...payload, id: Date.now() });
+    }
+    this.dataChange.emit({ socialLinks: next });
   }
 
   removeSocialLink(socialNetworkId: number): void {
@@ -816,66 +979,33 @@ export class ChampionshipHeaderComponent {
     this.dataChange.emit({ socialLinks: next });
   }
 
-  canSaveSocialDraft(): boolean {
-    const url = this.socialUrlDraft.trim();
-    if (!this.isValidHttpsUrl(url)) return false;
-    const exists = this.data().socialLinks.some(link =>
-      link.socialNetworkId === this.socialNetworkDraft &&
-      link.socialNetworkId !== this.socialEditingNetworkId()
-    );
-    return !exists;
-  }
-
-  saveSocialDraft(): void {
-    const url = this.socialUrlDraft.trim();
-    if (!this.isValidHttpsUrl(url)) {
-      this.socialEditorError.set('La URL debe ser valida y comenzar con https://');
-      return;
-    }
-
-    const duplicated = this.data().socialLinks.some(link =>
-      link.socialNetworkId === this.socialNetworkDraft &&
-      link.socialNetworkId !== this.socialEditingNetworkId()
-    );
-    if (duplicated) {
-      this.socialEditorError.set('Solo se permite una red por tipo.');
-      return;
-    }
-
-    const meta = SOCIAL_NETWORK_OPTIONS.find(opt => opt.id === this.socialNetworkDraft);
-    const next = [...this.data().socialLinks];
-    const idx = next.findIndex(link => link.socialNetworkId === this.socialEditingNetworkId());
-    const payload: ChampionshipHeaderSocialLink = {
-      socialNetworkId: this.socialNetworkDraft,
-      link: url,
-      name: meta?.name,
-      icon: meta?.icon,
-    };
-
-    if (idx >= 0) {
-      const existing = next[idx];
-      next[idx] = { ...existing, ...payload };
-    } else {
-      next.push({ ...payload, id: Date.now() });
-    }
-
-    this.dataChange.emit({ socialLinks: next });
-    this.cancelSocialEditor();
-  }
-
-  private isValidHttpsUrl(value: string): boolean {
-    try {
-      const parsed = new URL(value);
-      return parsed.protocol === 'https:';
-    } catch {
-      return false;
-    }
-  }
-
   private getStatusMeta(): (typeof STATUS_META)[keyof typeof STATUS_META] {
     const rawStatus = this.data().status;
     const statusKey = STATUS_BY_VALUE[String(rawStatus).toLowerCase()] ?? 'draft';
     return STATUS_META[statusKey];
+  }
+
+  private normalizeSocialIcon(icon: string | null | undefined, name: string): string {
+    if (icon) {
+      const normalizedIcon = icon.trim().toLowerCase();
+      const directMap: Record<string, string> = {
+        instagram: 'photo_camera',
+        facebook: 'thumb_up',
+        youtube: 'smart_display',
+        tiktok: 'music_note',
+        x: 'close',
+        twitter: 'close',
+      };
+      return directMap[normalizedIcon] ?? 'link';
+    }
+
+    const normalizedName = name.trim().toLowerCase();
+    if (normalizedName.includes('instagram')) return 'photo_camera';
+    if (normalizedName.includes('facebook')) return 'thumb_up';
+    if (normalizedName.includes('youtube')) return 'smart_display';
+    if (normalizedName.includes('tiktok')) return 'music_note';
+    if (normalizedName === 'x' || normalizedName.includes('twitter')) return 'close';
+    return 'link';
   }
 
   // ── Date range label ───────────────────────────────────────────

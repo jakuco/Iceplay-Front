@@ -148,7 +148,7 @@ interface NavItem {
       background: var(--mat-sys-surface-container);
       // border-bottom: 1px solid var(--mat-sys-outline-variant);
       flex-shrink: 0;
-      z-index: 1000;
+      z-index: 40;
     }
 
     .header-brand {

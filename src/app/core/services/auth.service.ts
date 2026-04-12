@@ -39,6 +39,7 @@ export class AuthService {
   user = this._currentUser.asReadonly();
 
   get currentUser() {
+    console.log('Obteniendo usuario actual:', this._currentUser());
     return this.user;
   }
 
@@ -180,7 +181,7 @@ export class AuthService {
       role,
       createdAt: new Date(
         (backUser['createdAt'] as string | number | Date | undefined) ??
-          Date.now()
+        Date.now()
       ),
       lastLoginAt: backUser['lastLoginAt']
         ? new Date(backUser['lastLoginAt'] as string | number | Date)

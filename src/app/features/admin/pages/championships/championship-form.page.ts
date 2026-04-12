@@ -9,9 +9,14 @@ import {
 import { RouterLink } from '@angular/router';
 import { ActivatedRoute, Router } from '@angular/router';
 import { Observable, forkJoin, of, map } from 'rxjs';
+import { catchError } from 'rxjs/operators';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { MatTabsModule } from '@angular/material/tabs';
+import { MatToolbarModule } from '@angular/material/toolbar';
+import { MatButtonModule } from '@angular/material/button';
+import { MatDividerModule } from '@angular/material/divider';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 
 import { ChampionshipService } from '../../../../core/services/championship.service';
@@ -19,7 +24,6 @@ import { AuthService } from '../../../../core/services/auth.service';
 import { SportService } from '../../../../core/services/sport.service';
 import {
   Championship,
-  ChampionshipDetail,
   CreateChampionshipDto,
   CreateSocialLinkDto,
   UpdateChampionshipDto,
@@ -29,6 +33,7 @@ import {
   ChampionshipHeaderComponent,
   ChampionshipHeaderData,
   ChampionshipHeaderSocialLink,
+  SocialNetworkOption,
   SportOption,
 } from './championship-components/championship-header.component';
 
@@ -44,7 +49,6 @@ import {
   ChampionshipRulesComponent,
   ChampionshipRuleItem,
   RulePatchDto,
-  MOCK_RULES_FOOTBALL,
 } from './championship-components/championship-rules.component';
 
 import {
@@ -72,115 +76,137 @@ interface NavTab { id: string; label: string; icon: string; count: number | null
     RouterLink,
     MatIconModule,
     MatProgressSpinnerModule,
+    MatTabsModule,
+    MatToolbarModule,
+    MatButtonModule,
+    MatDividerModule,
     ChampionshipHeaderComponent,
     ChampionshipPhasesComponent,
     ChampionshipRulesComponent,
     ChampionshipTeamsComponent,
   ],
   template: `
-<div class="min-h-screen flex flex-col bg-[#f0f2f5]">
+<div class="min-h-screen flex flex-col bg-[var(--mat-sys-surface)]">
 
   <!-- ══ TOPBAR ══════════════════════════════════════════════ -->
-  <nav class="sticky top-0 z-50 flex items-center justify-between h-[52px] px-7
-              bg-[#080f1c] border-b border-white/[0.06]">
+  <mat-toolbar class="sticky top-0 !h-[52px] !px-7 !bg-[var(--mat-sys-surface-container-highest)]
+                      border-b border-[var(--mat-sys-outline-variant)] justify-between">
 
-    <a class="inline-flex items-center gap-1.5 text-[13px] font-medium text-white/50
-              no-underline transition-colors hover:text-white/90"
+    <a class="inline-flex items-center gap-1.5 text-[13px] font-medium
+              text-[var(--mat-sys-on-surface-variant)] no-underline transition-colors
+              hover:text-[var(--mat-sys-on-surface)]"
        routerLink="/admin/championships">
       <mat-icon class="!size-[18px] !text-[18px]">arrow_back</mat-icon>
       Campeonatos
     </a>
 
     <button
-      class="inline-flex items-center gap-1.5 h-[34px] px-[18px] rounded-lg
-             text-[13px] font-semibold cursor-pointer border-none transition-colors"
-      [style.background]="isEditable() ? '#3b82f6' : 'rgba(255,255,255,0.07)'"
-      [style.color]="isEditable() ? '#fff' : 'rgba(255,255,255,0.8)'"
-      [style.border]="isEditable() ? 'none' : '1px solid rgba(255,255,255,0.15)'"
-      [style.opacity]="isSaving() ? '0.5' : '1'"
-      [style.cursor]="isSaving() ? 'not-allowed' : 'pointer'"
+      matButton="filled"
       [disabled]="isSaving()"
       (click)="onActionClick()"
     >
       @if (isSaving()) {
         <mat-spinner [diameter]="16" />
       } @else {
-        <mat-icon class="!size-4 !text-[16px]">{{ actionIcon() }}</mat-icon>
+        <mat-icon>{{ actionIcon() }}</mat-icon>
       }
       {{ actionLabel() }}
     </button>
-  </nav>
+  </mat-toolbar>
+
+  <!-- ══ RETRY BANNER ════════════════════════════════════════ -->
+  @if (pendingRetryId()) {
+    <div class="flex items-center justify-between gap-3 px-5 py-2.5
+                bg-[var(--mat-sys-error-container)] border-b border-[var(--mat-sys-error)]">
+      <div class="flex items-center gap-2 text-[13px] text-[var(--mat-sys-on-error-container)]">
+        <mat-icon class="!size-[18px] !text-[18px] shrink-0">warning</mat-icon>
+        El campeonato fue creado, pero algunas secciones no se guardaron.
+      </div>
+      <div class="flex items-center gap-2 shrink-0">
+        <button matButton (click)="runSaveAllSections(pendingRetryId()!)" [disabled]="isSaving()" type="button"
+                class="!text-[var(--mat-sys-on-error-container)] !font-semibold">
+          <mat-icon class="!size-[16px] !text-[16px]">refresh</mat-icon>
+          Reintentar
+        </button>
+        <a matButton [routerLink]="['/admin/championships', pendingRetryId()]"
+           class="!text-[var(--mat-sys-on-error-container)]">
+          Ir de todas formas
+          <mat-icon class="!size-[16px] !text-[16px]">arrow_forward</mat-icon>
+        </a>
+      </div>
+    </div>
+  }
 
   <!-- ══ HEADER ══════════════════════════════════════════════ -->
   <app-championship-header
     [data]="headerData()"
     [sports]="sports()"
+    [socialNetworkOptions]="socialNetworkOptions()"
     [editable]="isEditable()"
     (dataChange)="onHeaderChange($event)"
     (logoSelected)="onLogoFile($event)"
   />
 
-  <div class="h-px bg-white/[0.08]"></div>
+  <mat-divider />
 
   <!-- ══ NAV TABS ════════════════════════════════════════════ -->
-  <div class="flex px-7 bg-white border-b border-gray-200">
+  <mat-tab-group
+    class="championship-tabs flex-1 relative z-[1]"
+    [selectedIndex]="activeTabIndex()"
+    (selectedIndexChange)="onTabChange($event)"
+    animationDuration="150ms"
+  >
     @for (tab of navTabs(); track tab.id) {
-      <button
-        class="relative bottom-[-1px] inline-flex items-center gap-1.5 h-[46px] px-[18px]
-               text-[12px] font-bold tracking-[.06em] uppercase bg-transparent
-               border-none border-b-2 cursor-pointer transition-colors"
-        [style.color]="activeNavTab() === tab.id ? '#3b82f6' : '#9ca3af'"
-        [style.border-bottom-color]="activeNavTab() === tab.id ? '#3b82f6' : 'transparent'"
-        (click)="activeNavTab.set(tab.id)"
-      >
-        <mat-icon class="!size-[15px] !text-[15px]">{{ tab.icon }}</mat-icon>
-        {{ tab.label }}
-        @if (tab.count !== null) {
-          <span
-            class="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5
-                   rounded-full text-[10px] font-bold"
-            [class.bg-gray-200]="activeNavTab() !== tab.id"
-            [class.text-gray-500]="activeNavTab() !== tab.id"
-            [class.bg-blue-100]="activeNavTab() === tab.id"
-            [class.text-blue-700]="activeNavTab() === tab.id"
-          >{{ tab.count }}</span>
+      <mat-tab>
+        <ng-template mat-tab-label>
+          <mat-icon class="!size-[15px] !text-[15px] mr-1.5">{{ tab.icon }}</mat-icon>
+          {{ tab.label }}
+          @if (tab.count !== null) {
+            <span class="ml-1.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5
+                         rounded-full text-[10px] font-bold
+                         bg-[var(--mat-sys-surface-container-high)]
+                         text-[var(--mat-sys-on-surface-variant)]">
+              {{ tab.count }}
+            </span>
+          }
+        </ng-template>
+
+        @if (tab.id === 'fases') {
+          <app-championship-phases
+            [championshipId]="championshipId()"
+            [initialPhases]="phases()"
+            [initialFormat]="activeFormat()"
+            (phasesChange)="onPhasesChange($event)"
+            (cancel)="onPhasesCancel()"
+          />
         }
-      </button>
+        @if (tab.id === 'reglas') {
+          <app-championship-rules
+            [initialRules]="championshipRules()"
+            (save)="onRulesSave($event)"
+            (cancel)="activeNavTab.set('fases')"
+          />
+        }
+        @if (tab.id === 'equipos') {
+          <app-championship-teams
+            [championshipId]="championshipId()"
+            [maxTeams]="headerData().maxTeams"
+            [maxPlayersPerTeam]="headerData().maxPlayersPerTeam"
+            [initialTeams]="teamsData()"
+            (teamsChange)="onTeamsChange($event)"
+            (dirty)="isDirty.set(true)"
+          />
+        }
+      </mat-tab>
     }
-  </div>
+  </mat-tab-group>
 
-  <!-- ══ TAB CONTENT ═════════════════════════════════════════ -->
-  <div class="flex-1">
+  @if (pageMode() === 'edit') {
+    <p class="m-0 px-7 pb-3 text-xs" style="color: var(--mat-sys-on-surface-variant); opacity: .65;">
+      Los cambios en Fases, Reglas y Equipos se guardan desde cada sección.
+    </p>
+  }
 
-    @if (activeNavTab() === 'fases') {
-      <app-championship-phases
-        [initialPhases]="phases()"
-        [initialFormat]="activeFormat()"
-        (phasesChange)="onPhasesChange($event)"
-        (save)="onPhasesSave($event)"
-        (cancel)="onPhasesCancel()"
-      />
-    }
-
-    @if (activeNavTab() === 'reglas') {
-      <app-championship-rules
-        [initialRules]="championshipRules()"
-        (save)="onRulesSave($event)"
-        (cancel)="activeNavTab.set('fases')"
-      />
-    }
-
-    @if (activeNavTab() === 'equipos') {
-      <app-championship-teams
-        [maxTeams]="headerData().maxTeams"
-        [maxPlayersPerTeam]="headerData().maxPlayersPerTeam"
-        [initialTeams]="teamsData()"
-        (save)="onTeamsSave($event)"
-        (dirty)="isDirty.set(true)"
-      />
-    }
-
-  </div>
 </div>
   `,
 })
@@ -206,6 +232,7 @@ export default class ChampionshipFormPage implements OnInit {
 
   // ── Sports (cargados del servicio) ─────────────────────────────
   sports = signal<SportOption[]>([]);
+  socialNetworkOptions = signal<SocialNetworkOption[]>([]);
 
   // ── Header data ────────────────────────────────────────────────
   headerData = signal<ChampionshipHeaderData>({
@@ -223,6 +250,9 @@ export default class ChampionshipFormPage implements OnInit {
   // ── Rules state ─────────────────────────────────────────────────
   championshipRules = signal<ChampionshipRuleItem[]>([]);
 
+  // ── Retry state (create mode partial failures) ───────────────────
+  pendingRetryId = signal<string | null>(null);
+
   // ── Teams state ──────────────────────────────────────────────────
   teamsData = signal<TeamItem[]>([]);
 
@@ -233,13 +263,23 @@ export default class ChampionshipFormPage implements OnInit {
     { id: 'equipos', label: 'Equipos', icon: 'group', count: this.headerData().currentTeams || null },
   ]);
 
+  activeTabIndex = computed(() => {
+    const idx = this.navTabs().findIndex(t => t.id === this.activeNavTab());
+    return idx >= 0 ? idx : 0;
+  });
+
+  onTabChange(index: number): void {
+    const tab = this.navTabs()[index];
+    if (tab) this.activeNavTab.set(tab.id);
+  }
+
   // ── Computed ───────────────────────────────────────────────────
   isEditable = computed(() => this.pageMode() !== 'view');
 
   actionLabel = computed(() => {
     if (this.isSaving()) return this.pageMode() === 'create' ? 'Creando...' : 'Guardando...';
     if (this.pageMode() === 'create') return 'Crear Campeonato';
-    if (this.pageMode() === 'edit') return 'Guardar Cambios';
+    if (this.pageMode() === 'edit') return 'Guardar Info General';
     return 'Editar';
   });
 
@@ -263,6 +303,8 @@ export default class ChampionshipFormPage implements OnInit {
       this.cdr.markForCheck();
     });
 
+    this.championshipSvc.loadSocialNetworks();
+
     this.route.paramMap
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(params => {
@@ -284,8 +326,12 @@ export default class ChampionshipFormPage implements OnInit {
 
   // ── Header ─────────────────────────────────────────────────────
   onHeaderChange(patch: Partial<ChampionshipHeaderData>): void {
+    const prevSportId = this.headerData().sportId;
     this.headerData.update(d => ({ ...d, ...patch }));
     this.isDirty.set(true);
+    if (patch.sportId !== undefined && patch.sportId !== prevSportId) {
+      this.loadDefaultRules(patch.sportId);
+    }
   }
 
   onLogoFile(file: File): void {
@@ -298,21 +344,6 @@ export default class ChampionshipFormPage implements OnInit {
     this.phases.set(phases);
     this.headerData.update(d => ({ ...d, phaseCount: phases.length }));
     this.isDirty.set(true);
-  }
-
-  onPhasesSave(phases: PhaseCardData[]): void {
-    this.onPhasesChange(phases);
-    const id = this.championshipId();
-    if (!id) { this.snackBar.open('Fases guardadas', 'Cerrar', { duration: 2000 }); return; }
-    const dtos = phases.map(p => ({
-      name: p.name,
-      phaseType: p.phaseType,
-      phaseOrder: p.phaseOrder,
-    }));
-    this.championshipSvc.savePhases(id, dtos).subscribe({
-      next: () => this.snackBar.open('Fases guardadas', 'Cerrar', { duration: 2000 }),
-      error: () => this.snackBar.open('Error al guardar fases', 'Cerrar', { duration: 3000 }),
-    });
   }
 
   onPhasesCancel(): void {
@@ -331,36 +362,10 @@ export default class ChampionshipFormPage implements OnInit {
   }
 
   // ── Teams ──────────────────────────────────────────────────────
-  onTeamsSave(teams: TeamItem[]): void {
-    const id = this.championshipId();
-    if (!id) {
-      this.teamsData.set(teams);
-      this.headerData.update(d => ({ ...d, currentTeams: teams.filter(t => t.isActive).length }));
-      return;
-    }
-    const dtos = teams.map(t => ({
-      name: t.name,
-      shortname: t.shortname,
-      slug: t.slug,
-      logoUrl: t.logoUrl ?? undefined,
-      documentUrl: t.documentUrl ?? undefined,
-      primaryColor: t.primaryColor ?? undefined,
-      secondaryColor: t.secondaryColor ?? undefined,
-      location: t.location ?? undefined,
-      foundedYear: t.foundedYear ?? undefined,
-      homeVenue: t.homeVenue || undefined,
-      coachName: t.coachName ?? undefined,
-      coachPhone: t.coachPhone ?? undefined,
-      players: t.players,
-    }));
-    this.championshipSvc.saveTeams(id, dtos).subscribe({
-      next: (saved) => {
-        this.isDirty.set(false);
-        this.headerData.update(d => ({ ...d, currentTeams: saved.filter(t => t.isActive).length }));
-        this.snackBar.open('Equipos guardados', 'Cerrar', { duration: 2000 });
-      },
-      error: () => this.snackBar.open('Error al guardar equipos', 'Cerrar', { duration: 3000 }),
-    });
+  onTeamsChange(teams: TeamItem[]): void {
+    this.teamsData.set(teams);
+    this.headerData.update(d => ({ ...d, currentTeams: teams.filter(t => t.isActive).length }));
+    this.isDirty.set(true);
   }
 
   // ── Action button ──────────────────────────────────────────────
@@ -405,7 +410,6 @@ export default class ChampionshipFormPage implements OnInit {
     this.isSaving.set(true);
 
     if (this.pageMode() === 'edit' && this.championshipId()) {
-      const socialDtos = this.toSocialLinkDtos(hd.socialLinks);
       const dto: UpdateChampionshipDto = {
         name: hd.name,
         slug: this.toSlug(hd.name),
@@ -418,15 +422,27 @@ export default class ChampionshipFormPage implements OnInit {
         maxTeams: hd.maxTeams,
         maxPlayersPerTeam: hd.maxPlayersPerTeam,
       };
-      forkJoin([
-        this.championshipSvc.update(this.championshipId()!, dto),
-        this.championshipSvc.saveSocialLinks(this.championshipId()!, socialDtos),
-      ]).subscribe({
+      this.championshipSvc.update(this.championshipId()!, dto).subscribe({
         next: () => {
-          this.isDirty.set(false);
-          this.snackBar.open('Campeonato actualizado', 'Cerrar', { duration: 3000 });
-          this.pageMode.set('view');
-          this.isSaving.set(false);
+          const id = this.championshipId()!;
+          this.saveAllSections(id, 'edit').subscribe({
+            next: () => {
+              this.isDirty.set(false);
+              this.snackBar.open('Campeonato actualizado', 'Cerrar', { duration: 3000 });
+              this.pageMode.set('view');
+              this.isSaving.set(false);
+            },
+            error: () => {
+              this.isDirty.set(false);
+              this.snackBar.open(
+                'Campeonato actualizado. Algunas secciones no pudieron guardarse.',
+                'Cerrar',
+                { duration: 4000 },
+              );
+              this.pageMode.set('view');
+              this.isSaving.set(false);
+            },
+          });
         },
         error: () => {
           this.snackBar.open('Error al actualizar', 'Cerrar', { duration: 3000 });
@@ -435,7 +451,7 @@ export default class ChampionshipFormPage implements OnInit {
       });
     } else {
       const dto: CreateChampionshipDto = {
-        organizationId: +user.organizationId,
+        organizationId: user.organizationId,
         sportId: hd.sportId,
         name: hd.name,
         slug: this.toSlug(hd.name),
@@ -451,23 +467,7 @@ export default class ChampionshipFormPage implements OnInit {
       this.championshipSvc.create(dto).subscribe({
         next: (c: any) => {
           const newId = String(c.id);
-          // Auto-guardar fases y equipos que el admin haya configurado antes de crear
-          this.saveAllSections(newId).subscribe({
-            next: () => {
-              this.isDirty.set(false);
-              this.snackBar.open('Campeonato creado', 'Cerrar', { duration: 3000 });
-              this.router.navigate(['/admin/championships', newId]);
-            },
-            error: () => {
-              // El campeonato se creó; las secciones fallaron parcialmente
-              this.isDirty.set(false);
-              this.snackBar.open(
-                'Campeonato creado. Algunas secciones no pudieron guardarse.',
-                'Cerrar', { duration: 4000 },
-              );
-              this.router.navigate(['/admin/championships', newId]);
-            },
-          });
+          this.runSaveAllSections(newId);
         },
         error: () => {
           this.snackBar.open('Error al crear', 'Cerrar', { duration: 3000 });
@@ -477,58 +477,135 @@ export default class ChampionshipFormPage implements OnInit {
     }
   }
 
-  private saveAllSections(id: string): Observable<void> {
+  runSaveAllSections(id: string): void {
+    this.isSaving.set(true);
+    this.saveAllSections(id).subscribe({
+      next: () => {
+        this.pendingRetryId.set(null);
+        this.isDirty.set(false);
+        this.isSaving.set(false);
+        this.snackBar.open('Campeonato creado', 'Cerrar', { duration: 3000 });
+        this.router.navigate(['/admin/championships', id]);
+      },
+      error: () => {
+        this.isSaving.set(false);
+        this.pendingRetryId.set(id);
+      },
+    });
+  }
+
+  private saveAllSections(id: string, mode: 'create' | 'edit' = 'create'): Observable<void> {
     const saves: Observable<unknown>[] = [];
 
-    const phases = this.phases();
-    if (phases.length > 0) {
-      const dtos = phases.map(p => ({
-        name: p.name,
-        phaseType: p.phaseType,
-        phaseOrder: p.phaseOrder,
-      }));
-      saves.push(this.championshipSvc.savePhases(id, dtos));
+    // Fases y equipos solo en create — en edit cada componente los gestiona directo
+    if (mode === 'create') {
+      const phases = this.phases();
+      if (phases.length > 0) {
+        const dtos = phases.map(p => ({
+          name: p.name,
+          phaseType: p.phaseType,
+          phaseOrder: p.phaseOrder,
+          status: p.status,
+          swissConfig: p.swiss,
+        }));
+        saves.push(this.championshipSvc.savePhases(id, dtos));
+      }
+
+      if (this.teamsData().length > 0) {
+        const dtos = this.teamsData().map(t => ({
+          name: t.name,
+          shortname: t.shortname,
+          slug: t.slug,
+          logoUrl: t.logoUrl ?? undefined,
+          documentUrl: t.documentUrl ?? undefined,
+          primaryColor: t.primaryColor ?? undefined,
+          secondaryColor: t.secondaryColor ?? undefined,
+          location: t.location ?? undefined,
+          foundedYear: t.foundedYear ?? undefined,
+          homeVenue: t.homeVenue || undefined,
+          coachName: t.coachName ?? undefined,
+          coachPhone: t.coachPhone ?? undefined,
+          players: t.players,
+        }));
+        saves.push(
+          this.championshipSvc.saveTeams(id, dtos).pipe(
+            catchError((err: Error) => {
+              const msg = err?.message ?? '';
+              const isDuplicate = msg.toLowerCase().includes('exist') || msg.includes('409') || msg.includes('duplicate');
+              this.snackBar.open(
+                isDuplicate
+                  ? 'Uno o más equipos ya existen en el sistema y no pudieron guardarse.'
+                  : 'Error al guardar los equipos.',
+                'Cerrar',
+                { duration: 5000 },
+              );
+              return of([]);
+            }),
+          ),
+        );
+      }
     }
 
-    if (this.teamsData().length > 0) {
-      const dtos = this.teamsData().map(t => ({
-        name: t.name,
-        shortname: t.shortname,
-        slug: t.slug,
-        logoUrl: t.logoUrl ?? undefined,
-        documentUrl: t.documentUrl ?? undefined,
-        primaryColor: t.primaryColor ?? undefined,
-        secondaryColor: t.secondaryColor ?? undefined,
-        location: t.location ?? undefined,
-        foundedYear: t.foundedYear ?? undefined,
-        homeVenue: t.homeVenue || undefined,
-        coachName: t.coachName ?? undefined,
-        coachPhone: t.coachPhone ?? undefined,
-        players: t.players,
+    const overriddenRules = this.championshipRules().filter(r => r.isOverridden);
+    if (overriddenRules.length > 0) {
+      const dtos = overriddenRules.map(r => ({
+        matchRuleId: r.matchRuleId,
+        sportId: this.headerData().sportId,
+        value: r.currentValue,
       }));
-      saves.push(this.championshipSvc.saveTeams(id, dtos));
+      saves.push(
+        this.championshipSvc.updateRules(id, dtos).pipe(
+          catchError(() => of(null)),
+        ),
+      );
     }
 
     const socialDtos = this.toSocialLinkDtos(this.headerData().socialLinks);
-    saves.push(this.championshipSvc.saveSocialLinks(id, socialDtos));
+    saves.push(this.championshipSvc.replaceSocialLinks(id, socialDtos));
 
     return saves.length > 0
       ? forkJoin(saves).pipe(map(() => void 0))
       : of(void 0);
   }
 
-  private loadDefaultRules(_sportId: number): void {
-    // Catálogo con valores reseteados a default (sin overrides)
-    const defaults = MOCK_RULES_FOOTBALL.map(r => ({
-      ...r, currentValue: r.defaultValue, isOverridden: false,
-    }));
-    this.championshipRules.set(defaults);
-    this.cdr.markForCheck();
+  private loadDefaultRules(sportId: number): void {
+    this.championshipSvc.getDefaultRules(sportId).subscribe({
+      next: (response) => {
+        this.championshipRules.set(response.rules.map((rule) => this.toRuleItem(rule)));
+        this.cdr.markForCheck();
+      },
+      error: () => {
+        this.championshipRules.set([]);
+        this.snackBar.open('No se pudieron cargar las reglas del deporte', 'Cerrar', { duration: 3000 });
+        this.cdr.markForCheck();
+      },
+    });
   }
 
   private loadChampionship(id: string): void {
-    this.championshipSvc.getById(id).subscribe({
-      next: (c: ChampionshipDetail) => {
+    forkJoin({
+      detail: this.championshipSvc.getChampionshipById(id),
+      phases: this.championshipSvc.getPhases(id),
+      localSocialLinks: this.championshipSvc.getSocialLinks(id),
+      socialNetworks: this.championshipSvc.getSocialNetworks(),
+      rules: this.championshipSvc.getRules(id),
+    }).subscribe({
+      next: ({ detail: c, phases, localSocialLinks, socialNetworks, rules }) => {
+        const socialLinks = localSocialLinks.map(ls => {
+          const sn = socialNetworks.find(n => String(n.id) === String(ls.socialNetworkId));
+          return {
+            id: Number(ls.id),
+            socialNetworkId: Number(ls.socialNetworkId),
+            link: ls.link,
+            name: sn?.name,
+            icon: sn?.icon,
+          };
+        });
+
+        this.socialNetworkOptions.set(
+          socialNetworks.map(sn => ({ id: Number(sn.id), name: sn.name, icon: sn.icon }))
+        );
+
         this.headerData.set({
           name: c.name,
           description: c.description ?? '',
@@ -545,30 +622,16 @@ export default class ChampionshipFormPage implements OnInit {
           phaseCount: this.phases().length,
           status: (c.status as any) ?? 'active',
           logoUrl: c.logo ?? null,
-          socialLinks: (c.socialLinks ?? []).map(link => ({
-            id: Number(link.id),
-            socialNetworkId: Number(link.socialNetworkId),
-            link: link.link,
-            name: link.socialNetwork?.name,
-            icon: link.socialNetwork?.icon,
-          })),
+          socialLinks,
         });
-        // Cargar reglas guardadas y mezclar con metadatos del catálogo
-        this.championshipSvc.getRules(id).subscribe(rulesResp => {
-          const overrides = new Map(rulesResp.rules.map(r => [r.matchRuleId, r]));
-          const merged = MOCK_RULES_FOOTBALL.map(meta => {
-            const saved = overrides.get(meta.matchRuleId);
-            return saved
-              ? { ...meta, currentValue: saved.currentValue, isOverridden: saved.isOverridden }
-              : { ...meta, currentValue: meta.defaultValue, isOverridden: false };
-          });
-          this.championshipRules.set(merged);
-          this.cdr.markForCheck();
-        });
-        const phasesFromDetail = c.phases ?? [];
+
+        this.championshipRules.set(rules.rules.map((rule) => this.toRuleItem(rule)));
+        // Fases: endpoint dedicado /championships/:id/phases.
+        const phasesFromDetail = phases;
         {
           const mapped: PhaseCardData[] = phasesFromDetail.map(p => ({
             id: Number(p.id),
+            backendId: Number(p.id),
             name: p.name,
             phaseType: p.phaseType,
             phaseOrder: p.phaseOrder,
@@ -660,9 +723,10 @@ export default class ChampionshipFormPage implements OnInit {
         }
         // Cargar equipos del campeonato
         this.championshipSvc.getTeams(id).subscribe(profiles => {
-          const mapped: TeamItem[] = profiles.map((p, teamIndex) => ({
-            id: this.toStableNumericId(p.id, teamIndex + 1),
-            championshipId: this.toStableNumericId(p.championshipId, 0),
+          console.log('Teams loaded from backend:', profiles);
+          const mapped: TeamItem[] = profiles.map((p) => ({
+            id: p.id,
+            championshipId: p.championshipId,
             name: p.name,
             shortname: p.shortname,
             slug: p.slug,
@@ -671,24 +735,29 @@ export default class ChampionshipFormPage implements OnInit {
             primaryColor: p.primaryColor ?? '#1a56db',
             secondaryColor: p.secondaryColor ?? '#e5e7eb',
             location: p.location ?? '',
-            foundedYear: (p as any).foundedYear ?? null,
-            homeVenue: (p as any).homeVenue ?? '',
+            foundedYear: p.foundedYear ?? null,
+            homeVenue: p.homeVenue ?? '',
             coachName: p.coachName ?? '',
             coachPhone: p.coachPhone ?? '',
             isActive: p.isActive,
-            players: (p.players ?? []).map((pl, playerIndex) => ({
-              id: this.toStableNumericId(pl.id, (teamIndex + 1) * 1000 + playerIndex + 1),
-              teamId: this.toStableNumericId(pl.teamId, teamIndex + 1),
-              positionId: this.toStableNumericId(pl.positionId, 1),
+            players: (p.players ?? []).map((pl) => ({
+              id: pl.id,
+              teamId: pl.teamId,
+              positionId: pl.positionId,
               firstName: pl.firstName,
               lastName: pl.lastName,
               nickName: pl.nickName ?? null,
               number: pl.number,
-              birthDate: pl.birthDate ? String(pl.birthDate) : null,
+              birthDate: pl.birthDate,
               height: pl.height ?? null,
               weight: pl.weight ?? null,
               status: (pl.status as TeamItem['players'][number]['status']) ?? 'active',
-              photoUrl: (pl as any).photoUrl ?? null,
+              photoUrl: pl.photoUrl ?? null,
+              suspensionEndDate: pl.suspensionEndDate ?? null,
+              suspensionReason: pl.suspensionReason ?? null,
+              isActive: pl.isActive ?? true,
+              createdAt: pl.createdAt ?? new Date(),
+              updatedAt: pl.updatedAt ?? new Date(),
             })),
           }));
           this.teamsData.set(mapped);
@@ -735,27 +804,52 @@ export default class ChampionshipFormPage implements OnInit {
     return Array.from(mapByNetwork.values());
   }
 
-  private toStableNumericId(value: unknown, fallback: number): number {
-    if (typeof value === 'number' && Number.isFinite(value)) {
-      return value;
-    }
+  private toRuleItem(rule: {
+    matchRuleId: number | string;
+    name: string;
+    defaultValue: number;
+    currentValue: number;
+    isOverridden: boolean;
+  }): ChampionshipRuleItem {
+    const isBoolean = this.isBooleanRule(rule.name);
+    const label = this.humanizeRuleName(rule.name);
+    return {
+      matchRuleId: Number(rule.matchRuleId),
+      name: rule.name,
+      label,
+      description: `Configuracion para ${label.toLowerCase()}.`,
+      category: this.getRuleCategory(rule.name),
+      categoryLabel: this.getRuleCategoryLabel(rule.name),
+      valueType: isBoolean ? 'boolean' : 'number',
+      defaultValue: Number(rule.defaultValue),
+      currentValue: Number(rule.currentValue),
+      isOverridden: Boolean(rule.isOverridden),
+      min: isBoolean ? undefined : 0,
+      max: isBoolean ? undefined : 999,
+    };
+  }
 
-    const asNumber = Number(value);
-    if (Number.isFinite(asNumber)) {
-      return asNumber;
-    }
+  private humanizeRuleName(name: string): string {
+    return name
+      .replace(/_/g, ' ')
+      .replace(/\b\w/g, (char) => char.toUpperCase());
+  }
 
-    const text = String(value ?? '').trim();
-    if (!text) {
-      return fallback;
-    }
+  private isBooleanRule(name: string): boolean {
+    return name.startsWith('allow_') || name.startsWith('enable_') || name.includes('penalty') || name.includes('extra_time');
+  }
 
-    // Deterministic 32-bit hash for UUID/string ids to keep UI keys stable.
-    let hash = 0;
-    for (let i = 0; i < text.length; i++) {
-      hash = ((hash << 5) - hash + text.charCodeAt(i)) | 0;
-    }
-    return Math.abs(hash) || fallback;
+  private getRuleCategory(name: string): string {
+    if (name.includes('player') || name.includes('substitution')) return 'players';
+    if (name.includes('card') || name.includes('match') || name.includes('duration')) return 'match';
+    return 'additional';
+  }
+
+  private getRuleCategoryLabel(name: string): string {
+    const category = this.getRuleCategory(name);
+    if (category === 'players') return 'Jugadores';
+    if (category === 'match') return 'Partido';
+    return 'Opciones Adicionales';
   }
 
   private isHttpsUrl(value: string): boolean {

@@ -30,58 +30,26 @@ import {
 import { FormsModule } from '@angular/forms';
 import { KeyValuePipe } from '@angular/common';
 import { MatIconModule } from '@angular/material/icon';
+import { MatButtonModule } from '@angular/material/button';
+import { MatProgressBarModule } from '@angular/material/progress-bar';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatInputModule } from '@angular/material/input';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { finalize } from 'rxjs/operators';
 
 import {
   PlayerModalComponent,
   PlayerFormData,
-  PositionOption,
-  MOCK_POSITIONS,
 } from './player-modal.component';
+import { ChampionshipService } from '../../../../../core/services/championship.service';
 import { FileUploadComponent } from '../../../../../shared/ui/file-upload/file-upload.component';
 import { PdfViewerComponent } from '../../../../../shared/ui/pdf-viewer/pdf-viewer.component';
 import { TeamImportService, ImportedTeamPayload, ImportedPlayer, FieldError } from '../../../../../core/services/team-import.service';
+import { DbId, Player, PlayerApiResponse, PlayerStatus, PlayerUpsertDto, Team, TeamApiResponse } from '@core/models';
 
 // ─────────────────────────────────────────────────────────────
 // TYPES
 // ─────────────────────────────────────────────────────────────
-
-export type PlayerStatus = 'active' | 'suspended' | 'injured' | 'inactive';
-
-export interface TeamPlayer {
-  id: number;
-  teamId: number;
-  positionId: number;
-  firstName: string;
-  lastName: string;
-  nickName: string | null;
-  number: number;
-  birthDate: string | null;
-  height: number | null;
-  weight: number | null;
-  status: PlayerStatus;
-  photoUrl: string | null;   // URL persistida
-  photoFile?: File;             // transient — solo para preview/upload
-}
-
-export interface TeamItem {
-  id: number;
-  championshipId: number;
-  name: string;
-  shortname: string;
-  slug: string;
-  logoUrl: string | null;
-  documentUrl: string | null;
-  primaryColor: string;
-  secondaryColor: string;
-  location: string;
-  foundedYear: number | null;
-  homeVenue: string;
-  coachName: string;
-  coachPhone: string;
-  isActive: boolean;
-  players: TeamPlayer[];
-}
 
 /** Datos de conflicto cuando el CSV trae un equipo ya existente */
 interface ImportConflict {
@@ -107,9 +75,21 @@ type ImportedTeamEditableField =
 
 type ImportedPlayerEditableField = 'number' | 'firstName' | 'lastName' | 'position' | 'nickName';
 
+/**
+ * Representación UI de un equipo.
+ * Extiende Team reemplazando players opcionales por Player[] requerido.
+ * Equipos locales (no persistidos) usan IDs con prefijo "temp-".
+ * Equipos del backend usan su UUID string directamente como id.
+ */
+export interface TeamItem extends Omit<Team, 'players'> {
+  players: Player[];
+}
+
+type TeamPlayer = Player & { photoFile?: File };
+
 /** Datos del form para crear/editar un equipo */
 interface TeamFormData {
-  id?: number;
+  id?: DbId;   // backend UUID o prefijo 'temp-' para equipos locales
   name: string;
   shortname: string;
   coachName: string;
@@ -139,8 +119,56 @@ const PLAYER_STATUS_META: Record<PlayerStatus, { label: string; classes: string 
   active: { label: 'Activo', classes: 'bg-green-50 text-green-700' },
   suspended: { label: 'Suspendido', classes: 'bg-amber-50 text-amber-700' },
   injured: { label: 'Lesionado', classes: 'bg-orange-50 text-orange-700' },
-  inactive: { label: 'Inactivo', classes: 'bg-gray-100 text-gray-500' },
+  inactive: { label: 'Inactivo', classes: 'bg-[var(--mat-sys-surface-container-high)] text-[var(--mat-sys-on-surface-variant)]' },
 };
+
+// ─── Module-level helpers ──────────────────────────────────────
+
+/** Convierte PlayerApiResponse → Player (modelo frontend con fechas como Date). */
+function apiToPlayer(api: PlayerApiResponse): Player {
+  return {
+    id: api.id,
+    teamId: api.teamId,
+    positionId: api.positionId ? Number(api.positionId) : 0,
+    photoUrl: api.photoUrl,
+    firstName: api.firstName,
+    lastName: api.lastName,
+    nickName: api.nickName ?? null,
+    birthDate: api.birthDate ? new Date(api.birthDate) : null,
+    number: api.number ?? 0,
+    height: api.height ? parseFloat(api.height) : null,
+    weight: api.weight ? parseFloat(api.weight) : null,
+    status: (api.status as PlayerStatus) ?? PlayerStatus.Active,
+    suspensionEndDate: api.suspensionEndDate ? new Date(api.suspensionEndDate) : null,
+    suspensionReason: api.suspensionReason ?? null,
+    isActive: api.isActive,
+    createdAt: new Date(api.createdAt),
+    updatedAt: new Date(api.updatedAt),
+  };
+}
+
+/** Convierte TeamApiResponse → Team (modelo frontend). */
+function apiToTeam(api: TeamApiResponse): Team {
+  return {
+    id: api.id,
+    championshipId: api.championshipId,
+    name: api.name,
+    shortname: api.shortname ?? '',
+    slug: api.slug,
+    logoUrl: api.logoUrl ?? null,
+    documentUrl: api.documentURL ?? null,
+    primaryColor: api.primaryColor ?? '#1a56db',
+    secondaryColor: api.secondaryColor ?? '#e74694',
+    foundedYear: api.foundedYear ?? null,
+    homeVenue: api.homeVenue?.toString() ?? null,
+    location: api.location ?? null,
+    coachName: api.coachName ?? null,
+    coachPhone: api.coachPhone ?? null,
+    isActive: api.isActive,
+    hasActiveMatches: api.hasActiveMatches ?? undefined,
+    isTeamActive: api.isTeamActive ?? undefined,
+  };
+}
 
 // CSV template headers (localized)
 const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,color_primario,color_secundario';
@@ -152,8 +180,17 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
 @Component({
   selector: 'app-championship-teams',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  standalone: true,
-  imports: [FormsModule, MatIconModule, PlayerModalComponent, FileUploadComponent, PdfViewerComponent],
+  imports: [
+    FormsModule,
+    MatIconModule,
+    MatButtonModule,
+    MatProgressBarModule,
+    MatFormFieldModule,
+    MatInputModule,
+    PlayerModalComponent,
+    FileUploadComponent,
+    PdfViewerComponent,
+  ],
   template: `
 <div class="max-w-[960px] mx-auto px-7 pt-6 pb-8 flex flex-col gap-4">
 
@@ -161,11 +198,11 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
   <div class="flex items-center gap-3 flex-wrap">
 
     <!-- Counter + progress -->
-    <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white
-                border border-gray-200 text-[13px] font-medium text-gray-700 shrink-0">
-      <mat-icon class="size!-4 text-[16px]! text-gray-400">group</mat-icon>
-      <span><strong class="text-gray-900">{{ teams().length }}</strong>/{{ maxTeams() }}</span>
-      <div class="w-16 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+    <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[var(--mat-sys-surface-container)]
+                border border-[var(--mat-sys-outline-variant)] text-[13px] font-medium text-[var(--mat-sys-on-surface)] shrink-0">
+      <mat-icon class="size!-4 text-[16px]! text-[var(--mat-sys-on-surface-variant)]">group</mat-icon>
+      <span><strong class="text-[var(--mat-sys-on-surface)]">{{ teams().length }}</strong>/{{ maxTeams() }}</span>
+      <div class="w-16 h-1.5 bg-[var(--mat-sys-surface-container-high)] rounded-full overflow-hidden">
         <div
           class="h-full rounded-full transition-all duration-300"
           [style.width.%]="progressPct()"
@@ -176,12 +213,12 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
 
     <!-- Search -->
     <div class="relative flex-1 min-w-[180px]">
-      <mat-icon class="absolute left-3 top-1/2 -translate-y-1/2 size!-4 text-[16px]! text-gray-400
+      <mat-icon class="absolute left-3 top-1/2 -translate-y-1/2 size!-4 text-[16px]! text-[var(--mat-sys-on-surface-variant)]
                        pointer-events-none">search</mat-icon>
       <input
-        class="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg bg-white text-[13px]
-               text-gray-900 outline-none focus:border-blue-400 focus:ring-2
-               focus:ring-blue-400/10 transition-all placeholder:text-gray-400"
+        class="w-full pl-9 pr-3 py-2 border border-[var(--mat-sys-outline-variant)] rounded-lg bg-[var(--mat-sys-surface-container)] text-[13px]
+               text-[var(--mat-sys-on-surface)] outline-none focus:border-blue-400 focus:ring-2
+               focus:ring-blue-400/10 transition-all placeholder:text-[var(--mat-sys-on-surface-variant)]"
         [ngModel]="searchQuery()" (ngModelChange)="searchQuery.set($event)"
         placeholder="Buscar equipo..."
       />
@@ -190,17 +227,14 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
     <div class="flex items-center gap-2 ml-auto">
       <!-- Importar -->
       <button
-        class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-[13px]
-               font-medium cursor-pointer transition-colors border"
-        [style.background]="showImport() ? '#3b82f6' : '#fff'"
-        [style.color]="showImport() ? '#fff' : '#374151'"
-        [style.border-color]="showImport() ? '#3b82f6' : '#d1d5db'"
+        matButton="outlined"
+        class="!h-9"
         (click)="toggleImport()"
         type="button"
       >
-        <mat-icon class="size-4! text-[16px]!">upload</mat-icon>
+        <mat-icon>upload</mat-icon>
         Importar
-        <mat-icon class="size-3.5! text-[14px]! transition-transform duration-200"
+        <mat-icon class="transition-transform duration-200"
                   [style.transform]="showImport() ? 'rotate(180deg)' : 'rotate(0)'">
           expand_more
         </mat-icon>
@@ -208,15 +242,13 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
 
       <!-- Inscribir -->
       <button
-        class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-blue-500 border-none
-               text-white text-[13px] font-semibold cursor-pointer hover:bg-blue-600
-               transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        matButton="filled"
         [disabled]="isFull()"
         (click)="openCreateTeam()"
         type="button"
         [title]="isFull() ? 'Se alcanzó el límite de equipos' : 'Inscribir nuevo equipo'"
       >
-        <mat-icon class="size!-4 text-[16px]!">add</mat-icon>
+        <mat-icon>add</mat-icon>
         Inscribir
       </button>
     </div>
@@ -224,22 +256,22 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
 
   <!-- ══ IMPORT PANEL ═════════════════════════════════════ -->
   @if (showImport()) {
-    <div class="rounded-xl border border-gray-200 bg-white p-4 flex flex-col gap-3">
+    <div class="rounded-xl border border-[var(--mat-sys-outline-variant)] bg-[var(--mat-sys-surface-container)] p-4 flex flex-col gap-3">
 
       <!-- Info banner -->
-      <div class="flex items-start justify-between gap-4 rounded-lg bg-blue-50
-                  border border-blue-100 px-4 py-3">
+      <div class="flex items-start justify-between gap-4 rounded-lg bg-[var(--mat-sys-surface-container-low)]
+                  border border-[var(--mat-sys-outline-variant)] px-4 py-3">
         <div class="flex items-start gap-3">
-          <mat-icon class="size!-[18px] text-[18px]! text-blue-400 shrink-0 mt-0.5">
+          <mat-icon class="size!-[18px] text-[18px]! text-[var(--mat-sys-primary)] shrink-0 mt-0.5">
             description
           </mat-icon>
           <div>
-            <p class="m-0 text-[13px] text-blue-800 font-semibold">
+            <p class="m-0 text-[13px] text-[var(--mat-sys-on-surface)] font-semibold">
               Importa equipos masivamente desde un archivo
               <span class="font-bold">.csv</span> o
               <span class="font-bold">.xlsx</span>.
             </p>
-            <p class="m-0 mt-0.5 text-[12px] text-blue-600">
+            <p class="m-0 mt-0.5 text-[12px] text-[var(--mat-sys-on-surface-variant)]">
               Columnas reconocidas: nombre, nombre_corto, entrenador, teléfono, ciudad,
               color_primario, color_secundario
             </p>
@@ -248,13 +280,7 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
         <!-- TODO-DOWNLOAD: reemplazar el método downloadTemplate() con llamada al backend
              cuando el servicio de descarga esté disponible.
              this.teamService.downloadTemplate().subscribe(blob => saveAs(blob, 'plantilla.csv')) -->
-        <button
-          class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border
-                 border-blue-200 text-[12.5px] font-medium text-blue-600 cursor-pointer
-                 hover:bg-blue-50 transition-colors shrink-0"
-          (click)="downloadTemplate()"
-          type="button"
-        >
+        <button matButton="outlined" class="!h-8 shrink-0" (click)="downloadTemplate()" type="button">
           <mat-icon class="size!-[14px] text-[14px]!">download</mat-icon>
           Plantilla CSV
         </button>
@@ -266,8 +292,8 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
                flex flex-col items-center justify-center gap-2 py-10 px-6 text-center"
         [class.border-blue-400]="isDragOver()"
         [class.bg-blue-50]="isDragOver()"
-        [class.border-gray-300]="!isDragOver()"
-        [class.bg-gray-50]="!isDragOver()"
+        [style.border-color]="!isDragOver() ? 'var(--mat-sys-outline)' : ''"
+        [style.background]="!isDragOver() ? 'var(--mat-sys-surface-container-low)' : ''"
         [class.opacity-50]="importState() === 'uploading'"
         [class.pointer-events-none]="importState() === 'uploading'"
         (dragover)="onDragOver($event)"
@@ -283,13 +309,13 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
           class="sr-only"
           (change)="onFilesSelected($event)"
         />
-        <div class="size-12 rounded-full bg-white border border-gray-200 flex items-center
+        <div class="size-12 rounded-full bg-[var(--mat-sys-surface-container)] border border-[var(--mat-sys-outline-variant)] flex items-center
                     justify-center shadow-sm">
-          <mat-icon class="size!-6 text-[24px]! text-gray-400">upload_file</mat-icon>
+          <mat-icon class="size!-6 text-[24px]! text-[var(--mat-sys-on-surface-variant)]">upload_file</mat-icon>
         </div>
         <div>
-          <p class="m-0 text-[14px] font-semibold text-gray-700">Arrastra Excel + imágenes aquí</p>
-          <p class="m-0 mt-1 text-[12px] text-gray-400">
+          <p class="m-0 text-[14px] font-semibold text-[var(--mat-sys-on-surface)]">Arrastra Excel + imágenes aquí</p>
+          <p class="m-0 mt-1 text-[12px] text-[var(--mat-sys-on-surface-variant)]">
             Excel + logo (opcional) + fotos de jugadores (opcional)
           </p>
         </div>
@@ -302,8 +328,8 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
       @if (importQueue().length) {
         <div class="flex flex-col gap-2">
           @for (item of importQueue(); track item.fileName) {
-            <div class="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-gray-50
-                        border border-gray-100 text-[12.5px]">
+            <div class="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-[var(--mat-sys-surface-container-low)]
+                        border border-[var(--mat-sys-outline-variant)] text-[12.5px]">
               <mat-icon class="size!-4 text-[16px]! shrink-0"
                 [class.text-blue-400]="item.status === 'uploading'"
                 [class.text-green-500]="item.status === 'done'"
@@ -314,8 +340,8 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
                    item.status === 'error' ? 'error' :
                    item.status === 'conflict' ? 'warning' : 'hourglass_top' }}
               </mat-icon>
-              <span class="flex-1 truncate text-gray-700">{{ item.fileName }}</span>
-              <span class="text-gray-400 shrink-0">
+              <span class="flex-1 truncate text-[var(--mat-sys-on-surface)]">{{ item.fileName }}</span>
+              <span class="text-[var(--mat-sys-on-surface-variant)] shrink-0">
                 {{ item.status === 'uploading' ? 'Procesando...' :
                    item.status === 'done'      ? item.teamName + ' importado' :
                    item.status === 'conflict'  ? 'Conflicto' : item.error }}
@@ -329,17 +355,17 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
 
   <!-- ══ IMPORT PREVIEW PANEL ═════════════════════════════ -->
   @if (importState() === 'preview') {
-    <div class="rounded-xl border border-blue-200 bg-white p-6 flex flex-col gap-4">
-      
+    <div class="rounded-xl border border-[var(--mat-sys-outline-variant)] bg-[var(--mat-sys-surface-container)] p-6 flex flex-col gap-4">
+
       <!-- Header -->
       <div class="flex items-center justify-between">
         <div>
-          <h3 class="text-[15px] font-bold text-gray-900 m-0">Preview: {{ importedTeams().length }} Equipo(s)</h3>
-          <p class="text-[12px] text-gray-500 m-0 mt-1">{{ importProgressText() }}</p>
+          <h3 class="text-[15px] font-bold text-[var(--mat-sys-on-surface)] m-0">Preview: {{ importedTeams().length }} Equipo(s)</h3>
+          <p class="text-[12px] text-[var(--mat-sys-on-surface-variant)] m-0 mt-1">{{ importProgressText() }}</p>
         </div>
         <button
-          class="size-8 flex items-center justify-center rounded-lg text-gray-400
-                 hover:bg-gray-100 border-none bg-transparent cursor-pointer transition-colors"
+          class="size-8 flex items-center justify-center rounded-lg text-[var(--mat-sys-on-surface-variant)]
+                 hover:bg-[var(--mat-sys-surface-container-high)] border-none bg-transparent cursor-pointer transition-colors"
           (click)="cancelImport()"
           type="button"
         >
@@ -348,216 +374,58 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
       </div>
 
       <!-- Progreso -->
-      <div class="rounded-lg bg-blue-50 border border-blue-100 p-3">
+      <div class="rounded-lg bg-[var(--mat-sys-surface-container-low)] border border-[var(--mat-sys-outline-variant)] p-3">
         <div class="flex items-center justify-between mb-2">
-          <span class="text-[12px] font-medium text-blue-900">
+          <span class="text-[12px] font-medium text-[var(--mat-sys-on-surface)]">
             {{ importProgress().imagesProcessed }}/{{ importProgress().totalImages }} imágenes
           </span>
-          <span class="text-[12px] font-medium text-blue-900">
+          <span class="text-[12px] font-medium text-[var(--mat-sys-on-surface)]">
             {{ importedTeams().length }} Excel(s) procesado(s)
           </span>
         </div>
-        <div class="h-2 bg-blue-200 rounded-full overflow-hidden">
-          <div
-            class="h-full bg-blue-500 transition-all duration-300"
-            [style.width.%]="importProgress().totalImages > 0 
-              ? (importProgress().imagesProcessed / importProgress().totalImages) * 100 
-              : 0"
-          ></div>
-        </div>
+        <mat-progress-bar
+          mode="determinate"
+          [value]="importProgress().totalImages > 0
+            ? (importProgress().imagesProcessed / importProgress().totalImages) * 100
+            : 0"
+        />
       </div>
 
-      <!-- Teams preview - Acordeones -->
+      <!-- Teams preview - Lista resumida -->
       <div class="flex flex-col gap-3 max-h-96 overflow-y-auto">
         @for (team of importedTeams(); track team.name; let idx = $index) {
-          <div class="rounded-lg border border-gray-200 overflow-hidden">
-            <!-- Header del acordeón -->
-            <div class="bg-gray-50 p-3 flex items-center justify-between cursor-pointer hover:bg-gray-100"
-                 (click)="toggleTeamExpand(idx)">
+          <div class="rounded-lg border border-[var(--mat-sys-outline-variant)] overflow-hidden">
+            <div class="bg-[var(--mat-sys-surface-container-low)] p-3 flex items-center justify-between">
               <div class="flex items-center gap-2 flex-1">
-                <span class="text-[13px] font-semibold text-gray-900">{{ team.name }} ({{ team.shortname }})</span>
-                <span class="text-[11px] text-gray-500">{{ team.players.length }} jugadores</span>
+                <span class="text-[13px] font-semibold text-[var(--mat-sys-on-surface)]">{{ team.name }} ({{ team.shortname }})</span>
+                <span class="text-[11px] text-[var(--mat-sys-on-surface-variant)]">{{ team.players.length }} jugadores</span>
                 @if (team.logoFile) {
-                  <span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-green-100 text-green-700 text-[10px] font-medium">
-                    <mat-icon class="size!-3 text-[12px]!">check</mat-icon> Logo
+                  <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px] font-semibold
+                               border-[var(--mat-sys-outline-variant)]"
+                        style="background: color-mix(in srgb, var(--mat-sys-primary) 16%, var(--mat-sys-surface-container-high)); color: var(--mat-sys-primary);">
+                    <mat-icon class="!w-3 !h-3 !text-[12px] leading-none align-middle">check</mat-icon> Logo
                   </span>
                 }
                 @if (hasPlayersWithPhoto(team.players)) {
-                  <span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-green-100 text-green-700 text-[10px] font-medium">
-                    <mat-icon class="size!-3 text-[12px]!">check</mat-icon> 
+                  <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px] font-semibold
+                               border-[var(--mat-sys-outline-variant)]"
+                        style="background: color-mix(in srgb, var(--mat-sys-primary) 10%, var(--mat-sys-surface-container-high)); color: var(--mat-sys-on-surface);">
+                    <mat-icon class="!w-3 !h-3 !text-[12px] leading-none align-middle">check</mat-icon>
                     {{ countPlayersWithPhoto(team.players) }} fotos
                   </span>
                 }
               </div>
               <div class="flex items-center gap-2">
-                <button
-                  class="inline-flex items-center gap-1 px-2 py-1 rounded border border-red-200 bg-red-50 text-red-700 text-[11px] font-medium hover:bg-red-100"
-                  type="button"
-                  (click)="$event.stopPropagation(); removeImportedTeam(idx)"
-                >
+                <button matButton="outlined" class="!h-7 !text-[11px]" type="button" (click)="openImportDetailDialog(idx)">
+                  <mat-icon class="size!-3 text-[12px]!">visibility</mat-icon>
+                  Ver detalle
+                </button>
+                <button matButton="outlined" class="!h-7 !text-[11px]" type="button" (click)="removeImportedTeam(idx)">
                   <mat-icon class="size!-3 text-[12px]!">delete</mat-icon>
                   Quitar
                 </button>
-                <mat-icon class="size!-5 text-[20px]! text-gray-600 transition-transform"
-                          [style.transform]="expandedTeams().has(idx) ? 'rotate(180deg)' : 'rotate(0)'">
-                  expand_more
-                </mat-icon>
               </div>
             </div>
-
-            <!-- Contenido del acordeón -->
-            @if (expandedTeams().has(idx)) {
-              <div class="p-4 border-t border-gray-200 bg-white">
-                <!-- Logo + Datos -->
-                <div class="flex gap-3 mb-4">
-                  <div class="size-24 rounded-lg flex items-center justify-center text-white font-bold
-                              text-lg shrink-0 shadow-sm overflow-hidden"
-                       [style.background]="team.primaryColor">
-                    @if (team.logoFile) {
-                      <img [src]="getTeamLogoUrl(team.logoFile)" class="w-full h-full object-cover" alt="Logo" />
-                    } @else {
-                      {{ (team.shortname || team.name).slice(0,2).toUpperCase() }}
-                    }
-                  </div>
-                  <div class="flex-1">
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
-                      <input
-                        class="px-2 py-1.5 text-[12px] border border-gray-300 rounded-md"
-                        [class.border-red-400]="hasImportedTeamFieldError(team, 'name')"
-                        [class.bg-red-50]="hasImportedTeamFieldError(team, 'name')"
-                        placeholder="Nombre equipo"
-                        [ngModel]="team.name"
-                        (ngModelChange)="onImportedTeamFieldChange(idx, 'name', $event)"
-                      />
-                      <input
-                        class="px-2 py-1.5 text-[12px] border border-gray-300 rounded-md"
-                        [class.border-red-400]="hasImportedTeamFieldError(team, 'shortname')"
-                        [class.bg-red-50]="hasImportedTeamFieldError(team, 'shortname')"
-                        placeholder="Nombre corto"
-                        [ngModel]="team.shortname"
-                        (ngModelChange)="onImportedTeamFieldChange(idx, 'shortname', $event)"
-                      />
-                      <input
-                        class="px-2 py-1.5 text-[12px] border border-gray-300 rounded-md"
-                        [class.border-red-400]="hasImportedTeamFieldError(team, 'coachName')"
-                        [class.bg-red-50]="hasImportedTeamFieldError(team, 'coachName')"
-                        placeholder="Entrenador"
-                        [ngModel]="team.coachName"
-                        (ngModelChange)="onImportedTeamFieldChange(idx, 'coachName', $event)"
-                      />
-                      <input
-                        class="px-2 py-1.5 text-[12px] border border-gray-300 rounded-md"
-                        placeholder="Teléfono"
-                        [ngModel]="team.coachPhone || ''"
-                        (ngModelChange)="onImportedTeamFieldChange(idx, 'coachPhone', $event)"
-                      />
-                    </div>
-                    <input
-                      class="mt-2 w-full px-2 py-1.5 text-[12px] border border-gray-300 rounded-md"
-                      placeholder="Ciudad / ubicación"
-                      [ngModel]="team.location || ''"
-                      (ngModelChange)="onImportedTeamFieldChange(idx, 'location', $event)"
-                    />
-                    <div class="mt-2 flex gap-2">
-                      <div class="flex items-center gap-1">
-                        <div class="size-3 rounded" [style.background]="team.primaryColor"></div>
-                        <input
-                          class="w-24 px-1.5 py-1 text-[10px] border border-gray-300 rounded"
-                          [ngModel]="team.primaryColor"
-                          (ngModelChange)="onImportedTeamFieldChange(idx, 'primaryColor', $event)"
-                        />
-                      </div>
-                      <div class="flex items-center gap-1">
-                        <div class="size-3 rounded" [style.background]="team.secondaryColor"></div>
-                        <input
-                          class="w-24 px-1.5 py-1 text-[10px] border border-gray-300 rounded"
-                          [ngModel]="team.secondaryColor"
-                          (ngModelChange)="onImportedTeamFieldChange(idx, 'secondaryColor', $event)"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <!-- Tabla de jugadores + fotos -->
-                <div class="border-t border-gray-100 pt-3">
-                  <p class="text-[12px] font-semibold text-gray-900 m-0 mb-2">Jugadores ({{ team.players.length }})</p>
-                  <div class="max-h-56 overflow-y-auto pr-1">
-                    <table class="w-full text-[11px]">
-                      <tbody>
-                        @for (player of team.players; track $index) {
-                          <tr class="border-b border-gray-100 last:border-b-0">
-                            <td class="px-2 py-1.5 font-medium w-16">
-                              <input
-                                class="w-full px-1 py-1 text-[11px] border border-gray-300 rounded"
-                                [class.border-red-400]="hasImportedPlayerFieldError(player, 'number')"
-                                [class.bg-red-50]="hasImportedPlayerFieldError(player, 'number')"
-                                [ngModel]="player.number"
-                                (ngModelChange)="onImportedPlayerFieldChange(idx, $index, 'number', $event)"
-                              />
-                            </td>
-                            <td class="px-2 py-1.5">
-                              <div class="grid grid-cols-2 gap-1">
-                                <input
-                                  class="w-full px-1 py-1 text-[11px] border border-gray-300 rounded"
-                                  [class.border-red-400]="hasImportedPlayerFieldError(player, 'firstName')"
-                                  [class.bg-red-50]="hasImportedPlayerFieldError(player, 'firstName')"
-                                  [ngModel]="player.firstName"
-                                  (ngModelChange)="onImportedPlayerFieldChange(idx, $index, 'firstName', $event)"
-                                />
-                                <input
-                                  class="w-full px-1 py-1 text-[11px] border border-gray-300 rounded"
-                                  [class.border-red-400]="hasImportedPlayerFieldError(player, 'lastName')"
-                                  [class.bg-red-50]="hasImportedPlayerFieldError(player, 'lastName')"
-                                  [ngModel]="player.lastName"
-                                  (ngModelChange)="onImportedPlayerFieldChange(idx, $index, 'lastName', $event)"
-                                />
-                              </div>
-                            </td>
-                            <td class="px-2 py-1.5 w-24">
-                              <input
-                                class="w-full px-1 py-1 text-[11px] border border-gray-300 rounded uppercase"
-                                [class.border-red-400]="hasImportedPlayerFieldError(player, 'position')"
-                                [class.bg-red-50]="hasImportedPlayerFieldError(player, 'position')"
-                                [ngModel]="player.position"
-                                (ngModelChange)="onImportedPlayerFieldChange(idx, $index, 'position', $event)"
-                              />
-                            </td>
-                            <td class="px-2 py-1.5 text-right">
-                              @if (player.photoFile) {
-                                <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-green-50 text-green-700 text-[9px]">
-                                  <mat-icon class="size!-3 text-[12px]!">check</mat-icon> Foto ✓
-                                </span>
-                              } @else {
-                                <span class="text-gray-400">—</span>
-                              }
-                            </td>
-                          </tr>
-                        }
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-
-                <!-- Errores del equipo -->
-                @if (team.errors.length > 0) {
-                  <div class="mt-3 rounded bg-red-50 border border-red-200 p-2">
-                    <p class="text-[11px] font-semibold text-red-700 m-0 mb-1">
-                      <mat-icon class="size!-3 text-[12px]! inline">error</mat-icon>
-                      {{ team.errors.length }} error(es)
-                    </p>
-                    <ul class="list-none m-0 p-0">
-                      @for (err of team.errors.slice(0, 3); track $index) {
-                        <li class="text-[10px] text-red-600 m-0">• {{ err.message }}</li>
-                      }
-                      @if (team.errors.length > 3) {
-                        <li class="text-[10px] text-red-500 m-0 font-medium">+{{ team.errors.length - 3 }} más...</li>
-                      }
-                    </ul>
-                  </div>
-                }
-              </div>
-            }
           </div>
         }
       </div>
@@ -597,50 +465,236 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
       }
 
       <!-- Botones de acción -->
-      <div class="flex justify-end gap-3 pt-2 border-t border-gray-100">
+      <div class="flex justify-end gap-3 pt-2 border-t border-[var(--mat-sys-outline-variant)]">
+        <button matButton (click)="cancelImport()" type="button">Cancelar</button>
         <button
-          class="px-4 py-2 rounded-lg bg-white border border-gray-300 text-[13px]
-                 font-medium text-gray-600 cursor-pointer hover:bg-gray-50 transition-colors"
-          (click)="cancelImport()"
-          type="button"
-        >
-          Cancelar
-        </button>
-        <button
-          class="px-4 py-2 rounded-lg bg-blue-500 border-none text-white text-[13px]
-                 font-semibold cursor-pointer hover:bg-blue-600 transition-colors
-                 disabled:opacity-50 disabled:cursor-not-allowed"
-          [disabled]="!canConfirmImport()"
+          matButton="filled"
+          [disabled]="!canConfirmImport() || isSavingTeam()"
           (click)="confirmImportedTeam()"
           type="button"
-          [title]="canConfirmImport() ? 'Importar todos los equipos' : importBlockReason()"
+          [title]="canConfirmImport() ? (isSavingTeam() ? 'Guardando equipos...' : 'Importar todos los equipos') : importBlockReason()"
         >
-          <mat-icon class="size!-4 text-[16px]! inline mr-1.5">check_circle</mat-icon>
+          <mat-icon>check_circle</mat-icon>
           Importar {{ importedTeams().length }} Equipo(s)
         </button>
       </div>
     </div>
   }
 
+  <!-- ══ IMPORT DETAIL DIALOG ═══════════════════════════════ -->
+  @if (importDetailTeam(); as team) {
+    <div
+      class="fixed inset-0 z-[2200] flex items-center justify-center p-4"
+      style="background: rgba(0,0,0,0.45);"
+      (click)="closeImportDetailDialog()"
+    >
+      <div
+        class="relative w-full max-w-[1080px] max-h-[88vh] rounded-xl border border-[var(--mat-sys-outline-variant)] bg-[var(--mat-sys-surface-container)] shadow-2xl flex flex-col"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="import-detail-title"
+        tabindex="0"
+        (keydown.escape)="closeImportDetailDialog()"
+        (click)="$event.stopPropagation()"
+      >
+        <div class="flex items-center justify-between px-5 py-3 border-b border-[var(--mat-sys-outline-variant)]">
+          <h3 id="import-detail-title" class="m-0 text-[15px] font-bold text-[var(--mat-sys-on-surface)]">
+            {{ team.name }} ({{ team.shortname }}) · {{ team.players.length }} jugadores
+          </h3>
+          <button
+            class="size-8 flex items-center justify-center rounded-lg text-[var(--mat-sys-on-surface-variant)]
+                   hover:bg-[var(--mat-sys-surface-container-high)] border-none bg-transparent cursor-pointer transition-colors"
+            (click)="closeImportDetailDialog()"
+            type="button"
+            aria-label="Cerrar detalle"
+          >
+            <mat-icon class="size!-[18px] text-[18px]!">close</mat-icon>
+          </button>
+        </div>
+
+        <div class="flex-1 overflow-y-auto p-4">
+          <div class="flex gap-3 mb-4">
+            <div class="size-24 rounded-lg flex items-center justify-center text-white font-bold text-lg shrink-0 shadow-sm overflow-hidden"
+                 [style.background]="team.primaryColor">
+              @if (team.logoFile) {
+                <img [src]="getTeamLogoUrl(team.logoFile)" class="w-full h-full object-cover" alt="Logo" />
+              } @else {
+                {{ (team.shortname || team.name).slice(0,2).toUpperCase() }}
+              }
+            </div>
+            <div class="flex-1">
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+                <input
+                  class="px-2 py-1.5 text-[12px] border border-[var(--mat-sys-outline-variant)] rounded-md bg-[var(--mat-sys-surface-container)]"
+                  [class.border-red-400]="hasImportedTeamFieldError(team, 'name')"
+                  [class.bg-red-50]="hasImportedTeamFieldError(team, 'name')"
+                  placeholder="Nombre equipo"
+                  [ngModel]="team.name"
+                  (ngModelChange)="onImportedTeamFieldChange(importDetailTeamIdx()!, 'name', $event)"
+                />
+                <input
+                  class="px-2 py-1.5 text-[12px] border border-[var(--mat-sys-outline-variant)] rounded-md bg-[var(--mat-sys-surface-container)]"
+                  [class.border-red-400]="hasImportedTeamFieldError(team, 'shortname')"
+                  [class.bg-red-50]="hasImportedTeamFieldError(team, 'shortname')"
+                  placeholder="Nombre corto"
+                  [ngModel]="team.shortname"
+                  (ngModelChange)="onImportedTeamFieldChange(importDetailTeamIdx()!, 'shortname', $event)"
+                />
+                <input
+                  class="px-2 py-1.5 text-[12px] border border-[var(--mat-sys-outline-variant)] rounded-md bg-[var(--mat-sys-surface-container)]"
+                  [class.border-red-400]="hasImportedTeamFieldError(team, 'coachName')"
+                  [class.bg-red-50]="hasImportedTeamFieldError(team, 'coachName')"
+                  placeholder="Entrenador"
+                  [ngModel]="team.coachName"
+                  (ngModelChange)="onImportedTeamFieldChange(importDetailTeamIdx()!, 'coachName', $event)"
+                />
+                <input
+                  class="px-2 py-1.5 text-[12px] border border-[var(--mat-sys-outline-variant)] rounded-md bg-[var(--mat-sys-surface-container)]"
+                  placeholder="Teléfono"
+                  [ngModel]="team.coachPhone || ''"
+                  (ngModelChange)="onImportedTeamFieldChange(importDetailTeamIdx()!, 'coachPhone', $event)"
+                />
+              </div>
+              <input
+                class="mt-2 w-full px-2 py-1.5 text-[12px] border border-[var(--mat-sys-outline-variant)] rounded-md bg-[var(--mat-sys-surface-container)]"
+                placeholder="Ciudad / ubicación"
+                [ngModel]="team.location || ''"
+                (ngModelChange)="onImportedTeamFieldChange(importDetailTeamIdx()!, 'location', $event)"
+              />
+              <div class="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <mat-form-field appearance="outline" class="w-full">
+                  <mat-label>Color primario</mat-label>
+                  <input
+                    matInput
+                    [ngModel]="team.primaryColor"
+                    (ngModelChange)="onImportedTeamFieldChange(importDetailTeamIdx()!, 'primaryColor', $event)"
+                    placeholder="#1a56db"
+                  />
+                  <input
+                    matSuffix
+                    type="color"
+                    class="h-7 w-7 cursor-pointer rounded border-none bg-transparent p-0"
+                    [ngModel]="team.primaryColor"
+                    (ngModelChange)="onImportedTeamFieldChange(importDetailTeamIdx()!, 'primaryColor', $event)"
+                    aria-label="Seleccionar color primario"
+                  />
+                </mat-form-field>
+
+                <mat-form-field appearance="outline" class="w-full">
+                  <mat-label>Color secundario</mat-label>
+                  <input
+                    matInput
+                    [ngModel]="team.secondaryColor"
+                    (ngModelChange)="onImportedTeamFieldChange(importDetailTeamIdx()!, 'secondaryColor', $event)"
+                    placeholder="#e74694"
+                  />
+                  <input
+                    matSuffix
+                    type="color"
+                    class="h-7 w-7 cursor-pointer rounded border-none bg-transparent p-0"
+                    [ngModel]="team.secondaryColor"
+                    (ngModelChange)="onImportedTeamFieldChange(importDetailTeamIdx()!, 'secondaryColor', $event)"
+                    aria-label="Seleccionar color secundario"
+                  />
+                </mat-form-field>
+              </div>
+            </div>
+          </div>
+
+          <div class="border-t border-[var(--mat-sys-outline-variant)] pt-3">
+            <p class="text-[12px] font-semibold text-[var(--mat-sys-on-surface)] m-0 mb-2">Jugadores ({{ team.players.length }})</p>
+            <div class="max-h-[52vh] overflow-y-auto pr-1">
+              <table class="w-full text-[11px]">
+                <tbody>
+                  @for (player of team.players; track $index) {
+                    <tr class="border-b border-[var(--mat-sys-outline-variant)] last:border-b-0">
+                      <td class="px-2 py-1.5 font-medium w-16">
+                        <input
+                          class="w-full px-1 py-1 text-[11px] border border-[var(--mat-sys-outline-variant)] rounded bg-[var(--mat-sys-surface-container)]"
+                          [class.border-red-400]="hasImportedPlayerFieldError(player, 'number')"
+                          [class.bg-red-50]="hasImportedPlayerFieldError(player, 'number')"
+                          [ngModel]="player.number"
+                          (ngModelChange)="onImportedPlayerFieldChange(importDetailTeamIdx()!, $index, 'number', $event)"
+                        />
+                      </td>
+                      <td class="px-2 py-1.5">
+                        <div class="grid grid-cols-2 gap-1">
+                          <input
+                            class="w-full px-1 py-1 text-[11px] border border-[var(--mat-sys-outline-variant)] rounded bg-[var(--mat-sys-surface-container)]"
+                            [class.border-red-400]="hasImportedPlayerFieldError(player, 'firstName')"
+                            [class.bg-red-50]="hasImportedPlayerFieldError(player, 'firstName')"
+                            [ngModel]="player.firstName"
+                            (ngModelChange)="onImportedPlayerFieldChange(importDetailTeamIdx()!, $index, 'firstName', $event)"
+                          />
+                          <input
+                            class="w-full px-1 py-1 text-[11px] border border-[var(--mat-sys-outline-variant)] rounded bg-[var(--mat-sys-surface-container)]"
+                            [class.border-red-400]="hasImportedPlayerFieldError(player, 'lastName')"
+                            [class.bg-red-50]="hasImportedPlayerFieldError(player, 'lastName')"
+                            [ngModel]="player.lastName"
+                            (ngModelChange)="onImportedPlayerFieldChange(importDetailTeamIdx()!, $index, 'lastName', $event)"
+                          />
+                        </div>
+                      </td>
+                      <td class="px-2 py-1.5 w-24">
+                        <input
+                          class="w-full px-1 py-1 text-[11px] border border-[var(--mat-sys-outline-variant)] rounded bg-[var(--mat-sys-surface-container)] uppercase"
+                          [class.border-red-400]="hasImportedPlayerFieldError(player, 'position')"
+                          [class.bg-red-50]="hasImportedPlayerFieldError(player, 'position')"
+                          [ngModel]="player.position"
+                          (ngModelChange)="onImportedPlayerFieldChange(importDetailTeamIdx()!, $index, 'position', $event)"
+                        />
+                      </td>
+                      <td class="px-2 py-1.5 text-right">
+                        @if (player.photoFile) {
+                          <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[9px] font-semibold
+                                       border-[var(--mat-sys-outline-variant)]"
+                                style="background: color-mix(in srgb, var(--mat-sys-primary) 10%, var(--mat-sys-surface-container-high)); color: var(--mat-sys-on-surface);">
+                            <mat-icon class="!w-3 !h-3 !text-[11px] leading-none align-middle">check</mat-icon> Foto ✓
+                          </span>
+                        } @else {
+                          <span class="text-[var(--mat-sys-on-surface-variant)]">—</span>
+                        }
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          @if (team.errors.length > 0) {
+            <div class="mt-3 rounded bg-red-50 border border-red-200 p-2">
+              <p class="text-[11px] font-semibold text-red-700 m-0 mb-1">
+                <mat-icon class="size!-3 text-[12px]! inline">error</mat-icon>
+                {{ team.errors.length }} error(es)
+              </p>
+              <ul class="list-none m-0 p-0">
+                @for (err of team.errors.slice(0, 6); track $index) {
+                  <li class="text-[10px] text-red-600 m-0">• {{ err.message }}</li>
+                }
+                @if (team.errors.length > 6) {
+                  <li class="text-[10px] text-red-500 m-0 font-medium">+{{ team.errors.length - 6 }} más...</li>
+                }
+              </ul>
+            </div>
+          }
+        </div>
+      </div>
+    </div>
+  }
+
   <!-- ══ TEAMS LIST ════════════════════════════════════════ -->
-  <div class="rounded-xl border border-gray-200 bg-white overflow-hidden">
+  <div class="rounded-xl border border-[var(--mat-sys-outline-variant)] bg-[var(--mat-sys-surface-container)] overflow-hidden">
 
     @if (filteredTeams().length === 0) {
-      <div class="flex flex-col items-center gap-3 py-12 text-center text-gray-500">
-        <mat-icon class="size!-10 text-[40px]! text-gray-300">group_off</mat-icon>
+      <div class="flex flex-col items-center gap-3 py-12 text-center text-[var(--mat-sys-on-surface-variant)]">
+        <mat-icon class="size!-10 text-[40px]! text-[var(--mat-sys-outline)]">group_off</mat-icon>
         @if (searchQuery()) {
           <p class="m-0 text-[14px]">Sin resultados para "<strong>{{ searchQuery() }}</strong>"</p>
         } @else {
           <p class="m-0 text-[14px]">No hay equipos inscritos aún.</p>
-          <button
-            class="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-blue-500
-                   text-white text-[13px] font-semibold border-none cursor-pointer
-                   hover:bg-blue-600 disabled:opacity-40 disabled:cursor-not-allowed"
-            [disabled]="isFull()"
-            (click)="openCreateTeam()"
-            type="button"
-          >
-            <mat-icon class="size!-4 text-[16px]!">add</mat-icon> Inscribir primer equipo
+          <button matButton="filled" [disabled]="isFull()" (click)="openCreateTeam()" type="button">
+            <mat-icon>add</mat-icon> Inscribir primer equipo
           </button>
         }
       </div>
@@ -648,12 +702,12 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
 
     @for (team of filteredTeams(); track team.id; let last = $last) {
       <!-- Team row -->
-      <div [class.border-b]="!last" class="border-gray-100">
+      <div [class.border-b]="!last" class="border-[var(--mat-sys-outline-variant)]">
 
         <!-- ── Team header (clickeable → expand) ── -->
         <div
           class="flex items-center gap-3 px-4 py-3.5 cursor-pointer select-none
-                 hover:bg-gray-50 transition-colors"
+                 hover:bg-[var(--mat-sys-surface-container-low)] transition-colors"
           (click)="toggleTeam(team.id)"
         >
           <!-- Logo placeholder -->
@@ -672,13 +726,13 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
           <!-- Info -->
           <div class="flex-1 min-w-0">
             <div class="flex items-center gap-2">
-              <span class="text-[14px] font-semibold text-gray-900 truncate">{{ team.name }}</span>
+              <span class="text-[14px] font-semibold text-[var(--mat-sys-on-surface)] truncate">{{ team.name }}</span>
               @if (!team.isActive) {
                 <span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full
-                             bg-gray-100 text-gray-500">INACTIVO</span>
+                             bg-[var(--mat-sys-surface-container-high)] text-[var(--mat-sys-on-surface-variant)]">INACTIVO</span>
               }
             </div>
-            <p class="m-0 text-[12px] text-gray-400 truncate">
+            <p class="m-0 text-[12px] text-[var(--mat-sys-on-surface-variant)] truncate">
               {{ team.players.length }} jugadores · {{ team.coachName || '—' }} · {{ team.location || '—' }}
             </p>
           </div>
@@ -691,14 +745,14 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
               [class.bg-green-50]="team.isActive"
               [class.text-green-700]="team.isActive"
               [class.border-green-200]="team.isActive"
-              [class.bg-gray-50]="!team.isActive"
-              [class.text-gray-500]="!team.isActive"
-              [class.border-gray-200]="!team.isActive"
+              [style.background]="!team.isActive ? 'var(--mat-sys-surface-container-high)' : ''"
+              [style.color]="!team.isActive ? 'var(--mat-sys-on-surface-variant)' : ''"
+              [style.border-color]="!team.isActive ? 'var(--mat-sys-outline-variant)' : ''"
             >
               <span
                 class="size-1.5 rounded-full"
                 [class.bg-green-500]="team.isActive"
-                [class.bg-gray-400]="!team.isActive"
+                [style.background]="!team.isActive ? 'var(--mat-sys-outline)' : ''"
               ></span>
               {{ team.isActive ? 'Activo' : 'Inactivo' }}
             </span>
@@ -719,9 +773,10 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
 
             <button
               class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-[12.5px]
-                     font-medium text-gray-600 bg-transparent border border-gray-200
-                     cursor-pointer hover:bg-gray-100 transition-colors"
+                     font-medium text-[var(--mat-sys-on-surface-variant)] bg-transparent border border-[var(--mat-sys-outline-variant)]
+                     cursor-pointer hover:bg-[var(--mat-sys-surface-container-high)] transition-colors"
               (click)="openEditTeam(team, $event)"
+              [disabled]="pendingTeamDeletes().has(team.id)"
               type="button"
             >
               <mat-icon class="size!-[14px] text-[14px]!">edit</mat-icon>
@@ -733,6 +788,7 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
                      bg-red-50 text-red-400 cursor-pointer hover:bg-red-100 hover:text-red-600
                      transition-colors"
               (click)="removeTeam(team.id, $event)"
+              [disabled]="pendingTeamDeletes().has(team.id)"
               type="button"
               title="Retirar equipo"
             >
@@ -741,7 +797,7 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
 
             <!-- Chevron -->
             <mat-icon
-              class="size!-4 text-[16px]! text-gray-400 transition-transform duration-200 ml-1"
+              class="size!-4 text-[16px]! text-[var(--mat-sys-on-surface-variant)] transition-transform duration-200 ml-1"
               [style.transform]="expandedTeams().has(team.id) || playerMatchedTeamIds().has(team.id) ? 'rotate(180deg)' : 'rotate(0)'"
             >expand_more</mat-icon>
           </div>
@@ -749,23 +805,23 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
 
         <!-- ── Players expand panel ── -->
         @if (expandedTeams().has(team.id) || playerMatchedTeamIds().has(team.id)) {
-          <div class="border-t border-gray-100 bg-gray-50">
+          <div class="border-t border-[var(--mat-sys-outline-variant)] bg-[var(--mat-sys-surface-container-low)]">
 
             <!-- Players table -->
             @if (team.players.length > 0) {
               <table class="w-full text-left border-collapse">
                 <thead>
-                  <tr class="border-b border-gray-200">
-                    <th class="px-4 py-2 text-[10px] font-bold uppercase tracking-wide text-gray-400 w-12">#</th>
-                    <th class="px-4 py-2 text-[10px] font-bold uppercase tracking-wide text-gray-400">Jugador</th>
-                    <th class="px-4 py-2 text-[10px] font-bold uppercase tracking-wide text-gray-400">Posición</th>
-                    <th class="px-4 py-2 text-[10px] font-bold uppercase tracking-wide text-gray-400">Estado</th>
+                  <tr class="border-b border-[var(--mat-sys-outline-variant)]">
+                    <th class="px-4 py-2 text-[10px] font-bold uppercase tracking-wide text-[var(--mat-sys-on-surface-variant)] w-12">#</th>
+                    <th class="px-4 py-2 text-[10px] font-bold uppercase tracking-wide text-[var(--mat-sys-on-surface-variant)]">Jugador</th>
+                    <th class="px-4 py-2 text-[10px] font-bold uppercase tracking-wide text-[var(--mat-sys-on-surface-variant)]">Posición</th>
+                    <th class="px-4 py-2 text-[10px] font-bold uppercase tracking-wide text-[var(--mat-sys-on-surface-variant)]">Estado</th>
                     <th class="px-4 py-2 w-8"></th>
                   </tr>
                 </thead>
                 <tbody>
                   @for (player of team.players; track player.id) {
-                    <tr class="border-b border-gray-100 hover:bg-white transition-colors group">
+                    <tr class="border-b border-[var(--mat-sys-outline-variant)] hover:bg-[var(--mat-sys-surface-container)] transition-colors group">
                       <td class="px-4 py-2.5">
                         <span class="inline-flex size-7 items-center justify-center rounded-full
                                      text-[12px] font-bold text-white shrink-0"
@@ -788,15 +844,15 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
                               </span>
                             }
                           </div>
-                          <span class="text-[13.5px] font-semibold text-gray-900">
+                          <span class="text-[13.5px] font-semibold text-[var(--mat-sys-on-surface)]">
                             {{ player.firstName }} {{ player.lastName }}
                           </span>
                           @if (player.nickName) {
-                            <span class="text-[11px] text-gray-400">"{{ player.nickName }}"</span>
+                            <span class="text-[11px] text-[var(--mat-sys-on-surface-variant)]">"{{ player.nickName }}"</span>
                           }
                         </div>
                       </td>
-                      <td class="px-4 py-2.5 text-[13px] text-gray-600">
+                      <td class="px-4 py-2.5 text-[13px] text-[var(--mat-sys-on-surface-variant)]">
                         {{ positionLabel(player.positionId) }}
                       </td>
                       <td class="px-4 py-2.5">
@@ -807,9 +863,9 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
                       </td>
                       <td class="px-4 py-2.5">
                         <button
-                          class="size-6 flex items-center justify-center rounded text-gray-400
-                                 bg-transparent border-none cursor-pointer hover:bg-gray-200
-                                 hover:text-gray-600 transition-colors opacity-0 group-hover:opacity-100"
+                          class="size-6 flex items-center justify-center rounded text-[var(--mat-sys-on-surface-variant)]
+                                 bg-transparent border-none cursor-pointer hover:bg-[var(--mat-sys-surface-container-high)]
+                                 hover:text-[var(--mat-sys-on-surface)] transition-colors opacity-0 group-hover:opacity-100"
                           (click)="openEditPlayer(team, player)"
                           type="button"
                           title="Editar jugador"
@@ -822,14 +878,14 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
                 </tbody>
               </table>
             } @else {
-              <div class="flex flex-col items-center gap-2 py-6 text-center text-gray-400">
-                <mat-icon class="size!-8 text-[32px]! text-gray-300">person_off</mat-icon>
+              <div class="flex flex-col items-center gap-2 py-6 text-center text-[var(--mat-sys-on-surface-variant)]">
+                <mat-icon class="size!-8 text-[32px]! text-[var(--mat-sys-outline)]">person_off</mat-icon>
                 <p class="m-0 text-[13px]">Sin jugadores inscritos</p>
               </div>
             }
 
             <!-- Add player button -->
-            <div class="px-4 py-3 border-t border-gray-100 flex items-center gap-3">
+            <div class="px-4 py-3 border-t border-[var(--mat-sys-outline-variant)] flex items-center gap-3">
               <button
                 class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12.5px]
                        font-medium border transition-colors"
@@ -838,9 +894,9 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
                 [class.border-blue-100]="team.players.length < maxPlayersPerTeam()"
                 [class.hover:bg-blue-100]="team.players.length < maxPlayersPerTeam()"
                 [class.cursor-pointer]="team.players.length < maxPlayersPerTeam()"
-                [class.text-gray-400]="team.players.length >= maxPlayersPerTeam()"
-                [class.bg-gray-50]="team.players.length >= maxPlayersPerTeam()"
-                [class.border-gray-200]="team.players.length >= maxPlayersPerTeam()"
+                [style.color]="team.players.length >= maxPlayersPerTeam() ? 'var(--mat-sys-on-surface-variant)' : ''"
+                [style.background]="team.players.length >= maxPlayersPerTeam() ? 'var(--mat-sys-surface-container-high)' : ''"
+                [style.border-color]="team.players.length >= maxPlayersPerTeam() ? 'var(--mat-sys-outline-variant)' : ''"
                 [class.cursor-not-allowed]="team.players.length >= maxPlayersPerTeam()"
                 [class.opacity-60]="team.players.length >= maxPlayersPerTeam()"
                 (click)="openCreatePlayer(team)"
@@ -858,7 +914,7 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
                   Límite de {{ maxPlayersPerTeam() }} jugadores alcanzado
                 </span>
               } @else {
-                <span class="text-[11.5px] text-gray-400">
+                <span class="text-[11.5px] text-[var(--mat-sys-on-surface-variant)]">
                   {{ team.players.length }}/{{ maxPlayersPerTeam() }} jugadores
                 </span>
               }
@@ -869,41 +925,27 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
     }
   </div>
 
-  <!-- ══ FOOTER ════════════════════════════════════════════ -->
-  <div class="flex justify-end pt-3 border-t border-gray-200">
-    <button
-      class="inline-flex items-center gap-1.5 px-[18px] py-2 rounded-lg bg-blue-500
-             text-white text-[13px] font-semibold border-none cursor-pointer
-             hover:bg-blue-600 transition-colors"
-      (click)="save.emit(teams())"
-      type="button"
-    >
-      <mat-icon class="size!-4 text-[16px]!">save</mat-icon>
-      Guardar todos los cambios
-    </button>
-  </div>
-
 </div>
 
 <!-- ══ TEAM MODAL (drawer lateral) ══════════════════════════ -->
 @if (teamModal()) {
   <div
-    class="fixed inset-0 z-150 flex justify-end"
+    class="fixed inset-0 z-[2100] flex justify-end"
     style="background: rgba(0,0,0,0.35);"
     (click)="closeTeamModal()"
   >
     <div
-      class="h-full w-full max-w-[440px] bg-white flex flex-col shadow-2xl"
+      class="h-full w-full max-w-[440px] bg-[var(--mat-sys-surface-container)] flex flex-col shadow-2xl"
       (click)="$event.stopPropagation()"
     >
       <!-- Header -->
-      <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-        <h2 class="text-[16px] font-bold text-gray-900 m-0">
+      <div class="flex items-center justify-between px-6 py-4 border-b border-[var(--mat-sys-outline-variant)]">
+        <h2 class="text-[16px] font-bold text-[var(--mat-sys-on-surface)] m-0">
           {{ teamModal()!.id ? 'Editar Equipo' : 'Inscribir Equipo' }}
         </h2>
         <button
-          class="size-8 flex items-center justify-center rounded-lg text-gray-400
-                 hover:bg-gray-100 border-none bg-transparent cursor-pointer transition-colors"
+          class="size-8 flex items-center justify-center rounded-lg text-[var(--mat-sys-on-surface-variant)]
+                 hover:bg-[var(--mat-sys-surface-container-high)] border-none bg-transparent cursor-pointer transition-colors"
           (click)="closeTeamModal()" type="button"
         >
           <mat-icon class="size!-[18px] text-[18px]!">close</mat-icon>
@@ -912,7 +954,6 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
 
       <!-- Body -->
       <div class="flex-1 overflow-y-auto px-6 py-5 flex flex-col gap-4">
-
         <!-- Logo preview + upload -->
         <div class="flex items-center gap-4">
           <div
@@ -934,21 +975,21 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
           <input #logoFileInput type="file" accept="image/*" class="sr-only"
                  (change)="onTeamLogoSelected($event)" />
           <div>
-            <p class="m-0 text-[13px] font-medium text-gray-700">Logo del equipo</p>
-            <p class="m-0 mt-0.5 text-[11.5px] text-gray-400">Haz clic en la imagen para cambiarla</p>
+            <p class="m-0 text-[13px] font-medium text-[var(--mat-sys-on-surface)]">Logo del equipo</p>
+            <p class="m-0 mt-0.5 text-[11.5px] text-[var(--mat-sys-on-surface-variant)]">Haz clic en la imagen para cambiarla</p>
           </div>
         </div>
 
         <!-- Nombre + Nombre corto -->
         <div class="grid grid-cols-2 gap-3">
           <div class="flex flex-col gap-1.5">
-            <label class="text-[12px] font-semibold text-gray-600 uppercase tracking-wide">
+            <label class="text-[12px] font-semibold text-[var(--mat-sys-on-surface-variant)] uppercase tracking-wide">
               Nombre <span class="text-red-400">*</span>
             </label>
             <input class="team-input" [(ngModel)]="teamModal()!.name" placeholder="Ej: Osos Polares" />
           </div>
           <div class="flex flex-col gap-1.5">
-            <label class="text-[12px] font-semibold text-gray-600 uppercase tracking-wide">
+            <label class="text-[12px] font-semibold text-[var(--mat-sys-on-surface-variant)] uppercase tracking-wide">
               Nombre corto
             </label>
             <input class="team-input" [(ngModel)]="teamModal()!.shortname"
@@ -959,13 +1000,13 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
         <!-- Coach + Teléfono -->
         <div class="grid grid-cols-2 gap-3">
           <div class="flex flex-col gap-1.5">
-            <label class="text-[12px] font-semibold text-gray-600 uppercase tracking-wide">
+            <label class="text-[12px] font-semibold text-[var(--mat-sys-on-surface-variant)] uppercase tracking-wide">
               Entrenador
             </label>
             <input class="team-input" [(ngModel)]="teamModal()!.coachName" placeholder="Nombre del coach" />
           </div>
           <div class="flex flex-col gap-1.5">
-            <label class="text-[12px] font-semibold text-gray-600 uppercase tracking-wide">
+            <label class="text-[12px] font-semibold text-[var(--mat-sys-on-surface-variant)] uppercase tracking-wide">
               Teléfono coach
             </label>
             <input class="team-input" [(ngModel)]="teamModal()!.coachPhone" placeholder="+57 300..." />
@@ -975,15 +1016,15 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
         <!-- Ciudad + Año fundación -->
         <div class="grid grid-cols-2 gap-3">
           <div class="flex flex-col gap-1.5">
-            <label class="text-[12px] font-semibold text-gray-600 uppercase tracking-wide">
+            <label class="text-[12px] font-semibold text-[var(--mat-sys-on-surface-variant)] uppercase tracking-wide">
               Ciudad
             </label>
             <input class="team-input" [(ngModel)]="teamModal()!.location" placeholder="Ej: Bogotá" />
           </div>
           <div class="flex flex-col gap-1.5">
-            <label class="text-[12px] font-semibold text-gray-600 uppercase tracking-wide">
+            <label class="text-[12px] font-semibold text-[var(--mat-sys-on-surface-variant)] uppercase tracking-wide">
               Año de fundación
-              <span class="ml-1 normal-case text-[10px] font-normal text-gray-300">(opcional)</span>
+              <span class="ml-1 normal-case text-[10px] font-normal text-[var(--mat-sys-on-surface-variant)]">(opcional)</span>
             </label>
             <input class="team-input" type="number" min="1800" max="2100"
                    [(ngModel)]="teamModal()!.foundedYear" placeholder="Ej: 1995" />
@@ -992,9 +1033,9 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
 
         <!-- Estadio / Sede -->
         <div class="flex flex-col gap-1.5">
-          <label class="text-[12px] font-semibold text-gray-600 uppercase tracking-wide">
+          <label class="text-[12px] font-semibold text-[var(--mat-sys-on-surface-variant)] uppercase tracking-wide">
             Estadio / Sede
-            <span class="ml-1 normal-case text-[10px] font-normal text-gray-300">(opcional)</span>
+            <span class="ml-1 normal-case text-[10px] font-normal text-[var(--mat-sys-on-surface-variant)]">(opcional)</span>
           </label>
           <input class="team-input" [(ngModel)]="teamModal()!.homeVenue"
                  placeholder="Ej: Estadio El Campín" />
@@ -1002,25 +1043,25 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
 
         <!-- Colores -->
         <div>
-          <label class="text-[12px] font-semibold text-gray-600 uppercase tracking-wide block mb-2">
+          <label class="text-[12px] font-semibold text-[var(--mat-sys-on-surface-variant)] uppercase tracking-wide block mb-2">
             Colores del equipo
           </label>
           <div class="flex items-center gap-4">
             <div class="flex flex-col items-center gap-1.5">
               <input
                 type="color"
-                class="w-12 h-10 rounded-lg border border-gray-200 cursor-pointer p-0.5 bg-white"
+                class="w-12 h-10 rounded-lg border border-[var(--mat-sys-outline-variant)] cursor-pointer p-0.5 bg-[var(--mat-sys-surface-container)]"
                 [(ngModel)]="teamModal()!.primaryColor"
               />
-              <span class="text-[10px] text-gray-400">Principal</span>
+              <span class="text-[10px] text-[var(--mat-sys-on-surface-variant)]">Principal</span>
             </div>
             <div class="flex flex-col items-center gap-1.5">
               <input
                 type="color"
-                class="w-12 h-10 rounded-lg border border-gray-200 cursor-pointer p-0.5 bg-white"
+                class="w-12 h-10 rounded-lg border border-[var(--mat-sys-outline-variant)] cursor-pointer p-0.5 bg-[var(--mat-sys-surface-container)]"
                 [(ngModel)]="teamModal()!.secondaryColor"
               />
-              <span class="text-[10px] text-gray-400">Secundario</span>
+              <span class="text-[10px] text-[var(--mat-sys-on-surface-variant)]">Secundario</span>
             </div>
             <!-- Preview -->
             <div class="flex-1 h-10 rounded-lg overflow-hidden flex">
@@ -1032,7 +1073,7 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
 
         <!-- Documento del equipo -->
         <div class="flex flex-col gap-1.5">
-          <label class="text-[12px] font-semibold text-gray-600 uppercase tracking-wide">
+          <label class="text-[12px] font-semibold text-[var(--mat-sys-on-surface-variant)] uppercase tracking-wide">
             Documento del equipo
           </label>
           <app-file-upload
@@ -1054,17 +1095,11 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
       </div>
 
       <!-- Footer -->
-      <div class="flex items-center justify-end gap-2.5 px-6 py-4 border-t border-gray-100 bg-gray-50">
-        <button class="btn-ghost-sm" (click)="closeTeamModal()" type="button">Cancelar</button>
-        <button
-          class="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-blue-500 text-white
-                 text-[13px] font-semibold border-none cursor-pointer hover:bg-blue-600
-                 transition-colors"
-          (click)="submitTeamModal()"
-          type="button"
-        >
-          <mat-icon class="size!-4 text-[16px]!">save</mat-icon>
-          {{ teamModal()!.id ? 'Guardar cambios' : 'Inscribir equipo' }}
+      <div class="flex items-center justify-end gap-2.5 px-6 py-4 border-t border-[var(--mat-sys-outline-variant)] bg-[var(--mat-sys-surface-container-low)]">
+        <button matButton (click)="closeTeamModal()" type="button">Cancelar</button>
+        <button matButton="filled" [disabled]="isSavingTeam()" (click)="submitTeamModal()" type="button">
+          <mat-icon>save</mat-icon>
+          {{ isSavingTeam() ? 'Guardando...' : (teamModal()!.id ? 'Guardar cambios' : 'Inscribir equipo') }}
         </button>
       </div>
     </div>
@@ -1076,7 +1111,6 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
   <app-player-modal
     [player]="playerModal()!.player"
     [teamId]="playerModal()!.teamId"
-    [positions]="positions"
     (saved)="onPlayerSaved($event)"
     (deleted)="onPlayerDeleted($event)"
     (dismiss)="playerModal.set(null)"
@@ -1096,28 +1130,29 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
     :host { display: block; }
     .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); }
     .team-input {
-      padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 8px;
-      font-size: 14px; color: #111827; background: #fff; font-family: inherit;
+      padding: 8px 12px; border: 1px solid var(--mat-sys-outline-variant); border-radius: 8px;
+      font-size: 14px; color: var(--mat-sys-on-surface); background: var(--mat-sys-surface-container); font-family: inherit;
       outline: none; transition: border-color .15s; width: 100%; box-sizing: border-box;
     }
     .team-input:focus { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,0.1); }
     .btn-ghost-sm {
-      padding: 8px 16px; border-radius: 8px; background: #fff; color: #374151;
-      font-size: 13px; font-weight: 500; border: 1px solid #d1d5db; cursor: pointer;
+      padding: 8px 16px; border-radius: 8px; background: var(--mat-sys-surface-container); color: var(--mat-sys-on-surface);
+      font-size: 13px; font-weight: 500; border: 1px solid var(--mat-sys-outline-variant); cursor: pointer;
       transition: background .15s;
     }
-    .btn-ghost-sm:hover { background: #f9fafb; }
+    .btn-ghost-sm:hover { background: var(--mat-sys-surface-container-high); }
   `,
 })
 export class ChampionshipTeamsComponent {
 
   // ── Inputs / Outputs ──────────────────────────────────────────
+  readonly championshipId = input<string | null>(null);
   readonly maxTeams = input(16);
   readonly maxPlayersPerTeam = input(20);
   readonly initialTeams = input<TeamItem[]>([]);
-  readonly positions = MOCK_POSITIONS;
+  readonly sportId = input<number>(1);
 
-  readonly save = output<TeamItem[]>();
+  readonly teamsChange = output<TeamItem[]>();
   /** Emite cuando hay cambios locales sin guardar (jugador/equipo añadido, editado o eliminado). */
   readonly dirty = output<void>();
 
@@ -1125,20 +1160,25 @@ export class ChampionshipTeamsComponent {
   private snackBar = inject(MatSnackBar);
   private cdr = inject(ChangeDetectorRef);
   private teamImportService = inject(TeamImportService);
+  private championshipSvc = inject(ChampionshipService);
 
   // ── State ─────────────────────────────────────────────────────
   teams = signal<TeamItem[]>([]);
 
+  readonly positions = computed(() => this.championshipSvc.positions());
+
   constructor() {
     effect(() => {
-      this.teams.set(this.initialTeams().map(t => ({ ...t, players: [...t.players] })));
+      console.log('Initializing teams:', this.initialTeams());
+      this.teams.set(this.initialTeams().map(t => ({ ...t, players: [...(t.players ?? [])] })));
     });
+    this.championshipSvc.loadPositions(this.sportId());
     this.destroyRef.onDestroy(() => {
       this.blobUrls.forEach(u => URL.revokeObjectURL(u));
     });
   }
-  expandedTeams = signal<Set<number>>(new Set());
-  showImport = signal(true);   // visible por defecto — colapsable con el botón Importar
+  expandedTeams = signal<Set<DbId>>(new Set());
+  showImport = signal(false);  // inicia oculto por defecto en edición — colapsable con el botón Importar
   isDragOver = signal(false);
   importQueue = signal<Array<{
     fileName: string; status: 'uploading' | 'done' | 'error' | 'conflict';
@@ -1148,6 +1188,7 @@ export class ChampionshipTeamsComponent {
   // ── Import masivo ──────────────────────────────────────────
   importedTeams = signal<ImportedTeamPayload[]>([]);  // Array de equipos parseados
   importState = signal<'uploading' | 'preview' | null>(null);
+  importDetailTeamIdx = signal<number | null>(null);
   maxFileSize = signal(5);  // MB — editable
   importProgress = signal<{ excels: number; imagesProcessed: number; totalImages: number }>({ excels: 0, imagesProcessed: 0, totalImages: 0 });
   importErrors = signal<Array<{ type: string; file: string; message: string }>>([]);
@@ -1156,8 +1197,11 @@ export class ChampionshipTeamsComponent {
   // ─────────────────────────────────────────────────────────────
   teamModal = signal<TeamFormData | null>(null);
   teamModalError = signal('');
-  playerModal = signal<{ player: PlayerFormData | null; teamId: number } | null>(null);
+  playerModal = signal<{ player: PlayerFormData | null; teamId: DbId } | null>(null);
   pdfViewerData = signal<{ url: string; title: string } | null>(null);
+  isSavingTeam = signal(false);
+  pendingTeamDeletes = signal<Set<DbId>>(new Set());
+  pendingPlayerOps = signal<Set<DbId>>(new Set());
 
   private destroyRef = inject(DestroyRef);
   private blobUrls: string[] = [];
@@ -1182,6 +1226,163 @@ export class ChampionshipTeamsComponent {
       .replace(/\s+/g, ' ');
   }
 
+  private extractImportFileKeyCandidates(fileName: string): string[] {
+    const normalized = this.normalize(fileName).trim();
+    const withoutExt = normalized.replace(/\.[^.]+$/, '');
+    const justName = withoutExt.split(/[\\/]/).pop() ?? withoutExt;
+    const compact = justName.replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+
+    const candidates = [
+      this.normalizeImportFileKey(fileName),
+      this.normalizeImportFileKey(withoutExt),
+      this.normalizeImportFileKey(justName),
+      compact,
+    ].filter(Boolean);
+
+    return Array.from(new Set(candidates));
+  }
+
+  private isExpectedTargetAlreadyMatched(target: ExpectedImageTarget, teams: ImportedTeamPayload[]): boolean {
+    const team = teams[target.teamIdx];
+    if (!team) return true;
+    if (target.isLogo) return !!team.logoFile;
+    if (target.playerId === undefined) return true;
+    return !!team.players[target.playerId]?.photoFile;
+  }
+
+  private findExpectedTargetForImage(
+    fileName: string,
+    expectedMap: Map<string, ExpectedImageTarget[]>,
+    teams: ImportedTeamPayload[],
+  ): ExpectedImageTarget | undefined {
+    const keys = this.extractImportFileKeyCandidates(fileName);
+
+    for (const key of keys) {
+      const candidates = expectedMap.get(key) ?? [];
+      const available = candidates.find((candidate) => !this.isExpectedTargetAlreadyMatched(candidate, teams));
+      if (available) return available;
+      if (candidates.length > 0) return candidates[0];
+    }
+
+    return undefined;
+  }
+
+  private resolveImportedPositionId(positionRaw: string): DbId {
+    const positions = this.positions();
+    if (positions.length === 0) return 1;
+
+    const trimmed = String(positionRaw ?? '').trim();
+    if (!trimmed) return positions[0].id;
+
+    const byId = positions.find((pos) => String(pos.id) === trimmed);
+    if (byId) return byId.id;
+
+    const normalized = this.normalize(trimmed);
+    const aliasToAbbreviation: Record<string, string> = {
+      gk: 'por',
+      goalkeeper: 'por',
+      portero: 'por',
+      por: 'por',
+      df: 'def',
+      defender: 'def',
+      defensa: 'def',
+      def: 'def',
+      mf: 'med',
+      midfielder: 'med',
+      mediocampista: 'med',
+      med: 'med',
+      fw: 'del',
+      st: 'del',
+      forward: 'del',
+      delantero: 'del',
+      del: 'del',
+      piv: 'piv',
+      pivot: 'piv',
+      lib: 'lib',
+      libero: 'lib',
+      líbero: 'lib',
+    };
+
+    const wanted = aliasToAbbreviation[normalized] ?? normalized;
+    const byCodeOrAbbreviation = positions.find((pos) => {
+      const code = this.normalize(String(pos.code ?? ''));
+      const abbr = this.normalize(String(pos.abbreviation ?? ''));
+      return code === wanted || abbr === wanted;
+    });
+    if (byCodeOrAbbreviation) return byCodeOrAbbreviation.id;
+
+    const byLabel = positions.find((pos) => this.normalize(String(pos.label ?? '')).includes(wanted));
+    if (byLabel) return byLabel.id;
+
+    return positions[0].id;
+  }
+
+  private emitTeamsChange(): void {
+    this.teamsChange.emit(this.teams());
+  }
+
+  private toSlug(name: string): string {
+    return name.toLowerCase().normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+  }
+
+  private markTeamDeletePending(teamId: DbId, pending: boolean): void {
+    this.pendingTeamDeletes.update((set) => {
+      const next = new Set(set);
+      if (pending) next.add(teamId);
+      else next.delete(teamId);
+      return next;
+    });
+  }
+
+  private markPlayerPending(playerId: DbId, pending: boolean): void {
+    this.pendingPlayerOps.update((set) => {
+      const next = new Set(set);
+      if (pending) next.add(playerId);
+      else next.delete(playerId);
+      return next;
+    });
+  }
+
+  private mapProfileToTeamItem(profile: {
+    id: string | number;
+    championshipId: string | number;
+    name: string;
+    shortname?: string | null;
+    slug: string;
+    logoUrl?: string | null;
+    documentUrl?: string | null;
+    primaryColor?: string | null;
+    secondaryColor?: string | null;
+    location?: string | null;
+    foundedYear?: number | null;
+    homeVenue?: string | number | null;
+    coachName?: string | null;
+    coachPhone?: string | null;
+    isActive: boolean;
+  }, existingId?: DbId): TeamItem {
+    return {
+      id: existingId ?? profile.id,
+      championshipId: profile.championshipId,
+      name: profile.name,
+      shortname: String(profile.shortname ?? ''),
+      slug: profile.slug,
+      logoUrl: profile.logoUrl ?? null,
+      documentUrl: profile.documentUrl ?? null,
+      primaryColor: profile.primaryColor ?? '#1a56db',
+      secondaryColor: profile.secondaryColor ?? '#e74694',
+      location: String(profile.location ?? ''),
+      foundedYear: profile.foundedYear ?? null,
+      homeVenue: String(profile.homeVenue ?? ''),
+      coachName: String(profile.coachName ?? ''),
+      coachPhone: String(profile.coachPhone ?? ''),
+      isActive: profile.isActive,
+      players: [],
+    };
+  }
+
   // ── Computed ──────────────────────────────────────────────────
   filteredTeams = computed(() => {
     const q = this.normalize(this.searchQuery().trim());
@@ -1195,14 +1396,12 @@ export class ChampionshipTeamsComponent {
         continue;
       }
       const matchingPlayerIds = new Set(
-        t.players
-          .filter(p => this.normalize(`${p.firstName} ${p.lastName}`).includes(q))
-          .map(p => p.id)
+        t.players?.filter(p => this.normalize(`${p.firstName} ${p.lastName}`).includes(q)).map(p => p.id)
       );
       if (matchingPlayerIds.size > 0) {
         const sorted = [
-          ...t.players.filter(p => matchingPlayerIds.has(p.id)),
-          ...t.players.filter(p => !matchingPlayerIds.has(p.id)),
+          ...t.players?.filter(p => matchingPlayerIds.has(p.id)) || [],
+          ...t.players?.filter(p => !matchingPlayerIds.has(p.id)) || [],
         ];
         result.push({ ...t, players: sorted });
       }
@@ -1213,11 +1412,11 @@ export class ChampionshipTeamsComponent {
   // IDs de equipos que aparecen por coincidencia en jugadores (para auto-expandir)
   playerMatchedTeamIds = computed(() => {
     const q = this.normalize(this.searchQuery().trim());
-    if (!q) return new Set<number>();
-    const ids = new Set<number>();
+    if (!q) return new Set<DbId>();
+    const ids = new Set<DbId>();
     for (const t of this.teams()) {
       if (this.normalize(t.name).includes(q)) continue;
-      if (t.players.some(p => this.normalize(`${p.firstName} ${p.lastName}`).includes(q))) {
+      if (t.players?.some(p => this.normalize(`${p.firstName} ${p.lastName}`).includes(q))) {
         ids.add(t.id);
       }
     }
@@ -1263,7 +1462,21 @@ export class ChampionshipTeamsComponent {
     this.importedTeams().every(team => team.isValid)
   );
 
+  importDetailTeam = computed<ImportedTeamPayload | null>(() => {
+    const idx = this.importDetailTeamIdx();
+    if (idx === null) return null;
+    return this.importedTeams()[idx] ?? null;
+  });
+
   // ── Import helpers ───────────────────────────────────────────
+  openImportDetailDialog(idx: number): void {
+    this.importDetailTeamIdx.set(idx);
+  }
+
+  closeImportDetailDialog(): void {
+    this.importDetailTeamIdx.set(null);
+  }
+
   toggleTeamExpand(idx: number): void {
     this.expandedTeams.update(s => {
       const next = new Set(s);
@@ -1332,6 +1545,16 @@ export class ChampionshipTeamsComponent {
   removeImportedTeam(teamIdx: number): void {
     this.importedTeams.update(teams => teams.filter((_, idx) => idx !== teamIdx));
     this.expandedTeams.set(new Set());
+
+    const currentDetailIdx = this.importDetailTeamIdx();
+    if (currentDetailIdx !== null) {
+      if (currentDetailIdx === teamIdx) {
+        this.importDetailTeamIdx.set(null);
+      } else if (currentDetailIdx > teamIdx) {
+        this.importDetailTeamIdx.set(currentDetailIdx - 1);
+      }
+    }
+
     this.syncExpectedImageFiles();
     this.importProgress.update(p => ({ ...p, excels: this.importedTeams().length }));
 
@@ -1428,7 +1651,7 @@ export class ChampionshipTeamsComponent {
     const players = team.players.map((player, i) => {
       const rowNum = i + 2;
       const pErrors: FieldError[] = [];
-      if (!Number.isFinite(player.number) || player.number < 1 || player.number > 99) {
+      if (!Number.isFinite(player.number) || player.number < 0 || player.number > 99) {
         pErrors.push({ row: rowNum, field: 'numero', message: `Número de camiseta inválido: "${player.number}"` });
       }
       if (!player.firstName.trim()) {
@@ -1466,6 +1689,7 @@ export class ChampionshipTeamsComponent {
     // Reset state
     this.importedTeams.set([]);
     this.importState.set(null);
+    this.importDetailTeamIdx.set(null);
     this.importProgress.set({ excels: 0, imagesProcessed: 0, totalImages: 0 });
     this.importErrors.set([]);
     this.expectedImageFiles.set(new Map());
@@ -1473,7 +1697,7 @@ export class ChampionshipTeamsComponent {
   }
 
   // ── Team expand ───────────────────────────────────────────────
-  toggleTeam(id: number): void {
+  toggleTeam(id: DbId): void {
     this.expandedTeams.update(s => {
       const next = new Set(s);
       next.has(id) ? next.delete(id) : next.add(id);
@@ -1497,13 +1721,13 @@ export class ChampionshipTeamsComponent {
       id: team.id,
       name: team.name,
       shortname: team.shortname,
-      coachName: team.coachName,
-      coachPhone: team.coachPhone,
-      location: team.location,
+      coachName: team.coachName ?? '',
+      coachPhone: team.coachPhone ?? '',
+      location: team.location ?? '',
       foundedYear: team.foundedYear,
-      homeVenue: team.homeVenue,
-      primaryColor: team.primaryColor,
-      secondaryColor: team.secondaryColor,
+      homeVenue: team.homeVenue ?? '',
+      primaryColor: team.primaryColor ?? '#1a56db',
+      secondaryColor: team.secondaryColor ?? '#e74694',
       logoUrl: team.logoUrl,
       documentUrl: team.documentUrl,
     });
@@ -1552,34 +1776,103 @@ export class ChampionshipTeamsComponent {
     };
     console.log('Team files payload (mock upload):', filePayload);
 
-    if (f.id) {
-      // Edit
-      if (f.logoUrl?.startsWith('blob:')) this.blobUrls.push(f.logoUrl);
-      if (f.documentUrl?.startsWith('blob:')) this.blobUrls.push(f.documentUrl);
-      this.teams.update(list => list.map(t => t.id !== f.id ? t : {
-        ...t, name: f.name, shortname: f.shortname, coachName: f.coachName,
-        coachPhone: f.coachPhone, location: f.location,
-        foundedYear: f.foundedYear, homeVenue: f.homeVenue,
-        primaryColor: f.primaryColor, secondaryColor: f.secondaryColor,
-        logoUrl: f.logoUrl, documentUrl: f.documentUrl,
-      }));
-      this.snackBar.open('Equipo actualizado', 'Cerrar', { duration: 2000 });
-    } else {
-      // Create
-      const slug = f.name.toLowerCase().normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
-      const newTeam: TeamItem = {
-        id: _nextTeamId++, championshipId: 1, name: f.name, shortname: f.shortname,
-        slug, logoUrl: f.logoUrl, documentUrl: f.documentUrl,
-        primaryColor: f.primaryColor, secondaryColor: f.secondaryColor, location: f.location,
-        foundedYear: f.foundedYear, homeVenue: f.homeVenue,
-        coachName: f.coachName, coachPhone: f.coachPhone, isActive: true, players: [],
-      };
-      this.teams.update(list => [...list, newTeam]);
-      this.snackBar.open(`Equipo "${f.name}" inscrito`, 'Cerrar', { duration: 2000 });
+    const championshipId = this.championshipId();
+    const dto = {
+      championshipId: championshipId ?? String(this.teams()[0]?.championshipId ?? ''),
+      name: f.name,
+      shortname: f.shortname,
+      slug: this.toSlug(f.name),
+      coachName: f.coachName,
+      coachPhone: f.coachPhone,
+      location: f.location,
+      foundedYear: f.foundedYear,
+      homeVenue: f.homeVenue,
+      primaryColor: f.primaryColor,
+      secondaryColor: f.secondaryColor,
+      logoUrl: f.logoUrl,
+      documentUrl: f.documentUrl,
+      isActive: true,
+    };
+
+    if (!dto.championshipId) {
+      if (f.id) {
+        this.teams.update(list => list.map(t => t.id !== f.id ? t : {
+          ...t,
+          name: f.name,
+          shortname: f.shortname,
+          coachName: f.coachName,
+          coachPhone: f.coachPhone,
+          location: f.location,
+          foundedYear: f.foundedYear,
+          homeVenue: f.homeVenue,
+          primaryColor: f.primaryColor,
+          secondaryColor: f.secondaryColor,
+          logoUrl: f.logoUrl,
+          documentUrl: f.documentUrl,
+        }));
+      } else {
+        const newTeam: TeamItem = {
+          id: _nextTeamId++, championshipId: 1, name: f.name, shortname: f.shortname,
+          slug: dto.slug, logoUrl: f.logoUrl, documentUrl: f.documentUrl,
+          primaryColor: f.primaryColor, secondaryColor: f.secondaryColor, location: f.location,
+          foundedYear: f.foundedYear, homeVenue: f.homeVenue,
+          coachName: f.coachName, coachPhone: f.coachPhone, isActive: true, players: [],
+        };
+        this.teams.update(list => [...list, newTeam]);
+      }
+      this.teamModal.set(null);
+      this.dirty.emit();
+      this.emitTeamsChange();
+      this.snackBar.open('Equipo actualizado localmente', 'Cerrar', { duration: 2000 });
+      return;
     }
-    this.teamModal.set(null);
-    this.dirty.emit();
+
+    this.isSavingTeam.set(true);
+    if (f.id) {
+      const current = this.teams().find((team) => team.id === f.id);
+      const teamId = typeof current?.id === 'string' ? current.id : null;
+      if (!teamId) {
+        this.isSavingTeam.set(false);
+        this.snackBar.open('No se pudo identificar el equipo en backend', 'Cerrar', { duration: 3000 });
+        return;
+      }
+
+      this.championshipSvc.updateTeam(teamId, dto)
+        .pipe(finalize(() => this.isSavingTeam.set(false)))
+        .subscribe({
+          next: (updated) => {
+            this.teams.update((list) => list.map((team) =>
+              team.id === f.id
+                ? { ...team, ...this.mapProfileToTeamItem(updated, team.id), players: team.players }
+                : team,
+            ));
+            this.snackBar.open('Equipo actualizado', 'Cerrar', { duration: 2000 });
+            this.teamModal.set(null);
+            this.dirty.emit();
+            this.emitTeamsChange();
+          },
+          error: () => {
+            this.snackBar.open('Error al actualizar el equipo', 'Cerrar', { duration: 3000 });
+          },
+        });
+      return;
+    }
+
+    this.championshipSvc.createTeam(dto)
+      .pipe(finalize(() => this.isSavingTeam.set(false)))
+      .subscribe({
+        next: (created) => {
+          const mapped = this.mapProfileToTeamItem(created);
+          this.teams.update((list) => [...list, mapped]);
+          this.snackBar.open(`Equipo "${f.name}" inscrito`, 'Cerrar', { duration: 2000 });
+          this.teamModal.set(null);
+          this.dirty.emit();
+          this.emitTeamsChange();
+        },
+        error: () => {
+          this.snackBar.open('Error al crear el equipo', 'Cerrar', { duration: 3000 });
+        },
+      });
   }
 
   onDocumentFileChanged(file: File | null): void {
@@ -1607,12 +1900,35 @@ export class ChampionshipTeamsComponent {
     this.teamModal.set({ ...m, logoUrl, logoFile: file });
   }
 
-  removeTeam(id: number, event: Event): void {
+  removeTeam(id: DbId, event: Event): void {
     event.stopPropagation();
-    this.teams.update(list => list.filter(t => t.id !== id));
-    this.expandedTeams.update(s => { const n = new Set(s); n.delete(id); return n; });
-    this.snackBar.open('Equipo retirado del campeonato', 'Cerrar', { duration: 2000 });
-    this.dirty.emit();
+    const team = this.teams().find(t => t.id === id);
+    if (!team) return;
+
+    if (typeof team.id !== 'string') {
+      this.teams.update(list => list.filter(t => t.id !== id));
+      this.expandedTeams.update(s => { const n = new Set(s); n.delete(id); return n; });
+      this.snackBar.open('Equipo retirado localmente', 'Cerrar', { duration: 2000 });
+      this.dirty.emit();
+      this.emitTeamsChange();
+      return;
+    }
+
+    this.markTeamDeletePending(id, true);
+    this.championshipSvc.deleteTeam(team.id)
+      .pipe(finalize(() => this.markTeamDeletePending(id, false)))
+      .subscribe({
+        next: () => {
+          this.teams.update(list => list.filter(t => t.id !== id));
+          this.expandedTeams.update(s => { const n = new Set(s); n.delete(id); return n; });
+          this.snackBar.open('Equipo retirado del campeonato', 'Cerrar', { duration: 2000 });
+          this.dirty.emit();
+          this.emitTeamsChange();
+        },
+        error: () => {
+          this.snackBar.open('Error al retirar equipo', 'Cerrar', { duration: 3000 });
+        },
+      });
   }
 
   // ── Player modal ──────────────────────────────────────────────
@@ -1631,10 +1947,10 @@ export class ChampionshipTeamsComponent {
     this.playerModal.set({
       teamId: team.id,
       player: {
-        id: player.id, teamId: player.teamId, positionId: player.positionId,
+        id: String(player.id), teamId: player.teamId, positionId: Number(player.positionId),
         firstName: player.firstName, lastName: player.lastName,
         nickName: player.nickName ?? '', number: player.number,
-        birthDate: player.birthDate ?? '', height: player.height,
+        birthDate: player.birthDate ? player.birthDate.toISOString().slice(0, 10) : '', height: player.height,
         weight: player.weight, status: player.status,
         photoUrl: player.photoUrl, photoFile: player.photoFile,
       },
@@ -1642,39 +1958,129 @@ export class ChampionshipTeamsComponent {
   }
 
   onPlayerSaved(data: PlayerFormData): void {
-    this.teams.update(list => list.map(t => {
-      if (t.id !== data.teamId) return t;
-      const isEdit = !!data.id;
-      const updated: TeamPlayer = {
-        id: data.id ?? _nextPlayerId++, teamId: data.teamId, positionId: data.positionId,
-        firstName: data.firstName, lastName: data.lastName, nickName: data.nickName || null,
-        number: data.number!, birthDate: data.birthDate || null,
-        height: data.height, weight: data.weight, status: data.status,
+    const team = this.teams().find(t => t.id === data.teamId);
+    if (!team) return;
+
+    const dto = {
+      teamId: typeof team.id === 'string' ? team.id : String(data.teamId),
+      firstName: data.firstName,
+      lastName: data.lastName,
+      nickName: data.nickName || null,
+      number: data.number ?? 0,
+      birthDate: data.birthDate || null,
+      height: data.height,
+      weight: data.weight,
+      positionId: data.positionId,
+      status: data.status,
+      photoUrl: data.photoUrl || null,
+    };
+
+    const localUpsert = (player: TeamPlayer): void => {
+      this.teams.update(list => list.map(t => {
+        if (t.id !== data.teamId) return t;
+        const isEdit = !!data.id;
+        return {
+          ...t,
+          players: isEdit
+            ? (t.players ?? []).map(p => String(p.id) === String(player.id) ? player : p)
+            : [...(t.players ?? []), player],
+        };
+      }));
+      this.playerModal.set(null);
+      this.dirty.emit();
+      this.emitTeamsChange();
+    };
+
+    if (typeof team.id !== 'string') {
+      const localPlayer: TeamPlayer = {
+        id: data.id ? Number(data.id) || data.id : _nextPlayerId++,
+        teamId: data.teamId,
+        positionId: data.positionId,
+        firstName: data.firstName,
+        lastName: data.lastName,
+        nickName: data.nickName || null,
+        number: data.number!,
+        birthDate: data.birthDate ? new Date(data.birthDate) : null,
+        height: data.height,
+        weight: data.weight,
+        status: data.status as PlayerStatus,
         photoUrl: data.photoUrl ?? null,
         photoFile: data.photoFile,
+        suspensionEndDate: null,
+        suspensionReason: null,
+        isActive: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
       };
-      return {
-        ...t, players: isEdit
-          ? t.players.map(p => p.id === updated.id ? updated : p)
-          : [...t.players, updated],
-      };
-    }));
-    this.playerModal.set(null);
-    this.dirty.emit();
+      localUpsert(localPlayer);
+      return;
+    }
+
+    const pendingId: DbId = data.id ?? `temp-${Date.now()}`;
+    this.markPlayerPending(pendingId, true);
+    const request$ = data.id
+      ? this.championshipSvc.updatePlayer(data.id, dto)
+      : this.championshipSvc.createPlayer(dto);
+
+    request$
+      .pipe(finalize(() => this.markPlayerPending(pendingId, false)))
+      .subscribe({
+        next: (saved) => {
+          const mapped: TeamPlayer = {
+            ...saved,
+            id: saved.id ?? data.id ?? _nextPlayerId++,
+            teamId: saved.teamId ?? data.teamId,
+            positionId: saved.positionId ?? data.positionId,
+            status: saved.status ?? (data.status as PlayerStatus),
+            photoUrl: saved.photoUrl ?? data.photoUrl ?? null,
+            photoFile: data.photoFile,
+          };
+          localUpsert(mapped);
+          this.snackBar.open(data.id ? 'Jugador actualizado' : 'Jugador inscrito', 'Cerrar', { duration: 2000 });
+        },
+        error: () => {
+          this.snackBar.open(data.id ? 'Error al actualizar jugador' : 'Error al crear jugador', 'Cerrar', { duration: 3000 });
+        },
+      });
   }
 
-  onPlayerDeleted(playerId: number): void {
-    this.teams.update(list => list.map(t => ({
-      ...t, players: t.players.filter(p => p.id !== playerId),
-    })));
-    this.playerModal.set(null);
-    this.snackBar.open('Jugador dado de baja', 'Cerrar', { duration: 2000 });
-    this.dirty.emit();
+  onPlayerDeleted(event: { id: string | undefined }): void {
+    if (!event.id) {
+      return;
+    }
+
+    const existing = this.teams()
+      .flatMap((team) => team.players)
+      .find((player) => String(player.id) === event.id);
+
+    const applyLocalDelete = (): void => {
+      this.teams.update(list => list.map(t => ({
+        ...t,
+        players: t.players.filter(p => String(p.id) !== event.id),
+      })));
+      this.playerModal.set(null);
+      this.snackBar.open('Jugador dado de baja', 'Cerrar', { duration: 2000 });
+      this.dirty.emit();
+      this.emitTeamsChange();
+    };
+
+    if (!existing || typeof existing.id !== 'string') {
+      applyLocalDelete();
+      return;
+    }
+
+    this.markPlayerPending(existing.id, true);
+    this.championshipSvc.deletePlayer(existing.id)
+      .pipe(finalize(() => this.markPlayerPending(existing.id, false)))
+      .subscribe({
+        next: () => applyLocalDelete(),
+        error: () => this.snackBar.open('Error al eliminar jugador', 'Cerrar', { duration: 3000 }),
+      });
   }
 
   // ── Position helpers ──────────────────────────────────────────
-  positionLabel(positionId: number): string {
-    return this.positions.find(p => p.id === positionId)?.label ?? '—';
+  positionLabel(positionId: DbId): string {
+    return this.positions().find((p) => String(p.id) === String(positionId))?.label ?? '—';
   }
   playerStatusLabel(s: PlayerStatus): string {
     return PLAYER_STATUS_META[s]?.label ?? s;
@@ -1809,10 +2215,7 @@ export class ChampionshipTeamsComponent {
 
     // Procesar cada imagen
     imageFiles.forEach(file => {
-      // Extraer nombre sin extensión
-      const nameWithoutExt = this.normalizeImportFileKey(file.name);
-      const matchedCandidates = expectedMap.get(nameWithoutExt);
-      const matched = matchedCandidates?.[0];
+      const matched = this.findExpectedTargetForImage(file.name, expectedMap, this.importedTeams());
 
       if (matched) {
         // Validar tamaño (5 MB)
@@ -1826,7 +2229,7 @@ export class ChampionshipTeamsComponent {
           // Éxito: crear blob URL y guardar
           const blobUrl = URL.createObjectURL(file);
           this.blobUrls.push(blobUrl);
-          matchedImgs.set(nameWithoutExt, file);
+          matchedImgs.set(this.normalizeImportFileKey(file.name), file);
 
           // Asignar a payload según tipo
           if (matched.isLogo) {
@@ -1925,6 +2328,12 @@ export class ChampionshipTeamsComponent {
       return;
     }
 
+    const championshipId = this.championshipId();
+    if (championshipId) {
+      this.persistImportedTeams(championshipId, payloads);
+      return;
+    }
+
     // Procesar cada equipo
     const newTeams: TeamItem[] = [];
 
@@ -1941,13 +2350,18 @@ export class ChampionshipTeamsComponent {
         lastName: p.lastName,
         nickName: p.nickName,
         number: p.number,
-        positionId: MOCK_POSITIONS.find(pos => pos.code === p.position)?.id ?? 1,
-        birthDate: p.birthDate,
+        positionId: this.resolveImportedPositionId(p.position),
+        birthDate: p.birthDate ? new Date(p.birthDate) : null,
         height: p.height,
         weight: p.weight,
         status: 'active' as PlayerStatus,
         photoUrl: this.buildImportedAssetUrl(p.photoFile, p.photoFileName),
         photoFile: p.photoFile || undefined,
+        suspensionEndDate: null,
+        suspensionReason: null,
+        isActive: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
       }));
 
       const logoUrl = this.buildImportedAssetUrl(payload.logoFile, payload.logoFileName);
@@ -1990,10 +2404,78 @@ export class ChampionshipTeamsComponent {
 
     // Agregar todos los equipos a la lista
     this.teams.update(t => [...t, ...newTeams]);
+    this.emitTeamsChange();
 
     // Limpiar estado
     this.cancelImport({ revokeObjectUrls: false });
     this.snackBar.open(`${newTeams.length} equipo(s) importado(s) exitosamente`, 'Cerrar', { duration: 3000 });
+  }
+
+  private persistImportedTeams(championshipId: string, payloads: ImportedTeamPayload[]): void {
+    const toPersistedAssetUrl = (url: string | null): string | null => {
+      if (!url) return null;
+      return url.startsWith('blob:') ? null : url;
+    };
+
+    const playersBySlug = new Map<string, PlayerUpsertDto[]>();
+    payloads.forEach((payload) => {
+      const teamSlug = this.toSlug(payload.name);
+      const players: PlayerUpsertDto[] = payload.players.map((player) => ({
+        teamId: '',
+        firstName: player.firstName,
+        lastName: player.lastName,
+        nickName: player.nickName || null,
+        number: player.number,
+        birthDate: player.birthDate,
+        height: player.height,
+        weight: player.weight,
+        positionId: Number(this.resolveImportedPositionId(player.position)) || 0,
+        status: PlayerStatus.Active,
+        photoUrl: toPersistedAssetUrl(this.buildImportedAssetUrl(player.photoFile, player.photoFileName)),
+      }));
+      playersBySlug.set(teamSlug, players);
+    });
+
+    const dtos = payloads.map((payload) => ({
+      name: payload.name,
+      shortname: payload.shortname,
+      slug: this.toSlug(payload.name),
+      logoUrl: toPersistedAssetUrl(this.buildImportedAssetUrl(payload.logoFile, payload.logoFileName)) ?? undefined,
+      documentUrl: toPersistedAssetUrl(this.buildImportedAssetUrl(payload.documentFile, payload.documentFileName)) ?? undefined,
+      primaryColor: payload.primaryColor ?? undefined,
+      secondaryColor: payload.secondaryColor ?? undefined,
+      location: payload.location ?? undefined,
+      coachName: payload.coachName ?? undefined,
+      coachPhone: payload.coachPhone ?? undefined,
+      players: playersBySlug.get(this.toSlug(payload.name)) ?? [],
+    }));
+
+    this.isSavingTeam.set(true);
+    this.championshipSvc.saveTeams(championshipId, dtos)
+      .pipe(finalize(() => this.isSavingTeam.set(false)))
+      .subscribe({
+        next: () => {
+          this.championshipSvc.getTeams(championshipId).subscribe({
+            next: (profiles) => {
+              const mapped: TeamItem[] = profiles.map((profile) => ({
+                ...this.mapProfileToTeamItem(profile),
+                players: [...(profile.players ?? [])],
+              }));
+              this.teams.set(mapped);
+              this.emitTeamsChange();
+              this.dirty.emit();
+              this.cancelImport({ revokeObjectUrls: false });
+              this.snackBar.open(`${payloads.length} equipo(s) importado(s) y guardado(s)`, 'Cerrar', { duration: 3000 });
+            },
+            error: () => {
+              this.snackBar.open('Equipos guardados, pero no se pudo refrescar la lista.', 'Cerrar', { duration: 3500 });
+            },
+          });
+        },
+        error: () => {
+          this.snackBar.open('Error al guardar equipos importados', 'Cerrar', { duration: 3500 });
+        },
+      });
   }
 
   onPlayerPhotosSelected(event: Event): void {

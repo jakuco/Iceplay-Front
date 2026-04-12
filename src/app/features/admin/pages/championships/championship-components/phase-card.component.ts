@@ -55,6 +55,8 @@ export interface SwissConfig {
 
 export interface PhaseCardData {
   id: number;
+  /** ID real del backend — presente solo cuando la fase ya fue persistida en la BD. */
+  backendId?: number;
   name: string;
   phaseType: PhaseType;
   phaseOrder: number;
@@ -71,16 +73,40 @@ export interface PhaseCardData {
 // ─────────────────────────────────────────────────────────────
 
 const TYPE_META: Record<PhaseType, { label: string; tw: string }> = {
-  [PhaseType.League]: { label: 'Liga', tw: 'bg-blue-100  text-blue-700' },
-  [PhaseType.Knockout]: { label: 'Eliminatoria', tw: 'bg-orange-100 text-orange-700' },
-  [PhaseType.Groups]: { label: 'Grupos', tw: 'bg-purple-100 text-purple-700' },
-  [PhaseType.Swiss]: { label: 'Suizo', tw: 'bg-emerald-100 text-emerald-700' },
+  [PhaseType.League]: {
+    label: 'Liga',
+    tw: 'bg-[var(--mat-sys-surface-container-high)] text-[var(--mat-sys-primary)]',
+  },
+  [PhaseType.Knockout]: {
+    label: 'Eliminatoria',
+    tw: 'bg-[var(--mat-sys-surface-container-high)] text-[var(--mat-sys-on-surface)]',
+  },
+  [PhaseType.Groups]: {
+    label: 'Grupos',
+    tw: 'bg-[var(--mat-sys-surface-container-high)] text-[var(--mat-sys-primary)]',
+  },
+  [PhaseType.Swiss]: {
+    label: 'Suizo',
+    tw: 'bg-[var(--mat-sys-surface-container-high)] text-[var(--mat-sys-primary)]',
+  },
 };
 
 const STATUS_META: Record<PhaseStatus, { label: string; dotTw: string; pillTw: string }> = {
-  [PhaseStatus.Active]: { label: 'En Curso', dotTw: 'bg-green-500', pillTw: 'bg-green-50  text-green-700  ring-green-200' },
-  [PhaseStatus.Pending]: { label: 'Pendiente', dotTw: 'bg-amber-400', pillTw: 'bg-amber-50  text-amber-700  ring-amber-200' },
-  [PhaseStatus.Finished]: { label: 'Finalizado', dotTw: 'bg-slate-400', pillTw: 'bg-slate-100 text-slate-600  ring-slate-200' },
+  [PhaseStatus.Active]: {
+    label: 'En Curso',
+    dotTw: 'bg-[var(--mat-sys-primary)]',
+    pillTw: 'bg-[var(--mat-sys-surface-container-high)] text-[var(--mat-sys-primary)] ring-[var(--mat-sys-outline-variant)]',
+  },
+  [PhaseStatus.Pending]: {
+    label: 'Pendiente',
+    dotTw: 'bg-[var(--mat-sys-outline)]',
+    pillTw: 'bg-[var(--mat-sys-surface-container-high)] text-[var(--mat-sys-on-surface-variant)] ring-[var(--mat-sys-outline-variant)]',
+  },
+  [PhaseStatus.Finished]: {
+    label: 'Finalizado',
+    dotTw: 'bg-[var(--mat-sys-outline)]',
+    pillTw: 'bg-[var(--mat-sys-surface-container-high)] text-[var(--mat-sys-on-surface-variant)] ring-[var(--mat-sys-outline-variant)]',
+  },
 };
 
 function knockoutRounds(bracketSize: number): string {
@@ -110,7 +136,7 @@ function swissPairingLabel(sys: string): string {
   template: `
     <!-- ── Outer card ──────────────────────────────────────── -->
     <div
-      class="relative flex rounded-xl border bg-white transition-shadow duration-150 hover:shadow-md"
+      class="relative flex rounded-xl border bg-[var(--mat-sys-surface-container)] transition-shadow duration-150 hover:shadow-md"
       [class]="activeBorderClass()"
     >
       <!-- Order badge (left column) -->
@@ -134,7 +160,7 @@ function swissPairingLabel(sys: string): string {
           ></span>
 
           <!-- Name -->
-          <span class="text-[15px] font-semibold text-gray-900">
+          <span class="text-[15px] font-semibold text-[var(--mat-sys-on-surface)]">
             {{ phase().name }}
           </span>
 
@@ -157,8 +183,8 @@ function swissPairingLabel(sys: string): string {
 
           <!-- Configure button -->
           <button
-            class="ml-auto inline-flex items-center gap-1 rounded-md px-2 py-1 text-[13px] text-gray-400
-                   transition-colors hover:bg-gray-50 hover:text-gray-700 active:bg-gray-100"
+            class="ml-auto inline-flex items-center gap-1 rounded-md px-2 py-1 text-[13px] text-[var(--mat-sys-on-surface-variant)]
+                   transition-colors hover:bg-[var(--mat-sys-surface-container-high)] hover:text-[var(--mat-sys-on-surface)] active:bg-[var(--mat-sys-surface-container-highest)]"
             (click)="configure.emit(phase())"
             type="button"
           >
@@ -171,7 +197,7 @@ function swissPairingLabel(sys: string): string {
           @if (locked()) {
             <div
               class="inline-flex items-center gap-1 px-2 py-1 rounded-md
-                     bg-gray-100 text-gray-400 text-[11px] font-medium"
+                     bg-[var(--mat-sys-surface-container-high)] text-[var(--mat-sys-on-surface-variant)] text-[11px] font-medium"
               title="Fase base del formato — no se puede eliminar ni mover por delante de las fases base"
             >
               <mat-icon class="!size-[12px] !text-[12px]">lock</mat-icon>
@@ -221,13 +247,13 @@ function swissPairingLabel(sys: string): string {
     <!-- ── Stat cell template ──────────────────────────────── -->
     <ng-template #stat let-label="label" let-value="value" let-wide="wide">
       <div
-        class="flex flex-col gap-1 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2.5"
+        class="flex flex-col gap-1 rounded-lg border border-[var(--mat-sys-outline-variant)] bg-[var(--mat-sys-surface-container-low)] px-3 py-2.5"
         [class.col-span-2]="wide"
       >
-        <span class="text-[9px] font-bold uppercase tracking-widest text-gray-400">
+        <span class="text-[9px] font-bold uppercase tracking-widest text-[var(--mat-sys-on-surface-variant)]">
           {{ label }}
         </span>
-        <span class="text-[15px] font-semibold text-gray-900">{{ value }}</span>
+        <span class="text-[15px] font-semibold text-[var(--mat-sys-on-surface)]">{{ value }}</span>
       </div>
     </ng-template>
   `,
@@ -253,15 +279,20 @@ export class PhaseCardComponent {
 
   activeBorderClass(): string {
     const s = this.phase().status;
-    if (s === PhaseStatus.Active) return 'border-blue-300 shadow-[inset_3px_0_0_0_#3b82f6]';
-    if (s === PhaseStatus.Finished) return 'border-gray-200';
-    return 'border-gray-200';
+    if (s === PhaseStatus.Active) {
+      return 'border-[var(--mat-sys-outline)] shadow-[inset_3px_0_0_0_var(--mat-sys-primary)]';
+    }
+    return 'border-[var(--mat-sys-outline-variant)]';
   }
 
   orderBadgeClass(): string {
     const s = this.phase().status;
-    if (s === PhaseStatus.Active) return 'border-gray-100 bg-blue-50  text-blue-500';
-    if (s === PhaseStatus.Pending) return 'border-gray-100 bg-amber-50 text-amber-500';
-    return 'border-gray-100 bg-gray-50 text-gray-400';
+    if (s === PhaseStatus.Active) {
+      return 'border-[var(--mat-sys-outline-variant)] bg-[var(--mat-sys-surface-container-high)] text-[var(--mat-sys-primary)]';
+    }
+    if (s === PhaseStatus.Pending) {
+      return 'border-[var(--mat-sys-outline-variant)] bg-[var(--mat-sys-surface-container-high)] text-[var(--mat-sys-on-surface-variant)]';
+    }
+    return 'border-[var(--mat-sys-outline-variant)] bg-[var(--mat-sys-surface-container-low)] text-[var(--mat-sys-on-surface-variant)]';
   }
 }

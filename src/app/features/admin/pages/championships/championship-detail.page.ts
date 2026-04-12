@@ -96,9 +96,9 @@ export default class ChampionshipDetailPage implements OnInit {
   championshipName = signal('Campeonato');
 
   ngOnInit(): void {
-    this.championshipSvc.getById(this.id()).subscribe({
+    this.championshipSvc.getChampionshipById(this.id()).subscribe({
       next: c => this.championshipName.set(c.name),
-      error: () => {},
+      error: () => { },
     });
   }
 }
