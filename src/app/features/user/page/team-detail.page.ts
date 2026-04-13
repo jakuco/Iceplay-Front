@@ -1,11 +1,11 @@
 // ─────────────────────────────────────────────────────────────
 // user/page/team-detail.page.ts
 //
-// ESTADO: MOCK-ONLY — pendiente de integración real con backend.
+// ESTADO: INTEGRADO — conectado al backend real.
 //
-// Este componente NO hace llamadas reales al backend.
-// Todos los datos (equipo, jugadores, partidos) son generados con mock data
-// en loadTeamDetail(), loadPlayers(), loadMatches().
+// Carga el equipo via GET /teams/:id.
+// Los jugadores no se cargan (endpoint no soporta filtro teamId aún).
+// Los partidos siguen siendo mock (endpoint no soporta filtro teamId aún).
 //
 // Clasificación (Fase 2E):
 //   · Categoría: mock-only / pendiente de integración
@@ -19,18 +19,18 @@
 //   · GET /match?teamId=     → no confirmado
 // ─────────────────────────────────────────────────────────────
 import { ChangeDetectionStrategy, Component, input, inject, signal, effect } from '@angular/core';
+import { forkJoin } from 'rxjs';
 import { RouterLink } from '@angular/router';
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
 import { MatTabsModule } from '@angular/material/tabs';
 import { TeamService } from '../../../core/services/team.service';
 import { PlayerService } from '../../../core/services/player.service';
-import { Team } from '../../../core/models/team.model';
-import { Player, PlayerStatus } from '../../../core/models/player.model';
+import { Team, TeamApiResponse } from '../../../core/models/team.model';
+import { Player, PlayerApiResponse } from '../../../core/models/player.model';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatTableModule } from '@angular/material/table';
 import { MatMenuModule } from '@angular/material/menu';
-import { MatchService } from '../../../core/services/match.service';
 
 /** Fila de tabla de partidos (mock enriquecido; no coincide con `Match` del dominio). */
 interface UserMatchTableRow {
@@ -456,7 +456,7 @@ export default class TeamDetailPage {
   id = input.required<string>();
 
   private teamService = inject(TeamService);
-  private matchService = inject(MatchService);
+  private playerService = inject(PlayerService);
 
   team = signal<Team | null>(null);
   players = signal<Player[]>([]);
@@ -470,137 +470,30 @@ export default class TeamDetailPage {
       const teamId = this.id();
       if (teamId) {
         this.loadTeam(teamId);
-        this.loadMatches(teamId);
       }
     });
   }
 
   private loadTeam(id: string): void {
     this.isLoading.set(true);
-
-    // this.teamService.getTeamWithPlayers(id).subscribe({
-    //   next: (teamWithPlayers) => {
-    //     this.team.set(teamWithPlayers);
-    //     this.players.set(teamWithPlayers.players);
-    //     this.isLoading.set(false);
-    //   },
-    //   error: (error) => {
-    //     console.error('Error loading team', error);
-    //     this.isLoading.set(false);
-    //   },
-    // });
-
-    const mockTeam: Team = {
-      id: 1,
-      championshipId: 1,
-      name: 'Team 1',
-      shortname: 'T1',
-      slug: 'team-1',
-      logoUrl: null,
-      documentUrl: null,
-      primaryColor: '#1a237e',
-      secondaryColor: null,
-      foundedYear: 2020,
-      homeVenue: 'Venue 1',
-      location: 'City 1',
-      coachName: null,
-      coachPhone: null,
-      isActive: true,
-      hasActiveMatches: false,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
-    const positions = ['Delantero', 'Mediocampista', 'Defensa', 'Portero'];
-    const mockPlayers: Player[] = Array.from({ length: 10 }, (_, i) => ({
-      id: String(i + 1),
-      teamId: '1',
-      positionId: 1,
-      photoUrl: null,
-      firstName: 'Jugador',
-      lastName: String(i + 1),
-      nickName: null,
-      birthDate: new Date('2000-01-01'),
-      number: i + 1,
-      height: null,
-      weight: null,
-      status: PlayerStatus.Active,
-      suspensionEndDate: null,
-      suspensionReason: null,
-      isActive: true,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      position: {
-        id: 1,
-        code: 'FW',
-        label: positions[i % 4],
-        abbreviation: 'JUG',
+    forkJoin({
+      team: this.teamService.getTeamById(id),
+      players: this.playerService.getPlayersByTeam(id),
+    }).subscribe({
+      next: ({ team, players }) => {
+        this.team.set(team as unknown as Team);
+        this.players.set((players.players ?? []) as unknown as Player[]);
+        this.isLoading.set(false);
       },
-    }));
-
-    setTimeout(() => {
-      this.team.set(mockTeam);
-      this.players.set(mockPlayers);
-      this.isLoading.set(false);
-    }, 2000);
+      error: (err: unknown) => {
+        console.error('[TeamDetail] Error loading team', err);
+        this.isLoading.set(false);
+      },
+    });
   }
 
-  private loadMatches(id: string): void {
-    this.isLoading.set(true);
-    const mockMatches: UserMatchTableRow[] = [
-      {
-        id: 'match-1',
-        championshipId: 'champ-1',
-        homeTeam: { name: 'Team 1' },
-        awayTeam: { name: 'Team 2' },
-        homeScore: 2,
-        awayScore: 1,
-        status: 'finished',
-        scheduledDate: new Date('2024-08-01'),
-        scheduledTime: '18:00',
-        venue: 'Estadio Monumental',
-      },
-      {
-        id: 'match-2',
-        championshipId: 'champ-1',
-        homeTeam: { name: 'Team 1' },
-        awayTeam: { name: 'Team 3' },
-        homeScore: 1,
-        awayScore: 3,
-        status: 'finished',
-        scheduledDate: new Date('2024-08-02'),
-        scheduledTime: '20:00',
-        venue: 'Estadio Capwell',
-      },
-      {
-        id: 'match-3',
-        championshipId: 'champ-1',
-        homeTeam: { name: 'Team 1' },
-        awayTeam: { name: 'Team 3' },
-        homeScore: 1,
-        awayScore: 3,
-        status: 'finished',
-        scheduledDate: new Date('2024-08-03'),
-        scheduledTime: '20:00',
-        venue: 'Estadio Capwell',
-      },
-    ];
-
-    setTimeout(() => {
-      this.matches.set(mockMatches);
-      this.isLoading.set(false);
-    }, 2000);
-
-    // this.matchService.getMatches(id).subscribe({
-    //   next: (matches) => {
-    //     this.matches.set(matches);
-    //     this.isLoading.set(false);
-    //   },
-    //   error: (error: any) => {
-    //     console.error('Error loading matches', error);
-    //     this.isLoading.set(false);
-    //   },
-    // });
-  }
+  // No hay endpoint de backend para listar partidos por equipo.
+  // matches signal se queda vacío → template muestra estado 'No hay partidos'.
 
   playerRowName(p: Player): string {
     return `${p.firstName} ${p.lastName}`.trim();

@@ -12,6 +12,7 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar } from '@angular/material/snack-bar';
 
 import { ChampionshipService } from '../../../../core/services/championship.service';
+import { MatchService } from '../../../../core/services/match.service';
 import { ChampionshipFixture, FixturePhaseData, FixtureMatch } from '../../../../core/models/championship.model';
 import {
   ChampionshipPhasesComponent,
@@ -120,12 +121,41 @@ import {
                                 <span>{{ match.homeTeam?.name ?? 'Por definir' }}</span>
                               </div>
                               <div class="fixture-score">
-                                @if (match.homeScore !== null && match.awayScore !== null) {
-                                  <span class="score-value">{{ match.homeScore }} – {{ match.awayScore }}</span>
+                                @if (editingMatchId() === match.id) {
+                                  <div class="fixture-date-edit">
+                                    <input
+                                      type="datetime-local"
+                                      [value]="editingValue()"
+                                      (change)="editingValue.set($any($event.target).value)"
+                                      class="fixture-date-input"
+                                    />
+                                    <div class="fixture-date-actions">
+                                      <button type="button" class="fixture-action-btn fixture-action-btn--save"
+                                        (click)="saveMatchDate(match)"
+                                        [disabled]="savingMatchId() === match.id"
+                                        title="Guardar">
+                                        <mat-icon>check</mat-icon>
+                                      </button>
+                                      <button type="button" class="fixture-action-btn fixture-action-btn--cancel"
+                                        (click)="cancelEdit()" title="Cancelar">
+                                        <mat-icon>close</mat-icon>
+                                      </button>
+                                    </div>
+                                  </div>
                                 } @else {
-                                  <span class="score-pending">
-                                    {{ match.scheduledStart ? (match.scheduledStart | date:'dd/MM HH:mm') : 'vs' }}
-                                  </span>
+                                  @if (match.homeScore !== null && match.awayScore !== null) {
+                                    <span class="score-value">{{ match.homeScore }} – {{ match.awayScore }}</span>
+                                  } @else {
+                                    <div class="score-pending-group">
+                                      <span class="score-pending">
+                                        {{ match.scheduledStart ? (match.scheduledStart | date:'dd/MM HH:mm') : 'vs' }}
+                                      </span>
+                                      <button type="button" class="fixture-edit-btn"
+                                        (click)="startEditDate(match)" title="Editar fecha">
+                                        <mat-icon>edit_calendar</mat-icon>
+                                      </button>
+                                    </div>
+                                  }
                                 }
                               </div>
                               <div class="fixture-team fixture-team--away">
@@ -282,12 +312,77 @@ import {
       font-size: 0.75rem;
       color: var(--mat-sys-on-surface-variant);
     }
+
+    .score-pending-group {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+    }
+
+    .fixture-edit-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 1px;
+      color: var(--mat-sys-on-surface-variant);
+      opacity: 0.45;
+      line-height: 1;
+      display: flex;
+      align-items: center;
+    }
+
+    .fixture-edit-btn:hover {
+      opacity: 1;
+      color: var(--mat-sys-primary);
+    }
+
+    .fixture-edit-btn mat-icon { font-size: 14px; width: 14px; height: 14px; }
+
+    .fixture-date-edit {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      min-width: 150px;
+    }
+
+    .fixture-date-input {
+      font-size: 0.72rem;
+      padding: 3px 5px;
+      border: 1px solid var(--mat-sys-outline);
+      border-radius: 4px;
+      background: var(--mat-sys-surface-container-high);
+      color: var(--mat-sys-on-surface);
+      width: 100%;
+    }
+
+    .fixture-date-actions { display: flex; gap: 4px; }
+
+    .fixture-action-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 2px 4px;
+      border-radius: 4px;
+      line-height: 1;
+      display: flex;
+      align-items: center;
+    }
+
+    .fixture-action-btn mat-icon { font-size: 16px; width: 16px; height: 16px; }
+    .fixture-action-btn--save { color: var(--mat-sys-primary); }
+    .fixture-action-btn--save:hover { background: var(--mat-sys-primary-container); }
+    .fixture-action-btn--cancel { color: var(--mat-sys-error); }
+    .fixture-action-btn--cancel:hover { background: var(--mat-sys-error-container); }
+    .fixture-action-btn:disabled { opacity: 0.4; cursor: not-allowed; }
   `,
 })
 export default class ChampionshipDetailPage implements OnInit {
   private readonly championshipSvc = inject(ChampionshipService);
   private readonly cdr = inject(ChangeDetectorRef);
   private readonly snackBar = inject(MatSnackBar);
+  private readonly matchSvc = inject(MatchService);
 
   // ── Route input ────────────────────────────────────────────
   id = input.required<string>();
@@ -308,6 +403,9 @@ export default class ChampionshipDetailPage implements OnInit {
   activeFormat = signal<ChampionshipFormat | null>(null);
   rules = signal<ChampionshipRuleItem[]>([]);
   fixtureData = signal<ChampionshipFixture>({});
+  editingMatchId = signal<number | null>(null);
+  editingValue = signal<string>('');
+  savingMatchId = signal<number | null>(null);
 
   /** Fixture aplanado para el template: Array de fases, cada una con roundList. */
   fixturePhases = computed(() =>
@@ -471,6 +569,57 @@ export default class ChampionshipDetailPage implements OnInit {
         this.cdr.markForCheck();
       },
     });
+  }
+
+  // ── Fixture date editing ─────────────────────────────────────
+  startEditDate(match: FixtureMatch): void {
+    this.editingMatchId.set(match.id);
+    this.editingValue.set(this.toDatetimeLocal(match.scheduledStart));
+  }
+
+  cancelEdit(): void {
+    this.editingMatchId.set(null);
+    this.editingValue.set('');
+  }
+
+  saveMatchDate(match: FixtureMatch): void {
+    const raw = this.editingValue();
+    if (!raw) return;
+    this.savingMatchId.set(match.id);
+    const iso = new Date(raw).toISOString();
+
+    this.matchSvc.updateMatch(String(match.id), { scheduledStart: iso }).subscribe({
+      next: () => {
+        const current = this.fixtureData();
+        const updated: ChampionshipFixture = {};
+        for (const [phaseName, phaseData] of Object.entries(current) as [string, FixturePhaseData][]) {
+          const updatedRounds: Record<string, FixtureMatch[]> = {};
+          for (const [roundNum, roundMatches] of Object.entries(phaseData.rounds) as [string, FixtureMatch[]][]) {
+            updatedRounds[roundNum] = roundMatches.map(m =>
+              m.id === match.id ? { ...m, scheduledStart: iso } : m,
+            );
+          }
+          updated[phaseName] = { ...phaseData, rounds: updatedRounds };
+        }
+        this.fixtureData.set(updated);
+        this.editingMatchId.set(null);
+        this.savingMatchId.set(null);
+        this.snackBar.open('Fecha actualizada', 'Ok', { duration: 2500 });
+        this.cdr.markForCheck();
+      },
+      error: () => {
+        this.savingMatchId.set(null);
+        this.snackBar.open('Error al actualizar la fecha', 'Cerrar', { duration: 3000 });
+        this.cdr.markForCheck();
+      },
+    });
+  }
+
+  private toDatetimeLocal(iso: string | null): string {
+    if (!iso) return '';
+    const d = new Date(iso);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
   }
 
   // ── Helpers ────────────────────────────────────────────────

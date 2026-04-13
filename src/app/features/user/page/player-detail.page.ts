@@ -6,7 +6,7 @@ import { MatMenuModule } from '@angular/material/menu';
 import { MatTableModule } from '@angular/material/table';
 import { MatTabsModule } from '@angular/material/tabs';
 import { RouterLink } from '@angular/router';
-import { Player, PlayerStatus } from '../../../core/models/player.model';
+import { Player, PlayerApiResponse } from '../../../core/models/player.model';
 import { PlayerService } from '../../../core/services/player.service';
 import { AvatarComponent } from '../../../shared/ui';
 
@@ -411,102 +411,25 @@ export default class PlayerDetailPage {
   constructor() {
     effect(() => {
       this.loadPlayer(this.id());
-      this.loadMatches(this.id());
     });
   }
 
   private loadPlayer(id: string): void {
     this.isLoading.set(true);
-    // this.playerService.getPlayerById(id).subscribe((player) => {
-    //   this.player.set(player);
-    //   this.isLoading.set(false);
-    // });
-    setTimeout(() => {
-      const player: Player = {
-        id: '1',
-        teamId: '1',
-        positionId: 1,
-        photoUrl: null,
-        firstName: 'John',
-        lastName: 'Doe',
-        nickName: null,
-        birthDate: new Date('1995-06-15'),
-        number: 1,
-        height: null,
-        weight: null,
-        status: PlayerStatus.Active,
-        suspensionEndDate: null,
-        suspensionReason: null,
-        isActive: true,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
-      this.player.set(player);
-      this.isLoading.set(false);
-    }, 2000);
+    this.playerService.getPlayerById(id).subscribe({
+      next: (playerData: PlayerApiResponse) => {
+        this.player.set(playerData as unknown as Player);
+        this.isLoading.set(false);
+      },
+      error: (err: unknown) => {
+        console.error('[PlayerDetail] Error loading player', err);
+        this.isLoading.set(false);
+      },
+    });
   }
 
-  private loadMatches(id: string): void {
-    this.isLoading.set(true);
-    const mockMatches: UserMatchTableRow[] = [
-      {
-        id: 'match-1',
-        championshipId: 'champ-1',
-        homeTeam: { name: 'Team 1' },
-        awayTeam: { name: 'Team 2' },
-        homeScore: 2,
-        awayScore: 1,
-        status: 'finished',
-        scheduledDate: new Date('2024-08-01'),
-        scheduledTime: '18:00',
-        venue: 'Estadio Monumental',
-      },
-      {
-        id: 'match-2',
-        championshipId: 'champ-1',
-        homeTeam: { name: 'Team 1' },
-        awayTeam: { name: 'Team 3' },
-        homeScore: 1,
-        awayScore: 3,
-        status: 'finished',
-        scheduledDate: new Date('2024-08-02'),
-        scheduledTime: '20:00',
-        venue: 'Estadio Capwell',
-      },
-      {
-        id: 'match-3',
-        championshipId: 'champ-1',
-        homeTeam: { name: 'Team 1' },
-        awayTeam: { name: 'Team 3' },
-        homeScore: 1,
-        awayScore: 3,
-        status: 'finished',
-        scheduledDate: new Date('2024-08-03'),
-        scheduledTime: '20:00',
-        venue: 'Estadio Capwell',
-      },
-    ];
-
-    setTimeout(() => {
-      this.matches.set(mockMatches);
-      this.isLoading.set(false);
-    }, 2000);
-
-    // this.matchService.getMatches(id).subscribe({
-    //   next: (matches) => {
-    //     this.matches.set(matches);
-    //     this.isLoading.set(false);
-    //   },
-    //   error: (error: any) => {
-    //     console.error('Error loading matches', error);
-    //     this.isLoading.set(false);
-    //   },
-    // });
-  }
-
-  playerFullName(p: Player): string {
-    return `${p.firstName} ${p.lastName}`.trim();
-  }
+  // Partidos por jugador: sin endpoint backend confirmado.
+  // matches signal vacío → template muestra 'No hay partidos'.
 
   getStatusLabel(status: string): string {
     const labels: Record<string, string> = {
@@ -523,6 +446,11 @@ export default class PlayerDetailPage {
       postponed: 'Aplazado',
     };
     return labels[status] || status;
+  }
+
+  playerFullName(p: Player): string {
+    const nick = p.nickName ? ` "${p.nickName}"` : '';
+    return `${p.firstName} ${p.lastName}${nick}`.trim();
   }
 
   formatDate(date: Date): string {

@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, input, inject, signal, effect } from '@angular/core';
+import { forkJoin } from 'rxjs';
 import { RouterLink } from '@angular/router';
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
@@ -8,8 +9,8 @@ import { MatMenuModule } from '@angular/material/menu';
 import { MatTabsModule } from '@angular/material/tabs';
 import { TeamService } from '../../../../core/services/team.service';
 import { PlayerService } from '../../../../core/services/player.service';
-import { TeamProfile } from '../../../../core/models/team.model';
-import { Player } from '../../../../core/models/player.model';
+import { TeamProfile, TeamApiResponse } from '../../../../core/models/team.model';
+import { Player, PlayerApiResponse } from '../../../../core/models/player.model';
 
 @Component({
   selector: 'app-team-detail',
@@ -334,10 +335,8 @@ export default class TeamDetailPage {
   // TeamProfile = composición frontend de TeamApiResponse + players.
   // Producido por teamService.getTeamWithPlayers(), no directamente por backend.
   team = signal<TeamProfile | null>(null);
-  // ⚠️ SIEMPRE VACÍO hasta que backend exponga GET /player?teamId= en el controller.
-  // getTeamWithPlayers() retorna players: [] deliberadamente para evitar mostrar
-  // todos los jugadores del sistema como si fueran del equipo.
-  // TODO: reconectar cuando backend habilite el filtro.
+  // Cargado via GET /players?teamId= (getPlayersByTeam).
+  // Backend confirma soporte: controller extrae teamId de req.query y llama playerService.getPlayersByTeam().
   players = signal<Player[]>([]);
   isLoading = signal(false);
   displayedColumns = ['number', 'name', 'position', 'status', 'actions'];
@@ -353,14 +352,18 @@ export default class TeamDetailPage {
 
   private loadTeam(id: string): void {
     this.isLoading.set(true);
-    this.teamService.getTeamWithPlayers(id).subscribe({
-      next: (teamProfile) => {
-        this.team.set(teamProfile);
-        this.players.set(teamProfile.players);
+    forkJoin({
+      team: this.teamService.getTeamById(id),
+      players: this.playerService.getPlayersByTeam(id),
+    }).subscribe({
+      next: ({ team, players }) => {
+        // Cast: TeamApiResponse → TeamProfile (campos compatibles en template)
+        this.team.set(team as unknown as TeamProfile);
+        this.players.set((players.players ?? []) as unknown as Player[]);
         this.isLoading.set(false);
       },
-      error: (error) => {
-        console.error('Error loading team', error);
+      error: (error: unknown) => {
+        console.error('[TeamDetail] Error loading team', error);
         this.isLoading.set(false);
       },
     });

@@ -78,7 +78,8 @@ interface DisplayEvent {
           <div class="flex flex-col gap-4 md:flex-row md:flex-wrap">
             <!-- Home Team -->
             <div
-              class="card flex min-w-[140px] flex-1 flex-col items-center gap-3 rounded-xl p-4 sm:flex-row md:p-6"
+              class="card flex min-w-[140px] flex-1 flex-col items-center gap-3 rounded-xl p-4 sm:flex-row md:p-6 cursor-pointer hover:ring-2 hover:ring-(--mat-sys-primary)/40 transition-shadow"
+              [routerLink]="['/team', m.homeTeam.id]"
             >
               <img
                 class="h-14 w-14 sm:h-16 sm:w-16"
@@ -128,7 +129,8 @@ interface DisplayEvent {
 
             <!-- Away Team -->
             <div
-              class="card flex min-w-[140px] flex-1 flex-col-reverse items-center justify-end gap-3 rounded-xl p-4 sm:flex-row md:p-6"
+              class="card flex min-w-[140px] flex-1 flex-col-reverse items-center justify-end gap-3 rounded-xl p-4 sm:flex-row md:p-6 cursor-pointer hover:ring-2 hover:ring-(--mat-sys-primary)/40 transition-shadow"
+              [routerLink]="['/team', m.awayTeam.id]"
             >
               <div class="text-center sm:text-right">
                 <p class="text-secondary text-sm font-medium">{{ 'match.away' | translate }}</p>

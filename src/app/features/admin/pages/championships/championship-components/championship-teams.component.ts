@@ -29,6 +29,7 @@ import {
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { KeyValuePipe } from '@angular/common';
+import { RouterLink } from '@angular/router';
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
@@ -182,6 +183,7 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     FormsModule,
+    RouterLink,
     MatIconModule,
     MatButtonModule,
     MatProgressBarModule,
@@ -771,6 +773,18 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
               </button>
             }
 
+            <a
+              [routerLink]="['/team', team.id]"
+              class="size-8 flex items-center justify-center rounded-lg border border-[var(--mat-sys-outline-variant)]
+                     bg-[var(--mat-sys-surface-container)] text-[var(--mat-sys-on-surface-variant)]
+                     hover:bg-[var(--mat-sys-surface-container-high)] transition-colors"
+              (click)="$event.stopPropagation()"
+              title="Ver perfil público"
+              [attr.aria-label]="'Ver perfil de ' + team.name"
+            >
+              <mat-icon class="size!-[15px] text-[15px]!">open_in_new</mat-icon>
+            </a>
+
             <button
               class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-[12.5px]
                      font-medium text-[var(--mat-sys-on-surface-variant)] bg-transparent border border-[var(--mat-sys-outline-variant)]
@@ -844,9 +858,13 @@ const CSV_HEADERS = 'nombre,nombre_corto,entrenador,telefono_entrenador,ciudad,c
                               </span>
                             }
                           </div>
-                          <span class="text-[13.5px] font-semibold text-[var(--mat-sys-on-surface)]">
+                          <a
+                            [routerLink]="['/player', player.id]"
+                            class="text-[13.5px] font-semibold text-[var(--mat-sys-on-surface)]
+                                   hover:text-[var(--mat-sys-primary)] hover:underline transition-colors"
+                          >
                             {{ player.firstName }} {{ player.lastName }}
-                          </span>
+                          </a>
                           @if (player.nickName) {
                             <span class="text-[11px] text-[var(--mat-sys-on-surface-variant)]">"{{ player.nickName }}"</span>
                           }
