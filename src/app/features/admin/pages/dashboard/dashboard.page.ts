@@ -587,10 +587,9 @@ export default class DashboardPage {
 
   loadDashboardData(organizationId: string): Subscription {
     const composite = new Subscription();
-    const orgId = Number(organizationId);
 
     const outerSub = forkJoin({
-      championships: this.championshipService.getAll({ organizationId: orgId }),
+      championships: this.championshipService.getAll({ organizationId }),
       teams: this.teamService.getAllTeams({ organizationId }),
       players: of([] as unknown[]),
     }).subscribe({

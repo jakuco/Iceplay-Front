@@ -1,14 +1,47 @@
-import { ChangeDetectionStrategy, Component, OnInit, inject, input, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy, ChangeDetectorRef, Component, OnInit,
+  computed, inject, input, signal,
+} from '@angular/core';
 import { RouterLink } from '@angular/router';
+import { DatePipe } from '@angular/common';
+import { forkJoin } from 'rxjs';
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
 import { MatTabsModule } from '@angular/material/tabs';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatSnackBar } from '@angular/material/snack-bar';
+
 import { ChampionshipService } from '../../../../core/services/championship.service';
+import { ChampionshipFixture, FixturePhaseData, FixtureMatch } from '../../../../core/models/championship.model';
+import {
+  ChampionshipPhasesComponent,
+  ChampionshipFormat,
+} from './championship-components/championship-phases.component';
+import { PhaseCardData, PhaseType } from './championship-components/phase-card.component';
+import {
+  ChampionshipRulesComponent,
+  ChampionshipRuleItem,
+  RuleValueType,
+} from './championship-components/championship-rules.component';
+import {
+  ChampionshipTeamsComponent,
+  TeamItem,
+} from './championship-components/championship-teams.component';
 
 @Component({
   selector: 'app-championship-detail',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterLink, MatIconModule, MatButtonModule, MatTabsModule],
+  imports: [
+    RouterLink,
+    DatePipe,
+    MatIconModule,
+    MatButtonModule,
+    MatTabsModule,
+    MatProgressSpinnerModule,
+    ChampionshipTeamsComponent,
+    ChampionshipPhasesComponent,
+    ChampionshipRulesComponent,
+  ],
   template: `
     <div class="page-container">
       <header class="page-header">
@@ -18,7 +51,7 @@ import { ChampionshipService } from '../../../../core/services/championship.serv
           </a>
           <div>
             <h1 class="page-title">{{ championshipName() }}</h1>
-            <p class="page-subtitle">Campeonato ID: {{ id() }}</p>
+            <p class="page-subtitle">{{ championshipSeason() }}</p>
           </div>
         </div>
         <a matButton="outlined" [routerLink]="['/admin/championships', id(), 'edit']">
@@ -27,33 +60,99 @@ import { ChampionshipService } from '../../../../core/services/championship.serv
         </a>
       </header>
 
-      <mat-tab-group>
-        <mat-tab label="Resumen">
-          <div class="tab-content">
-            <p class="text-secondary">Información general del campeonato...</p>
-          </div>
-        </mat-tab>
-        <mat-tab label="Equipos">
-          <div class="tab-content">
-            <p class="text-secondary">Lista de equipos participantes...</p>
-          </div>
-        </mat-tab>
-        <mat-tab label="Fixture">
-          <div class="tab-content">
-            <p class="text-secondary">Calendario de partidos...</p>
-          </div>
-        </mat-tab>
-        <mat-tab label="Tabla">
-          <div class="tab-content">
-            <p class="text-secondary">Tabla de posiciones...</p>
-          </div>
-        </mat-tab>
-        <mat-tab label="Estadísticas">
-          <div class="tab-content">
-            <p class="text-secondary">Estadísticas del campeonato...</p>
-          </div>
-        </mat-tab>
-      </mat-tab-group>
+      @if (loading()) {
+        <div class="loading-state">
+          <mat-spinner diameter="48" />
+        </div>
+      } @else {
+        <mat-tab-group>
+
+          <mat-tab label="Equipos">
+            <div class="tab-content">
+              <app-championship-teams
+                [championshipId]="id()"
+                [maxTeams]="maxTeams()"
+                [maxPlayersPerTeam]="maxPlayersPerTeam()"
+                [initialTeams]="teamsData()"
+                [sportId]="sportId()"
+              />
+            </div>
+          </mat-tab>
+
+          <mat-tab label="Fases">
+            <div class="tab-content">
+              <app-championship-phases
+                [championshipId]="id()"
+                [initialPhases]="phases()"
+                [initialFormat]="activeFormat()"
+              />
+            </div>
+          </mat-tab>
+
+          <mat-tab label="Reglas">
+            <div class="tab-content">
+              <app-championship-rules
+                [initialRules]="rules()"
+              />
+            </div>
+          </mat-tab>
+
+          <mat-tab label="Fixture">
+            <div class="tab-content">
+              @if (fixturePhases().length === 0) {
+                <p class="text-secondary">No hay partidos generados para este campeonato.</p>
+              } @else {
+                @for (phase of fixturePhases(); track phase.phaseId) {
+                  <div class="fixture-phase">
+                    <h3 class="fixture-phase-title">{{ phase.name }}
+                      <span class="fixture-phase-meta">· {{ phase.totalMatches }} partidos</span>
+                    </h3>
+                    @for (round of phase.roundList; track round.number) {
+                      <div class="fixture-round">
+                        <h4 class="fixture-round-title">Ronda {{ round.number }}</h4>
+                        <div class="fixture-matches">
+                          @for (match of round.matches; track match.id) {
+                            <div class="fixture-match" [class.fixture-match--played]="match.homeScore !== null">
+                              <div class="fixture-team fixture-team--home">
+                                @if (match.homeTeam?.logoUrl) {
+                                  <img [src]="match.homeTeam!.logoUrl" [alt]="match.homeTeam!.name" class="fixture-logo" />
+                                }
+                                <span>{{ match.homeTeam?.name ?? 'Por definir' }}</span>
+                              </div>
+                              <div class="fixture-score">
+                                @if (match.homeScore !== null && match.awayScore !== null) {
+                                  <span class="score-value">{{ match.homeScore }} – {{ match.awayScore }}</span>
+                                } @else {
+                                  <span class="score-pending">
+                                    {{ match.scheduledStart ? (match.scheduledStart | date:'dd/MM HH:mm') : 'vs' }}
+                                  </span>
+                                }
+                              </div>
+                              <div class="fixture-team fixture-team--away">
+                                @if (match.awayTeam?.logoUrl) {
+                                  <img [src]="match.awayTeam!.logoUrl" [alt]="match.awayTeam!.name" class="fixture-logo" />
+                                }
+                                <span>{{ match.awayTeam?.name ?? 'Por definir' }}</span>
+                              </div>
+                            </div>
+                          }
+                        </div>
+                      </div>
+                    }
+                  </div>
+                }
+              }
+            </div>
+          </mat-tab>
+
+          <mat-tab label="Tabla">
+            <div class="tab-content">
+              <p class="text-secondary">Próximamente: tabla de posiciones.</p>
+            </div>
+          </mat-tab>
+
+        </mat-tab-group>
+      }
     </div>
   `,
   styles: `
@@ -87,18 +186,347 @@ import { ChampionshipService } from '../../../../core/services/championship.serv
       border-radius: 0 0 12px 12px;
       min-height: 300px;
     }
+
+    .loading-state {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 300px;
+    }
+
+    .fixture-phase {
+      margin-bottom: 2rem;
+    }
+
+    .fixture-phase-title {
+      font-size: 1rem;
+      font-weight: 700;
+      margin: 0 0 0.75rem;
+      color: var(--mat-sys-on-surface);
+      border-bottom: 2px solid var(--mat-sys-outline-variant);
+      padding-bottom: 0.5rem;
+    }
+
+    .fixture-phase-meta {
+      font-weight: 400;
+      font-size: 0.8rem;
+      color: var(--mat-sys-on-surface-variant);
+    }
+
+    .fixture-round {
+      margin-bottom: 1.25rem;
+    }
+
+    .fixture-round-title {
+      font-size: 0.8rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--mat-sys-on-surface-variant);
+      margin: 0 0 0.5rem;
+    }
+
+    .fixture-matches {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .fixture-match {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.6rem 1rem;
+      background: var(--mat-sys-surface);
+      border: 1px solid var(--mat-sys-outline-variant);
+      border-radius: 8px;
+    }
+
+    .fixture-match--played {
+      background: var(--mat-sys-surface-container-lowest);
+    }
+
+    .fixture-team {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.875rem;
+      font-weight: 500;
+    }
+
+    .fixture-team--away {
+      flex-direction: row-reverse;
+      text-align: right;
+    }
+
+    .fixture-logo {
+      width: 24px;
+      height: 24px;
+      object-fit: contain;
+      border-radius: 4px;
+    }
+
+    .fixture-score {
+      text-align: center;
+      min-width: 80px;
+    }
+
+    .score-value {
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--mat-sys-on-surface);
+    }
+
+    .score-pending {
+      font-size: 0.75rem;
+      color: var(--mat-sys-on-surface-variant);
+    }
   `,
 })
 export default class ChampionshipDetailPage implements OnInit {
-  private championshipSvc = inject(ChampionshipService);
+  private readonly championshipSvc = inject(ChampionshipService);
+  private readonly cdr = inject(ChangeDetectorRef);
+  private readonly snackBar = inject(MatSnackBar);
 
+  // ── Route input ────────────────────────────────────────────
   id = input.required<string>();
+
+  // ── UI state ───────────────────────────────────────────────
+  loading = signal(true);
+
+  // ── Championship meta ──────────────────────────────────────
   championshipName = signal('Campeonato');
+  championshipSeason = signal('');
+  maxTeams = signal(16);
+  maxPlayersPerTeam = signal(20);
+  sportId = signal<number>(1);
+
+  // ── Tab data ───────────────────────────────────────────────
+  teamsData = signal<TeamItem[]>([]);
+  phases = signal<PhaseCardData[]>([]);
+  activeFormat = signal<ChampionshipFormat | null>(null);
+  rules = signal<ChampionshipRuleItem[]>([]);
+  fixtureData = signal<ChampionshipFixture>({});
+
+  /** Fixture aplanado para el template: Array de fases, cada una con roundList. */
+  fixturePhases = computed(() =>
+    Object.entries(this.fixtureData()).map(([phaseName, data]: [string, FixturePhaseData]) => ({
+      name: phaseName,
+      phaseId: data.phaseId,
+      phaseType: data.phaseType,
+      status: data.status,
+      totalMatches: data.totalMatches,
+      roundList: Object.entries(data.rounds)
+        .sort(([a], [b]) => Number(a) - Number(b))
+        .map(([roundNum, matches]: [string, FixtureMatch[]]) => ({
+          number: Number(roundNum),
+          matches,
+        })),
+    }))
+  );
 
   ngOnInit(): void {
-    this.championshipSvc.getChampionshipById(this.id()).subscribe({
-      next: c => this.championshipName.set(c.name),
-      error: () => { },
+    const id = this.id();
+
+    forkJoin({
+      detail: this.championshipSvc.getChampionshipById(id),
+      phases: this.championshipSvc.getPhases(id),
+      rules:  this.championshipSvc.getRules(id),
+    }).subscribe({
+      next: ({ detail: c, phases, rules }) => {
+        // ── Championship meta ──────────────────────────────
+        this.championshipName.set(c.name);
+        this.championshipSeason.set(c.season ?? '');
+        this.maxTeams.set(c.maxTeams ?? 16);
+        this.maxPlayersPerTeam.set(c.maxPlayersPerTeam ?? 20);
+        this.sportId.set(Number(c.sportId) || 1);
+
+        // ── Rules ──────────────────────────────────────────
+        this.rules.set(rules.rules.map(r => this.toRuleItem(r)));
+
+        // ── Phases ─────────────────────────────────────────
+        const mapped: PhaseCardData[] = phases.map(p => ({
+          id: Number(p.id),
+          backendId: Number(p.id),
+          name: p.name,
+          phaseType: p.phaseType,
+          phaseOrder: p.phaseOrder,
+          status: p.status,
+          league: p.leagueConfig
+            ? {
+                winsPoints: 3, drawPoints: 1, lossPoints: 0, totalRounds: 10,
+                legs: p.leagueConfig.legs,
+                advanceCount: p.leagueConfig.advanceCount,
+                tiebreakOrder: 'points,goal_difference,goals_for,h2h,fair_play,draw',
+              }
+            : p.phaseType === PhaseType.League
+              ? { winsPoints: 3, drawPoints: 1, lossPoints: 0, totalRounds: 10, legs: 1, advanceCount: 4, tiebreakOrder: 'points,goal_difference,goals_for,h2h,fair_play,draw' }
+              : undefined,
+          knockout: p.knockoutConfig
+            ? {
+                legs: p.knockoutConfig.legs,
+                bracketSize: 8,
+                thirdPlaceMatch: p.knockoutConfig.thirdPlaceMatch,
+                seeding: p.knockoutConfig.seeding,
+                awayGoalsRule: p.knockoutConfig.awayGoalsRule,
+                tieBreak: p.knockoutConfig.tieBreak,
+              }
+            : p.phaseType === PhaseType.Knockout
+              ? { legs: 1, bracketSize: 8, thirdPlaceMatch: false, seeding: 'ranking', awayGoalsRule: false, tieBreak: 'penalties' }
+              : undefined,
+          groups: p.groupsConfig
+            ? {
+                numGroups: p.groupsConfig.numGroups,
+                teamsPerGroup: p.groupsConfig.teamsPerGroup,
+                legs: p.groupsConfig.legs,
+                advancePerGroup: p.groupsConfig.advancePerGroup,
+                advanceBestThirds: p.groupsConfig.advanceBestThirds,
+                tiebreakOrder: p.groupsConfig.tiebreakOrder,
+              }
+            : p.phaseType === PhaseType.Groups
+              ? { numGroups: 4, teamsPerGroup: 4, legs: 1, advancePerGroup: 2, advanceBestThirds: 0, tiebreakOrder: 'points,diff,gf,h2h,random' }
+              : undefined,
+          swiss: p.swissConfig
+            ? {
+                numRounds: p.swissConfig.numRounds,
+                pairingSystem: p.swissConfig.pairingSystem,
+                firstRound: p.swissConfig.firstRound,
+                allowRematch: p.swissConfig.allowRematch,
+                tiebreakOrder: p.swissConfig.tiebreakOrder,
+                directAdvancedCount: p.swissConfig.directAdvancedCount,
+                playoffCount: p.swissConfig.playoffCount,
+              }
+            : p.phaseType === PhaseType.Swiss
+              ? { numRounds: 7, pairingSystem: 'random', firstRound: 'random', allowRematch: false, tiebreakOrder: 'points,goal_difference,goals_for,h2h,fair_play,draw', directAdvancedCount: 2, playoffCount: 4 }
+              : undefined,
+        }));
+        this.phases.set(mapped);
+        this.activeFormat.set(this.inferFormat(mapped));
+
+        // ── Fixture (separate call, non-blocking) ─────────
+        this.championshipSvc.getFixture(id).subscribe({
+          next: fixture => {
+            this.fixtureData.set(fixture);
+            this.cdr.markForCheck();
+          },
+          error: () => {
+            // fixture vacío: no hay partidos generados aún — no es error bloqueante
+          },
+        });
+
+        // ── Teams (separate call, non-blocking) ───────────
+        this.championshipSvc.getTeams(id).subscribe({
+          next: profiles => {
+            const teamsMapped: TeamItem[] = profiles.map(p => ({
+              id: p.id,
+              championshipId: p.championshipId,
+              name: p.name,
+              shortname: p.shortname,
+              slug: p.slug,
+              logoUrl: p.logoUrl,
+              documentUrl: p.documentUrl ?? null,
+              primaryColor: p.primaryColor ?? '#1a56db',
+              secondaryColor: p.secondaryColor ?? '#e5e7eb',
+              location: p.location ?? '',
+              foundedYear: p.foundedYear ?? null,
+              homeVenue: p.homeVenue ?? '',
+              coachName: p.coachName ?? '',
+              coachPhone: p.coachPhone ?? '',
+              isActive: p.isActive,
+              players: (p.players ?? []).map(pl => ({
+                id: pl.id,
+                teamId: pl.teamId,
+                positionId: pl.positionId,
+                firstName: pl.firstName,
+                lastName: pl.lastName,
+                nickName: pl.nickName ?? null,
+                number: pl.number,
+                birthDate: pl.birthDate,
+                height: pl.height ?? null,
+                weight: pl.weight ?? null,
+                status: (pl.status as TeamItem['players'][number]['status']) ?? 'active',
+                photoUrl: pl.photoUrl ?? null,
+                suspensionEndDate: pl.suspensionEndDate ?? null,
+                suspensionReason: pl.suspensionReason ?? null,
+                isActive: pl.isActive ?? true,
+                createdAt: pl.createdAt ?? new Date(),
+                updatedAt: pl.updatedAt ?? new Date(),
+              })),
+            }));
+            this.teamsData.set(teamsMapped);
+            this.cdr.markForCheck();
+          },
+          error: () => {
+            this.snackBar.open('Error al cargar los equipos', 'Cerrar', { duration: 3000 });
+          },
+        });
+
+        this.loading.set(false);
+        this.cdr.markForCheck();
+      },
+      error: () => {
+        this.loading.set(false);
+        this.snackBar.open('Error al cargar el campeonato', 'Cerrar', { duration: 3000 });
+        this.cdr.markForCheck();
+      },
     });
+  }
+
+  // ── Helpers ────────────────────────────────────────────────
+  private inferFormat(phases: PhaseCardData[]): ChampionshipFormat | null {
+    const types = new Set(phases.map(p => p.phaseType));
+    if (types.has(PhaseType.Swiss))    return 'swiss_playoff';
+    if (types.has(PhaseType.Groups))   return 'groups_knockout';
+    if (types.has(PhaseType.Knockout) && !types.has(PhaseType.League)) return 'knockout';
+    if (types.has(PhaseType.League))   return 'league';
+    return null;
+  }
+
+  private toRuleItem(rule: {
+    matchRuleId: number | string;
+    name: string;
+    defaultValue: number;
+    currentValue: number;
+    isOverridden: boolean;
+  }): ChampionshipRuleItem {
+    const isBoolean = this.isBooleanRule(rule.name);
+    const label = this.humanizeRuleName(rule.name);
+    return {
+      matchRuleId:   Number(rule.matchRuleId),
+      name:          rule.name,
+      label,
+      description:   `Configuracion para ${label.toLowerCase()}.`,
+      category:      this.getRuleCategory(rule.name),
+      categoryLabel: this.getRuleCategoryLabel(rule.name),
+      valueType:     (isBoolean ? 'boolean' : 'number') as RuleValueType,
+      defaultValue:  Number(rule.defaultValue),
+      currentValue:  Number(rule.currentValue),
+      isOverridden:  Boolean(rule.isOverridden),
+      min:           isBoolean ? undefined : 0,
+      max:           isBoolean ? undefined : 999,
+    };
+  }
+
+  private humanizeRuleName(name: string): string {
+    return name.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  }
+
+  private isBooleanRule(name: string): boolean {
+    return name.startsWith('allow_') || name.startsWith('enable_')
+      || name.includes('penalty') || name.includes('extra_time');
+  }
+
+  private getRuleCategory(name: string): string {
+    if (name.includes('player') || name.includes('substitution')) return 'players';
+    if (name.includes('card') || name.includes('match') || name.includes('duration')) return 'match';
+    return 'additional';
+  }
+
+  private getRuleCategoryLabel(name: string): string {
+    const cat = this.getRuleCategory(name);
+    if (cat === 'players') return 'Jugadores';
+    if (cat === 'match')   return 'Partido';
+    return 'Opciones Adicionales';
   }
 }

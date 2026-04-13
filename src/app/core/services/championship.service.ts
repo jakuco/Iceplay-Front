@@ -31,6 +31,7 @@ import {
   UpdatePhaseApiDto,
   UpdateChampionshipDto,
   UpdateChampionshipStatusDto,
+  ChampionshipFixture,
 } from '../models/championship.model';
 import type { Position } from '../models/sport-config.model';
 import { TeamProfile, TeamUpsertDto } from '../models/team.model';
@@ -281,6 +282,43 @@ export class ChampionshipService {
       map((response) => this.extractCollection(response, 'phases') as BackendPhase[]),
       map((items) => items.map((item) => this.mapBackendPhase(item))),
       catchError((error) => this.handleError('Error fetching phases', error)),
+    );
+  }
+
+  /**
+   * GET /championships/:id/fixture
+   * Devuelve el fixture agrupado por fase y ronda.
+   * Filters opcionales: phaseId, round.
+   */
+  getFixture(
+    championshipId: string,
+    filters?: { phaseId?: number; round?: number },
+  ): Observable<ChampionshipFixture> {
+    const params: Record<string, string | number> = {};
+    if (filters?.phaseId != null) params['phaseId'] = filters.phaseId;
+    if (filters?.round   != null) params['round']   = filters.round;
+    return this.api.get<ChampionshipFixture>(
+      `championships/${championshipId}/fixture`,
+      params,
+    ).pipe(
+      catchError((error) => this.handleError('Error fetching fixture', error)),
+    );
+  }
+
+  /**
+   * POST /phases/:phaseId/fixture
+   * Genera los partidos del fixture para una fase.
+   * El backend activa la fase (status → active) al terminar.
+   */
+  generateFixture(
+    phaseId: number,
+    params?: { startDate?: string; matchIntervalDays?: number; venue?: string; city?: string },
+  ): Observable<{ phaseId: number; phaseName: string; phaseType: string; totalMatches: number }> {
+    return this.api.post<{ phaseId: number; phaseName: string; phaseType: string; totalMatches: number }>(
+      `phases/${phaseId}/fixture`,
+      params ?? {},
+    ).pipe(
+      catchError((error) => this.handleError('Error generating fixture', error)),
     );
   }
 

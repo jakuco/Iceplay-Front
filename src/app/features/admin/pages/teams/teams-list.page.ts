@@ -241,10 +241,12 @@ export default class TeamsListPage {
     this.isLoading.set(true);
     forkJoin({
       teams: this.teamService.getTeamsByOrganization(organizationId),
-      championships: this.championshipService.getChampionships(organizationId),
+      championships: this.championshipService.getAllChampionships(),
     }).subscribe({
       next: ({ teams, championships }) => {
-        championships.forEach((c) => this.championshipsMap.set(c.id, c));
+        championships
+          .filter((c: Championship) => String(c.organizationId) === organizationId)
+          .forEach((c: Championship) => this.championshipsMap.set(c.id, c));
 
         const displayTeams: DisplayTeam[] = teams.map((team) => {
           const championship = this.championshipsMap.get(team.championshipId);
@@ -254,7 +256,7 @@ export default class TeamsListPage {
             shortname: team.shortname ?? '',
             logoUrl: team.logoUrl ?? null,
             primaryColor: team.primaryColor ?? null,
-            playerCount:  0,
+            playerCount: team.playerCount ?? 0,
             championship: championship?.name ?? 'Sin campeonato',
             championshipId: team.championshipId,
           };

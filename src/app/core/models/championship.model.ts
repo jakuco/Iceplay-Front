@@ -553,6 +553,45 @@ export type ChampionshipSummary = Pick<
   'id' | 'name' | 'slug' | 'season' | 'logo' | 'status' | 'startDate' | 'endDate'
 >;
 
+// ─────────────────────────────────────────────────────────────
+// FIXTURE
+// Respuesta de GET /championships/:id/fixture
+// ─────────────────────────────────────────────────────────────
+
+export interface FixtureTeam {
+  id: string;
+  name: string;
+  shortname?: string | null;
+  logoUrl?: string | null;
+}
+
+export interface FixtureMatch {
+  id: number;
+  round: number;
+  scheduledStart: string | null;
+  status: string;
+  homeTeamId: string | null;
+  awayTeamId: string | null;
+  homeScore: number | null;
+  awayScore: number | null;
+  homeTeam: FixtureTeam | null;
+  awayTeam: FixtureTeam | null;
+}
+
+/** Clave = número de ronda (como string en JSON). */
+export type FixtureRounds = Record<string, FixtureMatch[]>;
+
+export interface FixturePhaseData {
+  phaseId: number;
+  phaseType: string;
+  status: string;
+  totalMatches: number;
+  rounds: FixtureRounds;
+}
+
+/** Respuesta completa: clave = nombre de la fase. */
+export type ChampionshipFixture = Record<string, FixturePhaseData>;
+
 /**
  * Respuesta paginada genérica para listas de campeonatos.
  */

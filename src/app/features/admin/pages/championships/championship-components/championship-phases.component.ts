@@ -27,6 +27,7 @@ import { finalize } from 'rxjs/operators';
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCheckboxModule } from '@angular/material/checkbox';
+import { MatProgressSpinner } from '@angular/material/progress-spinner';
 import { MAT_DIALOG_DATA, MatDialog, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { PhaseCardComponent, PhaseCardData, PhaseType, PhaseStatus } from './phase-card.component';
@@ -205,7 +206,7 @@ export class SavePhaseDialogComponent {
   selector: 'app-championship-phases',
   changeDetection: ChangeDetectionStrategy.OnPush,
   standalone: true,
-  imports: [FormsModule, MatIconModule, MatButtonModule, MatCheckboxModule, PhaseCardComponent],
+  imports: [FormsModule, MatIconModule, MatButtonModule, MatCheckboxModule, MatProgressSpinner, PhaseCardComponent],
   template: `
 <div class="max-w-[960px] mx-auto px-7 pt-7 pb-8">
 
@@ -365,6 +366,26 @@ export class SavePhaseDialogComponent {
                   (configure)="openPhaseDetail($event)"
                   (delete)="ph.isBase ? null : deletePhase(ph.id)"
                 />
+                @if (ph.backendId != null && ph.status === 'pending') {
+                  <div class="flex justify-end mt-2 pr-1">
+                    <button
+                      matButton="outlined"
+                      type="button"
+                      [disabled]="generatingFixtureForPhase() === ph.backendId"
+                      (click)="generateFixture(ph)"
+                    >
+                      @if (generatingFixtureForPhase() === ph.backendId) {
+                        <mat-progress-spinner diameter="16" mode="indeterminate" />
+                        Generando…
+                      } @else {
+                        <ng-container>
+                          <mat-icon>sports_soccer</mat-icon>
+                          Generar Fixture
+                        </ng-container>
+                      }
+                    </button>
+                  </div>
+                }
               </div>
             </div>
 
@@ -1049,6 +1070,42 @@ export class ChampionshipPhasesComponent {
   }
 
   cancelEdit(): void { this.viewMode.set('list'); }
+
+  // ── Fixture generation ────────────────────────────────────────
+  generatingFixtureForPhase = signal<number | null>(null);
+
+  generateFixture(phase: PhaseCardData): void {
+    const phaseId = phase.backendId;
+    if (phaseId == null) {
+      this.snackBar.open('Guarda las fases antes de generar el fixture', 'Cerrar', { duration: 3000 });
+      return;
+    }
+    this.generatingFixtureForPhase.set(phaseId);
+    this.championshipSvc.generateFixture(phaseId).subscribe({
+      next: (result) => {
+        this.generatingFixtureForPhase.set(null);
+        // Marcar la fase como active en la lista local
+        this.phases.update(list =>
+          list.map(p => p.backendId === phaseId ? { ...p, status: PhaseStatus.Active } : p)
+        );
+        this.snackBar.open(
+          `Fixture generado: ${result.totalMatches} partidos en "${result.phaseName}"`,
+          'Cerrar',
+          { duration: 4000 },
+        );
+        this.cdr.markForCheck();
+      },
+      error: (err: Error) => {
+        this.generatingFixtureForPhase.set(null);
+        this.snackBar.open(
+          err?.message ?? 'Error al generar el fixture',
+          'Cerrar',
+          { duration: 4000 },
+        );
+        this.cdr.markForCheck();
+      },
+    });
+  }
 
   // ── Type change ───────────────────────────────────────────────
   onTypeChange(type: PhaseType): void {

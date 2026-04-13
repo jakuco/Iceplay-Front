@@ -315,13 +315,13 @@ export default class PlayersListPage implements OnInit {
         this.isLoading.set(true);
         forkJoin({
             teams: this.teamService.getTeamsByOrganization(organizationId),
-            championships: this.championshipService.getChampionships(organizationId),
+            championships: this.championshipService.getAllChampionships(),
         }).subscribe({
             next: ({ teams, championships }) => {
                 this.allTeams.set(teams);
                 this.filteredTeams.set(teams);
                 this.championships.set(
-                    championships.filter((c) => c.status === ChampionshipStatus.Active),
+                    championships.filter((c: Championship) => String(c.organizationId) === organizationId && c.status === ChampionshipStatus.Active),
                 );
                 this.loadPlayers();
             },
@@ -411,7 +411,7 @@ export default class PlayersListPage implements OnInit {
                 id: String(player.id),
                 fullName,
                 number: player.number ?? 0,
-                position: String(player.positionId),
+                position: player.positionId != null ? String(player.positionId) : '—',
                 team: team?.name || 'Sin equipo',
                 teamId: String(player.teamId),
                 status: this.toDisplayStatus(normalizedStatus),

@@ -203,15 +203,16 @@ export default class TeamFormPage {
   }
 
   private loadChampionships(organizationId: string): void {
-    this.championshipService.getChampionships(organizationId).subscribe({
-      next: (championships) => {
+    this.championshipService.getAllChampionships().subscribe({
+      next: (championships: Championship[]) => {
         this.championships.set(
-          championships.filter((c) =>
+          championships.filter((c: Championship) =>
+            String(c.organizationId) === organizationId &&
             ['active', 'registration', 'draft'].includes(String(c.status))
           )
         );
       },
-      error: (err) => console.error('Error loading championships', err),
+      error: (err: any) => console.error('Error loading championships', err),
     });
   }
 
