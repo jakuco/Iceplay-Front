@@ -134,6 +134,13 @@ export class MatchEventService {
       .pipe(catchError((err) => this.handleError('Error deleting event', err)));
   }
 
+  /** GET /matches/:matchId/events — all historical events for a match */
+  getMatchEvents(matchId: string): Observable<MatchEvent[]> {
+    return this.api
+      .get<MatchEvent[]>(`matches/${matchId}/events`)
+      .pipe(catchError((err) => this.handleError('Error loading match events', err)));
+  }
+
   getEventTypes(): Observable<TypeMatchEvent[]> {
     return this.api
       .get<TypeMatchEvent[]>('matches/event-types')

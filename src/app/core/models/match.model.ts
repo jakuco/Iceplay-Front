@@ -100,6 +100,9 @@ export interface MatchByIdResponse {
   awayTeamId: string;
   scheduledStart: string;
   status: string;
+  homeScore: number;
+  awayScore: number;
+  championshipId?: string | null;
 }
 
 /**
@@ -232,6 +235,8 @@ export interface UpdateMatchApiDto {
   scheduledStart?: string;
   venue?: string;
   city?: string;
+  homeScore?: number;
+  awayScore?: number;
 }
 
 // ─────────────────────────────────────────────

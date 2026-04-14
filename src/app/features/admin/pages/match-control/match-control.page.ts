@@ -706,8 +706,14 @@ export default class MatchControlPage implements OnInit, OnDestroy {
 
     this.saveToHistory();
 
+    const payload: UpdateMatchApiDto = { status };
+    if (status === 'finished') {
+      payload.homeScore = this.homeTeam().score;
+      payload.awayScore = this.awayTeam().score;
+    }
+
     this.matchService
-      .updateMatch(String(match.id), { status } as unknown as UpdateMatchApiDto)
+      .updateMatch(String(match.id), payload)
       .subscribe({
         next: (updated) => {
           this.matchData.set(updated);

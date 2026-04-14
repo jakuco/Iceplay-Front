@@ -486,7 +486,8 @@ export default class MatchesList {
     const date = this.formatDateToISO(this.selectedDate());
     this.isLoading.set(true);
 
-    this.matchService.getScheduleByDate(date).subscribe({
+    const offset = this.selectedDate().getTimezoneOffset();
+    this.matchService.getScheduleByDate(date, offset).subscribe({
       next: (res) => {
         this.applyScheduleResponse(res);
         this.isLoading.set(false);
@@ -706,7 +707,10 @@ export default class MatchesList {
   }
 
   private formatDateToISO(date: Date): string {
-    return date.toISOString().split('T')[0];
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
   }
 
   shouldHideDay(index: number): boolean {

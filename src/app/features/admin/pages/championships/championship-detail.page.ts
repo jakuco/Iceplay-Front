@@ -126,9 +126,20 @@ import {
                                     <input
                                       type="datetime-local"
                                       [value]="editingValue()"
-                                      (change)="editingValue.set($any($event.target).value)"
+                                      (input)="editingValue.set($any($event.target).value)"
                                       class="fixture-date-input"
                                     />
+                                    <select class="fixture-status-select"
+                                      [value]="editingStatus()"
+                                      (change)="editingStatus.set($any($event.target).value)">
+                                      <option value="scheduled">Programado</option>
+                                      <option value="warmup">Calentamiento</option>
+                                      <option value="live">En vivo</option>
+                                      <option value="halftime">Descanso</option>
+                                      <option value="finished">Finalizado</option>
+                                      <option value="postponed">Aplazado</option>
+                                      <option value="cancelled">Cancelado</option>
+                                    </select>
                                     <div class="fixture-date-actions">
                                       <button type="button" class="fixture-action-btn fixture-action-btn--save"
                                         (click)="saveMatchDate(match)"
@@ -143,19 +154,23 @@ import {
                                     </div>
                                   </div>
                                 } @else {
-                                  @if (match.homeScore !== null && match.awayScore !== null) {
+                                  @if (match.status === 'finished') {
                                     <span class="score-value">{{ match.homeScore }} – {{ match.awayScore }}</span>
-                                  } @else {
-                                    <div class="score-pending-group">
-                                      <span class="score-pending">
-                                        {{ match.scheduledStart ? (match.scheduledStart | date:'dd/MM HH:mm') : 'vs' }}
-                                      </span>
-                                      <button type="button" class="fixture-edit-btn"
-                                        (click)="startEditDate(match)" title="Editar fecha">
-                                        <mat-icon>edit_calendar</mat-icon>
-                                      </button>
-                                    </div>
                                   }
+                                  <div class="score-pending-group">
+                                    <span class="score-pending">
+                                      {{ match.scheduledStart ? (match.scheduledStart | date:'dd/MM HH:mm') : 'vs' }}
+                                    </span>
+                                    <button type="button" class="fixture-edit-btn"
+                                      (click)="startEditDate(match)" title="Editar fecha/estado">
+                                      <mat-icon>edit_calendar</mat-icon>
+                                    </button>
+                                    <a class="fixture-edit-btn"
+                                      [routerLink]="['/admin/match', match.id, 'control']"
+                                      title="Control del partido">
+                                      <mat-icon>sports</mat-icon>
+                                    </a>
+                                  </div>
                                 }
                               </div>
                               <div class="fixture-team fixture-team--away">
@@ -405,6 +420,7 @@ export default class ChampionshipDetailPage implements OnInit {
   fixtureData = signal<ChampionshipFixture>({});
   editingMatchId = signal<number | null>(null);
   editingValue = signal<string>('');
+  editingStatus = signal<string>('');
   savingMatchId = signal<number | null>(null);
 
   /** Fixture aplanado para el template: Array de fases, cada una con roundList. */
@@ -575,11 +591,13 @@ export default class ChampionshipDetailPage implements OnInit {
   startEditDate(match: FixtureMatch): void {
     this.editingMatchId.set(match.id);
     this.editingValue.set(this.toDatetimeLocal(match.scheduledStart));
+    this.editingStatus.set(match.status ?? 'scheduled');
   }
 
   cancelEdit(): void {
     this.editingMatchId.set(null);
     this.editingValue.set('');
+    this.editingStatus.set('');
   }
 
   saveMatchDate(match: FixtureMatch): void {
@@ -588,7 +606,8 @@ export default class ChampionshipDetailPage implements OnInit {
     this.savingMatchId.set(match.id);
     const iso = new Date(raw).toISOString();
 
-    this.matchSvc.updateMatch(String(match.id), { scheduledStart: iso }).subscribe({
+    const newStatus = this.editingStatus();
+    this.matchSvc.updateMatch(String(match.id), { scheduledStart: iso, status: newStatus }).subscribe({
       next: () => {
         const current = this.fixtureData();
         const updated: ChampionshipFixture = {};
@@ -596,7 +615,7 @@ export default class ChampionshipDetailPage implements OnInit {
           const updatedRounds: Record<string, FixtureMatch[]> = {};
           for (const [roundNum, roundMatches] of Object.entries(phaseData.rounds) as [string, FixtureMatch[]][]) {
             updatedRounds[roundNum] = roundMatches.map(m =>
-              m.id === match.id ? { ...m, scheduledStart: iso } : m,
+              m.id === match.id ? { ...m, scheduledStart: iso, status: newStatus } : m,
             );
           }
           updated[phaseName] = { ...phaseData, rounds: updatedRounds };
@@ -604,7 +623,8 @@ export default class ChampionshipDetailPage implements OnInit {
         this.fixtureData.set(updated);
         this.editingMatchId.set(null);
         this.savingMatchId.set(null);
-        this.snackBar.open('Fecha actualizada', 'Ok', { duration: 2500 });
+        this.editingStatus.set('');
+        this.snackBar.open('Partido actualizado', 'Ok', { duration: 2500 });
         this.cdr.markForCheck();
       },
       error: () => {

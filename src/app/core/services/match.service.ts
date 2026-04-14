@@ -84,8 +84,8 @@ export class MatchService {
   // ─────────────────────────────────────────
   // GET /matches/schedule-by-date
   // ─────────────────────────────────────────
-  getScheduleByDate(date: string): Observable<DayScheduleResponse> {
-    return this.api.get<DayScheduleResponse>('matches/schedule-by-date', { date }).pipe(
+  getScheduleByDate(date: string, offset: number = 0): Observable<DayScheduleResponse> {
+    return this.api.get<DayScheduleResponse>('matches/schedule-by-date', { date, offset }).pipe(
       catchError((error) => this.handleError('Error fetching schedule by date', error)),
     );
   }

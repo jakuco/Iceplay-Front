@@ -12,7 +12,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
 import { MatTabsModule } from '@angular/material/tabs';
 import { RouterLink } from '@angular/router';
-import { Subscription, forkJoin, of, type Observable } from 'rxjs';
+import { Subscription, forkJoin, of, map, type Observable } from 'rxjs';
 import { I18nService } from '../../../../core/services/i18n.service';
 import { TranslatePipe } from '../../../../core/pipes/translate.pipe';
 import { MatchService } from '../../../../core/services/match.service';
@@ -20,7 +20,7 @@ import { MatchEventService } from '../../../../core/services/match-event.service
 import { TeamService } from '../../../../core/services/team.service';
 import { ChampionshipService } from '../../../../core/services/championship.service';
 import { MatchByIdResponse } from '../../../../core/models/match.model';
-import { MatchEventViewModel } from '../../../../core/models/event.model';
+import { MatchEvent, MatchEventViewModel, mapEventToViewModel } from '../../../../core/models/event.model';
 import { TeamApiResponse } from '../../../../core/models/team.model';
 import { Championship } from '../../../../core/models/championship.model';
 
@@ -403,30 +403,44 @@ export default class MatchDetails implements OnDestroy {
     return this.championshipService.getChampionshipById(String(championshipId));
   }
 
-  private loadEvents(matchId: string, _isLive: boolean): void {
+  private loadEvents(matchId: string, isLive: boolean): void {
     this.eventSubscription?.unsubscribe();
     this.events.set([]);
 
     const homeTeamId = String(this.homeTeam()?.id ?? '');
-    // Duración nominal de periodo en segundos. Valor de referencia hasta que
-    // exista endpoint GET /championships/:id/rules con `match_duration`.
     const PERIOD_DURATION_SECONDS = 2700;
 
-    this.eventSubscription = this.matchEventService
-      .connectToMatchStream(matchId, homeTeamId, PERIOD_DURATION_SECONDS)
-      .subscribe({
-        next: (msg) => {
-          // TODO: Score event and parsing
-          if (msg.type === 'add') {
-            this.events.update((current) => [...current, msg.event]);
-          } else {
-            this.events.update((current) => current.filter((e) => e.id !== msg.eventId));
-          }
+    if (isLive) {
+      // Live match: use SSE for real-time events
+      this.eventSubscription = this.matchEventService
+        .connectToMatchStream(matchId, homeTeamId, PERIOD_DURATION_SECONDS)
+        .subscribe({
+          next: (msg) => {
+            if (msg.type === 'add') {
+              this.events.update((current) => [...current, msg.event]);
+            } else {
+              this.events.update((current) => current.filter((e) => e.id !== msg.eventId));
+            }
+          },
+          error: (error) => {
+            console.error('Error loading events via SSE', error);
+          },
+        });
+    } else {
+      // Finished/scheduled: fetch historical events via REST
+      this.matchEventService.getMatchEvents(matchId).pipe(
+        map((rawEvents: MatchEvent[]) =>
+          rawEvents.map((e) => mapEventToViewModel(e, homeTeamId, PERIOD_DURATION_SECONDS))
+        )
+      ).subscribe({
+        next: (viewModels) => {
+          this.events.set(viewModels);
         },
         error: (error) => {
-          console.error('Error loading events via SSE', error);
+          console.error('Error loading match events', error);
         },
       });
+    }
   }
 
   private transformEvents(
