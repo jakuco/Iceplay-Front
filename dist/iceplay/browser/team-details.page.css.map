@@ -1,7 +1,0 @@
-{
-  "version": 3,
-  "sources": ["%3Cno%20source%3E", "src/app/features/team/pages/details/team-details.page.ts", "team-details.page.ts"],
-  "sourcesContent": [null, "\n    .inactive-tab {\n      @apply border-transparent!;\n      color: var(--mat-sys-on-surface-variant) !important;\n    }\n  ", ".inactive-tab {\n  @apply border-transparent!;\n  color: var(--mat-sys-on-surface-variant) !important;\n}\n/*# sourceMappingURL=data:application/json;charset=utf-8;base64,eyJ2ZXJzaW9uIjozLCJzb3VyY2VSb290IjoiIiwic291cmNlcyI6WyJmaWxlOi8vL0Q6L0Zyb3Blbi9JY2VwbGF5L0ljZXBsYXktRnJvbnQvc3JjL2FwcC9mZWF0dXJlcy90ZWFtL3BhZ2VzL2RldGFpbHMvdGVhbS1kZXRhaWxzLnBhZ2UudHMiXSwibmFtZXMiOltdLCJtYXBwaW5ncyI6IkFBQ0k7RUFDRTtFQUNBIiwic291cmNlc0NvbnRlbnQiOlsiXG4gICAgLmluYWN0aXZlLXRhYiB7XG4gICAgICBAYXBwbHkgYm9yZGVyLXRyYW5zcGFyZW50ITtcbiAgICAgIGNvbG9yOiB2YXIoLS1tYXQtc3lzLW9uLXN1cmZhY2UtdmFyaWFudCkgIWltcG9ydGFudDtcbiAgICB9XG4gICJdfQ== */"],
-  "mappings": ";ACCI,CAAA;AACE,gBAAA;AACA,SAAA,IAAA;ACAL;",
-  "names": []
-}

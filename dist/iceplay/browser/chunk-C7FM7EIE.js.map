@@ -1,7 +1,0 @@
-{
-  "version": 3,
-  "sources": ["src/app/features/auth/auth.routes.ts"],
-  "sourcesContent": ["import type { Routes } from '@angular/router';\r\n\r\nconst routes: Routes = [\r\n  {\r\n    path: 'login',\r\n    loadComponent: () => import('./pages/login/login.page'),\r\n    title: 'Iniciar Sesión - IcePlay',\r\n  },\r\n  {\r\n    path: '',\r\n    redirectTo: 'login',\r\n    pathMatch: 'full',\r\n  },\r\n];\r\n\r\nexport default routes;\r\n\r\n"],
-  "mappings": ";;;AAEA,IAAM,SAAiB;EACrB;IACE,MAAM;IACN,eAAe,MAAM,OAAO,qBAA0B;IACtD,OAAO;;EAET;IACE,MAAM;IACN,YAAY;IACZ,WAAW;;;AAIf,IAAA,sBAAe;",
-  "names": []
-}
