@@ -86,6 +86,7 @@ import {
                 [championshipId]="id()"
                 [initialPhases]="phases()"
                 [initialFormat]="activeFormat()"
+                (fixtureGenerated)="reloadFixture()"
               />
             </div>
           </mat-tab>
@@ -399,20 +400,16 @@ export default class ChampionshipDetailPage implements OnInit {
   private readonly snackBar = inject(MatSnackBar);
   private readonly matchSvc = inject(MatchService);
 
-  // ── Route input ────────────────────────────────────────────
   id = input.required<string>();
 
-  // ── UI state ───────────────────────────────────────────────
   loading = signal(true);
 
-  // ── Championship meta ──────────────────────────────────────
   championshipName = signal('Campeonato');
   championshipSeason = signal('');
   maxTeams = signal(16);
   maxPlayersPerTeam = signal(20);
   sportId = signal<number>(1);
 
-  // ── Tab data ───────────────────────────────────────────────
   teamsData = signal<TeamItem[]>([]);
   phases = signal<PhaseCardData[]>([]);
   activeFormat = signal<ChampionshipFormat | null>(null);
@@ -423,7 +420,6 @@ export default class ChampionshipDetailPage implements OnInit {
   editingStatus = signal<string>('');
   savingMatchId = signal<number | null>(null);
 
-  /** Fixture aplanado para el template: Array de fases, cada una con roundList. */
   fixturePhases = computed(() =>
     Object.entries(this.fixtureData()).map(([phaseName, data]: [string, FixturePhaseData]) => ({
       name: phaseName,
@@ -446,20 +442,17 @@ export default class ChampionshipDetailPage implements OnInit {
     forkJoin({
       detail: this.championshipSvc.getChampionshipById(id),
       phases: this.championshipSvc.getPhases(id),
-      rules:  this.championshipSvc.getRules(id),
+      rules: this.championshipSvc.getRules(id),
     }).subscribe({
       next: ({ detail: c, phases, rules }) => {
-        // ── Championship meta ──────────────────────────────
         this.championshipName.set(c.name);
         this.championshipSeason.set(c.season ?? '');
         this.maxTeams.set(c.maxTeams ?? 16);
         this.maxPlayersPerTeam.set(c.maxPlayersPerTeam ?? 20);
         this.sportId.set(Number(c.sportId) || 1);
 
-        // ── Rules ──────────────────────────────────────────
         this.rules.set(rules.rules.map(r => this.toRuleItem(r)));
 
-        // ── Phases ─────────────────────────────────────────
         const mapped: PhaseCardData[] = phases.map(p => ({
           id: Number(p.id),
           backendId: Number(p.id),
@@ -469,13 +462,24 @@ export default class ChampionshipDetailPage implements OnInit {
           status: p.status,
           league: p.leagueConfig
             ? {
-                winsPoints: 3, drawPoints: 1, lossPoints: 0, totalRounds: 10,
+                winsPoints: 3,
+                drawPoints: 1,
+                lossPoints: 0,
+                totalRounds: 10,
                 legs: p.leagueConfig.legs,
                 advanceCount: p.leagueConfig.advanceCount,
                 tiebreakOrder: 'points,goal_difference,goals_for,h2h,fair_play,draw',
               }
             : p.phaseType === PhaseType.League
-              ? { winsPoints: 3, drawPoints: 1, lossPoints: 0, totalRounds: 10, legs: 1, advanceCount: 4, tiebreakOrder: 'points,goal_difference,goals_for,h2h,fair_play,draw' }
+              ? {
+                  winsPoints: 3,
+                  drawPoints: 1,
+                  lossPoints: 0,
+                  totalRounds: 10,
+                  legs: 1,
+                  advanceCount: 4,
+                  tiebreakOrder: 'points,goal_difference,goals_for,h2h,fair_play,draw',
+                }
               : undefined,
           knockout: p.knockoutConfig
             ? {
@@ -487,7 +491,14 @@ export default class ChampionshipDetailPage implements OnInit {
                 tieBreak: p.knockoutConfig.tieBreak,
               }
             : p.phaseType === PhaseType.Knockout
-              ? { legs: 1, bracketSize: 8, thirdPlaceMatch: false, seeding: 'ranking', awayGoalsRule: false, tieBreak: 'penalties' }
+              ? {
+                  legs: 1,
+                  bracketSize: 8,
+                  thirdPlaceMatch: false,
+                  seeding: 'ranking',
+                  awayGoalsRule: false,
+                  tieBreak: 'penalties',
+                }
               : undefined,
           groups: p.groupsConfig
             ? {
@@ -499,7 +510,14 @@ export default class ChampionshipDetailPage implements OnInit {
                 tiebreakOrder: p.groupsConfig.tiebreakOrder,
               }
             : p.phaseType === PhaseType.Groups
-              ? { numGroups: 4, teamsPerGroup: 4, legs: 1, advancePerGroup: 2, advanceBestThirds: 0, tiebreakOrder: 'points,diff,gf,h2h,random' }
+              ? {
+                  numGroups: 4,
+                  teamsPerGroup: 4,
+                  legs: 1,
+                  advancePerGroup: 2,
+                  advanceBestThirds: 0,
+                  tiebreakOrder: 'points,diff,gf,h2h,random',
+                }
               : undefined,
           swiss: p.swissConfig
             ? {
@@ -512,24 +530,23 @@ export default class ChampionshipDetailPage implements OnInit {
                 playoffCount: p.swissConfig.playoffCount,
               }
             : p.phaseType === PhaseType.Swiss
-              ? { numRounds: 7, pairingSystem: 'random', firstRound: 'random', allowRematch: false, tiebreakOrder: 'points,goal_difference,goals_for,h2h,fair_play,draw', directAdvancedCount: 2, playoffCount: 4 }
+              ? {
+                  numRounds: 7,
+                  pairingSystem: 'random',
+                  firstRound: 'random',
+                  allowRematch: false,
+                  tiebreakOrder: 'points,goal_difference,goals_for,h2h,fair_play,draw',
+                  directAdvancedCount: 2,
+                  playoffCount: 4,
+                }
               : undefined,
         }));
+
         this.phases.set(mapped);
         this.activeFormat.set(this.inferFormat(mapped));
 
-        // ── Fixture (separate call, non-blocking) ─────────
-        this.championshipSvc.getFixture(id).subscribe({
-          next: fixture => {
-            this.fixtureData.set(fixture);
-            this.cdr.markForCheck();
-          },
-          error: () => {
-            // fixture vacío: no hay partidos generados aún — no es error bloqueante
-          },
-        });
+        this.reloadFixture(false);
 
-        // ── Teams (separate call, non-blocking) ───────────
         this.championshipSvc.getTeams(id).subscribe({
           next: profiles => {
             const teamsMapped: TeamItem[] = profiles.map(p => ({
@@ -587,7 +604,23 @@ export default class ChampionshipDetailPage implements OnInit {
     });
   }
 
-  // ── Fixture date editing ─────────────────────────────────────
+  reloadFixture(showError = true): void {
+    const id = this.id();
+
+    this.championshipSvc.getFixture(id).subscribe({
+      next: fixture => {
+        this.fixtureData.set(fixture);
+        this.cdr.markForCheck();
+      },
+      error: () => {
+        if (showError) {
+          this.snackBar.open('Error al recargar el fixture', 'Cerrar', { duration: 3000 });
+        }
+        this.cdr.markForCheck();
+      },
+    });
+  }
+
   startEditDate(match: FixtureMatch): void {
     this.editingMatchId.set(match.id);
     this.editingValue.set(this.toDatetimeLocal(match.scheduledStart));
@@ -603,23 +636,28 @@ export default class ChampionshipDetailPage implements OnInit {
   saveMatchDate(match: FixtureMatch): void {
     const raw = this.editingValue();
     if (!raw) return;
+
     this.savingMatchId.set(match.id);
     const iso = new Date(raw).toISOString();
-
     const newStatus = this.editingStatus();
+
     this.matchSvc.updateMatch(String(match.id), { scheduledStart: iso, status: newStatus }).subscribe({
       next: () => {
         const current = this.fixtureData();
         const updated: ChampionshipFixture = {};
+
         for (const [phaseName, phaseData] of Object.entries(current) as [string, FixturePhaseData][]) {
           const updatedRounds: Record<string, FixtureMatch[]> = {};
+
           for (const [roundNum, roundMatches] of Object.entries(phaseData.rounds) as [string, FixtureMatch[]][]) {
             updatedRounds[roundNum] = roundMatches.map(m =>
               m.id === match.id ? { ...m, scheduledStart: iso, status: newStatus } : m,
             );
           }
+
           updated[phaseName] = { ...phaseData, rounds: updatedRounds };
         }
+
         this.fixtureData.set(updated);
         this.editingMatchId.set(null);
         this.savingMatchId.set(null);
@@ -637,18 +675,21 @@ export default class ChampionshipDetailPage implements OnInit {
 
   private toDatetimeLocal(iso: string | null): string {
     if (!iso) return '';
+
     const d = new Date(iso);
     const pad = (n: number) => String(n).padStart(2, '0');
+
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
   }
 
-  // ── Helpers ────────────────────────────────────────────────
   private inferFormat(phases: PhaseCardData[]): ChampionshipFormat | null {
     const types = new Set(phases.map(p => p.phaseType));
-    if (types.has(PhaseType.Swiss))    return 'swiss_playoff';
-    if (types.has(PhaseType.Groups))   return 'groups_knockout';
+
+    if (types.has(PhaseType.Swiss)) return 'swiss_playoff';
+    if (types.has(PhaseType.Groups)) return 'groups_knockout';
     if (types.has(PhaseType.Knockout) && !types.has(PhaseType.League)) return 'knockout';
-    if (types.has(PhaseType.League))   return 'league';
+    if (types.has(PhaseType.League)) return 'league';
+
     return null;
   }
 
@@ -661,19 +702,20 @@ export default class ChampionshipDetailPage implements OnInit {
   }): ChampionshipRuleItem {
     const isBoolean = this.isBooleanRule(rule.name);
     const label = this.humanizeRuleName(rule.name);
+
     return {
-      matchRuleId:   Number(rule.matchRuleId),
-      name:          rule.name,
+      matchRuleId: Number(rule.matchRuleId),
+      name: rule.name,
       label,
-      description:   `Configuracion para ${label.toLowerCase()}.`,
-      category:      this.getRuleCategory(rule.name),
+      description: `Configuracion para ${label.toLowerCase()}.`,
+      category: this.getRuleCategory(rule.name),
       categoryLabel: this.getRuleCategoryLabel(rule.name),
-      valueType:     (isBoolean ? 'boolean' : 'number') as RuleValueType,
-      defaultValue:  Number(rule.defaultValue),
-      currentValue:  Number(rule.currentValue),
-      isOverridden:  Boolean(rule.isOverridden),
-      min:           isBoolean ? undefined : 0,
-      max:           isBoolean ? undefined : 999,
+      valueType: (isBoolean ? 'boolean' : 'number') as RuleValueType,
+      defaultValue: Number(rule.defaultValue),
+      currentValue: Number(rule.currentValue),
+      isOverridden: Boolean(rule.isOverridden),
+      min: isBoolean ? undefined : 0,
+      max: isBoolean ? undefined : 999,
     };
   }
 
@@ -682,8 +724,10 @@ export default class ChampionshipDetailPage implements OnInit {
   }
 
   private isBooleanRule(name: string): boolean {
-    return name.startsWith('allow_') || name.startsWith('enable_')
-      || name.includes('penalty') || name.includes('extra_time');
+    return name.startsWith('allow_')
+      || name.startsWith('enable_')
+      || name.includes('penalty')
+      || name.includes('extra_time');
   }
 
   private getRuleCategory(name: string): string {
@@ -695,7 +739,7 @@ export default class ChampionshipDetailPage implements OnInit {
   private getRuleCategoryLabel(name: string): string {
     const cat = this.getRuleCategory(name);
     if (cat === 'players') return 'Jugadores';
-    if (cat === 'match')   return 'Partido';
+    if (cat === 'match') return 'Partido';
     return 'Opciones Adicionales';
   }
 }

@@ -771,7 +771,7 @@ export class ChampionshipPhasesComponent {
   /** Fases pre-existentes (modo edición — viene del backend) */
   readonly initialPhases = input<PhaseCardData[]>([]);
   readonly initialFormat = input<ChampionshipFormat | null>(null);
-
+  readonly fixtureGenerated = output<void>();
   readonly phasesChange = output<PhaseCardData[]>();
   readonly cancel = output<void>();
 
@@ -1084,10 +1084,13 @@ export class ChampionshipPhasesComponent {
     this.championshipSvc.generateFixture(phaseId).subscribe({
       next: (result) => {
         this.generatingFixtureForPhase.set(null);
-        // Marcar la fase como active en la lista local
+
         this.phases.update(list =>
           list.map(p => p.backendId === phaseId ? { ...p, status: PhaseStatus.Active } : p)
         );
+
+        this.fixtureGenerated.emit();
+
         this.snackBar.open(
           `Fixture generado: ${result.totalMatches} partidos en "${result.phaseName}"`,
           'Cerrar',
