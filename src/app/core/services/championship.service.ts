@@ -278,12 +278,12 @@ export class ChampionshipService {
    * ]
    */
   getPhases(championshipId: string): Observable<Phase[]> {
-    return this.api.get<unknown>('phases/all/', { championshipId }).pipe(
-      map((response) => this.extractCollection(response, 'phases') as BackendPhase[]),
-      map((items) => items.map((item) => this.mapBackendPhase(item))),
-      catchError((error) => this.handleError('Error fetching phases', error)),
-    );
-  }
+  return this.api.get<unknown>('phases/all', { championshipId }).pipe(
+    map((response) => this.extractCollection(response, 'phases') as BackendPhase[]),
+    map((items) => items.map((item) => this.mapBackendPhase(item))),
+    catchError((error) => this.handleError('Error fetching phases', error)),
+  );
+}
 
   /**
    * GET /championships/:id/fixture
@@ -471,6 +471,7 @@ export class ChampionshipService {
   // ── Team CRUD ──────────────────────────────────────────────────────────
 
   getTeams(championshipId: string): Observable<TeamProfile[]> {
+
     return this.api.get<unknown>('teams/all', { championshipId }).pipe(
       map((response) => this.extractCollection(response, 'teams')),
       switchMap((teams) => {
