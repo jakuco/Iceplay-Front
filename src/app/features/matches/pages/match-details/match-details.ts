@@ -375,8 +375,13 @@ export default class MatchDetails implements OnDestroy {
       next: (match) => {
         this.matchData.set(match);
 
-        const isLive =
-          match.status === 'live' || match.status === 'warmup' || match.status === 'halftime';
+       const isLive =
+        match.status === 'live' ||
+        match.status === 'warmup' ||
+        match.status === 'halftime' ||
+        match.status === 'break' ||
+        match.status === 'overtime' ||
+        match.status === 'penalties';
 
         forkJoin({
           homeTeam: this.teamService.getTeamById(String(match.homeTeamId)),
