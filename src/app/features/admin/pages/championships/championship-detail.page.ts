@@ -1,10 +1,10 @@
 import {
-  ChangeDetectionStrategy, ChangeDetectorRef, Component, OnInit,
+  ChangeDetectionStrategy, ChangeDetectorRef, Component, OnDestroy, OnInit,
   computed, inject, input, signal,
 } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { DatePipe } from '@angular/common';
-import { forkJoin } from 'rxjs';
+import { Subscription, forkJoin } from 'rxjs';
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
 import { MatTabsModule } from '@angular/material/tabs';
@@ -394,7 +394,7 @@ import {
     .fixture-action-btn:disabled { opacity: 0.4; cursor: not-allowed; }
   `,
 })
-export default class ChampionshipDetailPage implements OnInit {
+export default class ChampionshipDetailPage implements OnInit, OnDestroy {
   private readonly championshipSvc = inject(ChampionshipService);
   private readonly cdr = inject(ChangeDetectorRef);
   private readonly snackBar = inject(MatSnackBar);
@@ -415,6 +415,7 @@ export default class ChampionshipDetailPage implements OnInit {
   activeFormat = signal<ChampionshipFormat | null>(null);
   rules = signal<ChampionshipRuleItem[]>([]);
   fixtureData = signal<ChampionshipFixture>({});
+  private fixtureSubscription: Subscription | null = null;
   editingMatchId = signal<number | null>(null);
   editingValue = signal<string>('');
   editingStatus = signal<string>('');
@@ -606,8 +607,8 @@ export default class ChampionshipDetailPage implements OnInit {
 
   reloadFixture(showError = true): void {
     const id = this.id();
-
-    this.championshipSvc.getFixture(id).subscribe({
+    this.fixtureSubscription?.unsubscribe();
+    this.fixtureSubscription = this.championshipSvc.getFixture(id).subscribe({
       next: fixture => {
         this.fixtureData.set(fixture);
         this.cdr.markForCheck();
@@ -619,6 +620,10 @@ export default class ChampionshipDetailPage implements OnInit {
         this.cdr.markForCheck();
       },
     });
+  }
+
+  ngOnDestroy(): void {
+    this.fixtureSubscription?.unsubscribe();
   }
 
   startEditDate(match: FixtureMatch): void {

@@ -519,14 +519,7 @@ export class ChampionshipService {
     );
 
     return forkJoin(creates).pipe(
-      switchMap(results => {
-        const saved = results.filter(r => r.profile !== null).map(r => r.profile!);
-        const hasDuplicates = results.some(r => r.isDuplicate);
-        if (hasDuplicates) {
-          return throwError(() => new Error('Some teams could not be saved: duplicate 409'));
-        }
-        return of(saved);
-      }),
+      map(results => results.filter(r => r.profile !== null).map(r => r.profile!)),
     );
   }
 
