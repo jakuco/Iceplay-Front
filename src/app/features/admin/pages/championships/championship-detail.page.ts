@@ -114,7 +114,7 @@ import {
                         <h4 class="fixture-round-title">Ronda {{ round.number }}</h4>
                         <div class="fixture-matches">
                           @for (match of round.matches; track match.id) {
-                            <div class="fixture-match" [class.fixture-match--played]="match.homeScore !== null">
+                            <div class="fixture-match" [class.fixture-match--played]="match.status === 'finished'">
                               <div class="fixture-team fixture-team--home">
                                 @if (match.homeTeam?.logoUrl) {
                                   <img [src]="match.homeTeam!.logoUrl" [alt]="match.homeTeam!.name" class="fixture-logo" />
