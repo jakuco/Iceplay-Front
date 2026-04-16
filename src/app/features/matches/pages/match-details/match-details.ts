@@ -202,10 +202,8 @@ interface DisplayEvent {
                                 class="inline-flex items-center gap-2 text-sm font-semibold"
                                 [style.color]="getEventColor(event.type)"
                               >
-                                <mat-icon class="text-base!">{{
-                                  getEventIcon(event.type)
-                                }}</mat-icon>
-                                {{ getEventLabel(event.type) }}
+                                <mat-icon class="text-base!">{{ getEventIcon(event.type) }}</mat-icon>
+                                {{ event.type }}
                               </span>
                             </td>
                             <td class="px-4 py-3 text-sm whitespace-nowrap">
@@ -302,6 +300,9 @@ export default class MatchDetails implements OnDestroy {
   private eventSubscription?: Subscription;
   isLoading = signal(true);
 
+  // Exact labels that increment the scoreboard. No partial matches.
+  private readonly SCORE_LABELS = new Set(['Gol', 'Gol por penal']);
+
   match = computed<DisplayMatch | null>(() => {
     const m = this.matchData();
     const home = this.homeTeam();
@@ -318,29 +319,21 @@ export default class MatchDetails implements OnDestroy {
       (m as { actualStartTime?: string | Date | null }).actualStartTime
     );
 
-    const isLiveStatus =
-      m.status === 'live' ||
-      m.status === 'warmup' ||
-      m.status === 'halftime' ||
-      m.status === 'break' ||
-      m.status === 'overtime' ||
-      m.status === 'penalties';
-
-    const scoreLabels = new Set(['Gol', 'Gol por penal']);
-
+    // Score derived from loaded events (works for live bootstrap + finished + refresh).
+    // The DB homeScore/awayScore is only reliably updated when status → "finished";
+    // during live play it stays at 0. We always prefer events when available.
     const homeScoreFromEvents = evts.filter(
-      (e) => scoreLabels.has(this.safeTypeLabel(e.typeLabel)) && e.isHomeTeam
+      (e) => this.SCORE_LABELS.has(this.safeTypeLabel(e.typeLabel)) && e.isHomeTeam
     ).length;
-
     const awayScoreFromEvents = evts.filter(
-      (e) => scoreLabels.has(this.safeTypeLabel(e.typeLabel)) && !e.isHomeTeam
+      (e) => this.SCORE_LABELS.has(this.safeTypeLabel(e.typeLabel)) && !e.isHomeTeam
     ).length;
 
     const backendHomeScore = Number((m as { homeScore?: number | null }).homeScore ?? 0);
     const backendAwayScore = Number((m as { awayScore?: number | null }).awayScore ?? 0);
 
+    // Use event-derived score when goals exist; fall back to backend score for 0-0 / scheduled.
     const hasScoringEvents = homeScoreFromEvents > 0 || awayScoreFromEvents > 0;
-
     const homeScore = hasScoringEvents ? homeScoreFromEvents : backendHomeScore;
     const awayScore = hasScoringEvents ? awayScoreFromEvents : backendAwayScore;
 
@@ -467,8 +460,8 @@ export default class MatchDetails implements OnDestroy {
 
     if (isLive) {
       // Bootstrap historical events via REST first, then connect SSE for new events.
-      // SSE catch-up only triggers on reconnect (Last-Event-ID header); on first connect
-      // there is no catch-up, so new clients entering a live match need the REST load.
+      // SSE catch-up only triggers on reconnect (Last-Event-ID header); first-connect
+      // has no catch-up, so new clients entering a live match need the REST load.
       this.matchEventService
         .getMatchEvents(matchId)
         .pipe(
@@ -506,43 +499,19 @@ export default class MatchDetails implements OnDestroy {
     }
   }
 
-  private resolvePlayerName(
-    event: MatchEventViewModel,
-    homeTeam: TeamApiResponse,
-    awayTeam: TeamApiResponse
-  ): string {
-    if (event.playerName && event.playerName.trim().length > 0) {
-      return event.playerName.trim();
+  /**
+   * Builds a display name from MatchEventViewModel.playerInfo.
+   * playerInfo carries firstName/lastName/nickName from the backend FullEventDTO.
+   * Falls back to playerId if no name available.
+   */
+  private resolvePlayerName(event: MatchEventViewModel): string {
+    const info = event.playerInfo;
+    if (info) {
+      const fullName = [info.firstName, info.lastName].filter(Boolean).join(' ').trim();
+      if (fullName) return fullName;
+      if (info.nickName) return info.nickName;
     }
-
-    const fallbackDescription =
-      typeof (event as { description?: string | null }).description === 'string'
-        ? ((event as { description?: string | null }).description ?? '').trim()
-        : '';
-
-    if (fallbackDescription) {
-      return fallbackDescription;
-    }
-
-    return event.playerId ? `#${event.playerId}` : '—';
-  }
-
-  private resolveDescription(
-    event: MatchEventViewModel,
-    homeTeam: TeamApiResponse,
-    awayTeam: TeamApiResponse
-  ): string {
-    const playerName = this.resolvePlayerName(event, homeTeam, awayTeam);
-    if (playerName && playerName !== '—') return playerName;
-
-    const rawDescription =
-      typeof (event as { description?: string | null }).description === 'string'
-        ? ((event as { description?: string | null }).description ?? '').trim()
-        : '';
-
-    if (rawDescription) return rawDescription;
-
-    return '—';
+    return event.playerId ? `#${String(event.playerId)}` : '—';
   }
 
   private transformEvents(
@@ -554,14 +523,13 @@ export default class MatchDetails implements OnDestroy {
       .map((event) => {
         const isHomeTeam = String(event.teamId ?? '') === String(homeTeam.id);
         const team = isHomeTeam ? homeTeam : awayTeam;
-        const playerName = this.resolvePlayerName(event, homeTeam, awayTeam);
 
         return {
           minute: event.timeFormatted,
           type: this.safeTypeLabel(event.typeLabel),
-          playerName,
+          playerName: this.resolvePlayerName(event),
           teamName: team.name,
-          description: this.resolveDescription(event, homeTeam, awayTeam),
+          description: typeof event.description === 'string' ? event.description : undefined,
         };
       })
       .sort((a, b) => {
@@ -575,18 +543,9 @@ export default class MatchDetails implements OnDestroy {
     return (typeLabel ?? '').trim();
   }
 
-  private normalizeEventType(type: string): string {
-    return type
-      .trim()
-      .toLowerCase()
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '');
-  }
-
   private toDate(value: string | Date | null | undefined): Date | null {
     if (!value) return null;
     if (value instanceof Date) return isNaN(value.getTime()) ? null : value;
-
     const parsed = new Date(value);
     return isNaN(parsed.getTime()) ? null : parsed;
   }
@@ -602,17 +561,12 @@ export default class MatchDetails implements OnDestroy {
     ) {
       return 'live';
     }
-
     if (status === 'finished') {
       return 'finished';
     }
-
     return 'scheduled';
   }
 
-  /**
-   * Formats match date according to current language
-   */
   formattedMatchDate(match: DisplayMatch): string {
     return this.i18nService.formatDate(match.date, {
       day: 'numeric',
@@ -621,50 +575,36 @@ export default class MatchDetails implements OnDestroy {
     });
   }
 
+  // Keys are the Spanish labels that come from the backend typeMatchEvent.label.
   getEventIcon(type: string): string {
-    const normalized = this.normalizeEventType(type);
-
     const icons: Record<string, string> = {
-      gol: 'sports_soccer',
-      'gol por penal': 'sports_soccer',
-      'tarjeta amarilla': 'square',
-      'tarjeta roja': 'square',
-      asistencia: 'assistant',
-      sustitucion: 'swap_vert',
-      substitucion: 'swap_vert',
-      cambio: 'swap_vert',
-      falta: 'warning',
-      'mvp de partido': 'diamond',
-      autogol: 'sports_soccer',
-      penal: 'sports_soccer',
+      'Gol': 'sports_soccer',
+      'Gol por penal': 'sports_soccer',
+      'Gol recibido': 'sports_soccer',
+      'Gol recibido por penal': 'sports_soccer',
+      'Asistencia': 'sports_soccer',
+      'Tarjeta Amarilla': 'square',
+      'Tarjeta Roja': 'square',
+      'Sustitución': 'swap_vert',
+      'Falta': 'warning',
+      'MVP de Partido': 'star',
     };
-
-    return icons[normalized] || 'event';
+    return icons[type] ?? 'event';
   }
 
   getEventColor(type: string): string {
-    const normalized = this.normalizeEventType(type);
-
     const colors: Record<string, string> = {
-      gol: '#4ade80',
-      'gol por penal': '#22c55e',
-      'tarjeta amarilla': '#facc15',
-      'tarjeta roja': '#f87171',
-      asistencia: '#60a5fa',
-      sustitucion: 'var(--mat-sys-on-surface-variant)',
-      substitucion: 'var(--mat-sys-on-surface-variant)',
-      cambio: 'var(--mat-sys-on-surface-variant)',
-      falta: '#f59e0b',
-      'mvp de partido': '#38bdf8',
-      autogol: '#fb7185',
-      penal: '#22c55e',
+      'Gol': '#4ade80',
+      'Gol por penal': '#4ade80',
+      'Gol recibido': '#f87171',
+      'Gol recibido por penal': '#f87171',
+      'Asistencia': '#60a5fa',
+      'Tarjeta Amarilla': '#facc15',
+      'Tarjeta Roja': '#f87171',
+      'Sustitución': 'var(--mat-sys-on-surface-variant)',
+      'Falta': '#f59e0b',
+      'MVP de Partido': '#f59e0b',
     };
-
-    return colors[normalized] || 'var(--mat-sys-on-surface-variant)';
-  }
-
-  getEventLabel(type: string): string {
-    const safeType = type?.trim();
-    return safeType || 'Evento';
+    return colors[type] ?? 'var(--mat-sys-on-surface-variant)';
   }
 }
