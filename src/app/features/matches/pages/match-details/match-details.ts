@@ -311,8 +311,13 @@ export default class MatchDetails implements OnDestroy {
       (m as { actualStartTime?: string | Date | null }).actualStartTime
     );
 
-    const isLiveStatus = this.mapMatchStatus(m.status) === 'live';
-    const evts = this.events();
+    const isLiveStatus =
+      m.status === 'live' ||
+      m.status === 'warmup' ||
+      m.status === 'halftime' ||
+      m.status === 'break' ||
+      m.status === 'overtime' ||
+      m.status === 'penalties';
     const homeScore = isLiveStatus
       ? evts.filter((e) => e.category === 'scoring' && e.isHomeTeam).length
       : Number((m as { homeScore?: number | null }).homeScore ?? 0);
