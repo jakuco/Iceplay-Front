@@ -20,7 +20,11 @@ import { MatchEventService } from '../../../../core/services/match-event.service
 import { TeamService } from '../../../../core/services/team.service';
 import { ChampionshipService } from '../../../../core/services/championship.service';
 import { MatchByIdResponse } from '../../../../core/models/match.model';
-import { MatchEvent, MatchEventViewModel, mapEventToViewModel } from '../../../../core/models/event.model';
+import {
+  MatchEvent,
+  MatchEventViewModel,
+  mapEventToViewModel,
+} from '../../../../core/models/event.model';
 import { TeamApiResponse } from '../../../../core/models/team.model';
 import { Championship } from '../../../../core/models/championship.model';
 
@@ -41,8 +45,9 @@ interface DisplayMatch {
 interface DisplayEvent {
   minute: string;
   type: string;
-  description: string;
+  playerName: string;
   teamName: string;
+  description?: string;
 }
 
 @Component({
@@ -168,14 +173,14 @@ interface DisplayEvent {
                             {{ 'match.table.time' | translate }}
                           </th>
                           <th
-                            class="w-32 px-4 py-3 text-left text-xs font-medium tracking-wider uppercase"
+                            class="w-40 px-4 py-3 text-left text-xs font-medium tracking-wider uppercase"
                           >
                             {{ 'match.table.event' | translate }}
                           </th>
                           <th
                             class="px-4 py-3 text-left text-xs font-medium tracking-wider uppercase"
                           >
-                            {{ 'match.table.description' | translate }}
+                            Jugador
                           </th>
                           <th
                             class="px-4 py-3 text-left text-xs font-medium tracking-wider uppercase"
@@ -185,7 +190,7 @@ interface DisplayEvent {
                         </tr>
                       </thead>
                       <tbody class="divide-y divide-(--mat-sys-outline-variant)">
-                        @for (event of m.events; track event.minute + event.type + event.teamName) {
+                        @for (event of m.events; track event.minute + event.type + event.teamName + event.playerName) {
                           <tr>
                             <td
                               class="text-secondary px-4 py-3 font-mono text-sm font-bold whitespace-nowrap"
@@ -203,7 +208,9 @@ interface DisplayEvent {
                                 {{ getEventLabel(event.type) }}
                               </span>
                             </td>
-                            <td class="px-4 py-3 text-sm">{{ event.description }}</td>
+                            <td class="px-4 py-3 text-sm whitespace-nowrap">
+                              {{ event.playerName }}
+                            </td>
                             <td class="text-secondary px-4 py-3 text-sm whitespace-nowrap">
                               {{ event.teamName }}
                             </td>
@@ -318,12 +325,24 @@ export default class MatchDetails implements OnDestroy {
       m.status === 'break' ||
       m.status === 'overtime' ||
       m.status === 'penalties';
-    const homeScore = isLiveStatus
-      ? evts.filter((e) => e.category === 'scoring' && e.isHomeTeam).length
-      : Number((m as { homeScore?: number | null }).homeScore ?? 0);
-    const awayScore = isLiveStatus
-      ? evts.filter((e) => e.category === 'scoring' && !e.isHomeTeam).length
-      : Number((m as { awayScore?: number | null }).awayScore ?? 0);
+
+    const scoreLabels = new Set(['Gol', 'Gol por penal']);
+
+    const homeScoreFromEvents = evts.filter(
+      (e) => scoreLabels.has(this.safeTypeLabel(e.typeLabel)) && e.isHomeTeam
+    ).length;
+
+    const awayScoreFromEvents = evts.filter(
+      (e) => scoreLabels.has(this.safeTypeLabel(e.typeLabel)) && !e.isHomeTeam
+    ).length;
+
+    const backendHomeScore = Number((m as { homeScore?: number | null }).homeScore ?? 0);
+    const backendAwayScore = Number((m as { awayScore?: number | null }).awayScore ?? 0);
+
+    const hasScoringEvents = homeScoreFromEvents > 0 || awayScoreFromEvents > 0;
+
+    const homeScore = hasScoringEvents ? homeScoreFromEvents : backendHomeScore;
+    const awayScore = hasScoringEvents ? awayScoreFromEvents : backendAwayScore;
 
     return {
       id: String(m.id),
@@ -375,13 +394,13 @@ export default class MatchDetails implements OnDestroy {
       next: (match) => {
         this.matchData.set(match);
 
-       const isLive =
-        match.status === 'live' ||
-        match.status === 'warmup' ||
-        match.status === 'halftime' ||
-        match.status === 'break' ||
-        match.status === 'overtime' ||
-        match.status === 'penalties';
+        const isLive =
+          match.status === 'live' ||
+          match.status === 'warmup' ||
+          match.status === 'halftime' ||
+          match.status === 'break' ||
+          match.status === 'overtime' ||
+          match.status === 'penalties';
 
         forkJoin({
           homeTeam: this.teamService.getTeamById(String(match.homeTeamId)),
@@ -450,35 +469,80 @@ export default class MatchDetails implements OnDestroy {
       // Bootstrap historical events via REST first, then connect SSE for new events.
       // SSE catch-up only triggers on reconnect (Last-Event-ID header); on first connect
       // there is no catch-up, so new clients entering a live match need the REST load.
-      this.matchEventService.getMatchEvents(matchId).pipe(
-        map((rawEvents: MatchEvent[]) =>
-          rawEvents.map((e) => mapEventToViewModel(e, homeTeamId, PERIOD_DURATION_SECONDS))
+      this.matchEventService
+        .getMatchEvents(matchId)
+        .pipe(
+          map((rawEvents: MatchEvent[]) =>
+            rawEvents.map((e) => mapEventToViewModel(e, homeTeamId, PERIOD_DURATION_SECONDS))
+          )
         )
-      ).subscribe({
-        next: (viewModels) => {
-          this.events.set(viewModels);
-          subscribeToSSE();
-        },
-        error: (error) => {
-          console.error('Error bootstrapping live match events', error);
-          subscribeToSSE();
-        },
-      });
+        .subscribe({
+          next: (viewModels) => {
+            this.events.set(viewModels);
+            subscribeToSSE();
+          },
+          error: (error) => {
+            console.error('Error bootstrapping live match events', error);
+            subscribeToSSE();
+          },
+        });
     } else {
       // Finished/scheduled: fetch historical events via REST only
-      this.matchEventService.getMatchEvents(matchId).pipe(
-        map((rawEvents: MatchEvent[]) =>
-          rawEvents.map((e) => mapEventToViewModel(e, homeTeamId, PERIOD_DURATION_SECONDS))
+      this.matchEventService
+        .getMatchEvents(matchId)
+        .pipe(
+          map((rawEvents: MatchEvent[]) =>
+            rawEvents.map((e) => mapEventToViewModel(e, homeTeamId, PERIOD_DURATION_SECONDS))
+          )
         )
-      ).subscribe({
-        next: (viewModels) => {
-          this.events.set(viewModels);
-        },
-        error: (error) => {
-          console.error('Error loading match events', error);
-        },
-      });
+        .subscribe({
+          next: (viewModels) => {
+            this.events.set(viewModels);
+          },
+          error: (error) => {
+            console.error('Error loading match events', error);
+          },
+        });
     }
+  }
+
+  private resolvePlayerName(
+    event: MatchEventViewModel,
+    homeTeam: TeamApiResponse,
+    awayTeam: TeamApiResponse
+  ): string {
+    if (event.playerName && event.playerName.trim().length > 0) {
+      return event.playerName.trim();
+    }
+
+    const fallbackDescription =
+      typeof (event as { description?: string | null }).description === 'string'
+        ? ((event as { description?: string | null }).description ?? '').trim()
+        : '';
+
+    if (fallbackDescription) {
+      return fallbackDescription;
+    }
+
+    return event.playerId ? `#${event.playerId}` : '—';
+  }
+
+  private resolveDescription(
+    event: MatchEventViewModel,
+    homeTeam: TeamApiResponse,
+    awayTeam: TeamApiResponse
+  ): string {
+    const playerName = this.resolvePlayerName(event, homeTeam, awayTeam);
+    if (playerName && playerName !== '—') return playerName;
+
+    const rawDescription =
+      typeof (event as { description?: string | null }).description === 'string'
+        ? ((event as { description?: string | null }).description ?? '').trim()
+        : '';
+
+    if (rawDescription) return rawDescription;
+
+    return '—';
   }
 
   private transformEvents(
@@ -490,12 +554,14 @@ export default class MatchDetails implements OnDestroy {
       .map((event) => {
         const isHomeTeam = String(event.teamId ?? '') === String(homeTeam.id);
         const team = isHomeTeam ? homeTeam : awayTeam;
+        const playerName = this.resolvePlayerName(event, homeTeam, awayTeam);
 
         return {
           minute: event.timeFormatted,
-          type: event.typeLabel,
-          description: event.description || '',
+          type: this.safeTypeLabel(event.typeLabel),
+          playerName,
           teamName: team.name,
+          description: this.resolveDescription(event, homeTeam, awayTeam),
         };
       })
       .sort((a, b) => {
@@ -503,6 +569,18 @@ export default class MatchDetails implements OnDestroy {
         const minuteB = parseInt(b.minute.replace(/[^0-9]/g, ''), 10) || 0;
         return minuteA - minuteB;
       });
+  }
+
+  private safeTypeLabel(typeLabel: string | null | undefined): string {
+    return (typeLabel ?? '').trim();
+  }
+
+  private normalizeEventType(type: string): string {
+    return type
+      .trim()
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '');
   }
 
   private toDate(value: string | Date | null | undefined): Date | null {
@@ -544,41 +622,49 @@ export default class MatchDetails implements OnDestroy {
   }
 
   getEventIcon(type: string): string {
+    const normalized = this.normalizeEventType(type);
+
     const icons: Record<string, string> = {
-      goal: 'sports_soccer',
-      point: 'sports_soccer',
-      substitution: 'swap_vert',
-      yellow_card: 'square',
-      red_card: 'square',
-      assist: 'sports_soccer',
-      foul: 'warning',
+      gol: 'sports_soccer',
+      'gol por penal': 'sports_soccer',
+      'tarjeta amarilla': 'square',
+      'tarjeta roja': 'square',
+      asistencia: 'assistant',
+      sustitucion: 'swap_vert',
+      substitucion: 'swap_vert',
+      cambio: 'swap_vert',
+      falta: 'warning',
+      'mvp de partido': 'diamond',
+      autogol: 'sports_soccer',
+      penal: 'sports_soccer',
     };
-    return icons[type] || 'event';
+
+    return icons[normalized] || 'event';
   }
 
   getEventColor(type: string): string {
+    const normalized = this.normalizeEventType(type);
+
     const colors: Record<string, string> = {
-      goal: '#4ade80',
-      point: '#4ade80',
-      substitution: 'var(--mat-sys-on-surface-variant)',
-      yellow_card: '#facc15',
-      red_card: '#f87171',
-      assist: '#60a5fa',
-      foul: '#f59e0b',
+      gol: '#4ade80',
+      'gol por penal': '#22c55e',
+      'tarjeta amarilla': '#facc15',
+      'tarjeta roja': '#f87171',
+      asistencia: '#60a5fa',
+      sustitucion: 'var(--mat-sys-on-surface-variant)',
+      substitucion: 'var(--mat-sys-on-surface-variant)',
+      cambio: 'var(--mat-sys-on-surface-variant)',
+      falta: '#f59e0b',
+      'mvp de partido': '#38bdf8',
+      autogol: '#fb7185',
+      penal: '#22c55e',
     };
-    return colors[type] || 'var(--mat-sys-on-surface-variant)';
+
+    return colors[normalized] || 'var(--mat-sys-on-surface-variant)';
   }
 
   getEventLabel(type: string): string {
-    const labels: Record<string, string> = {
-      goal: this.i18nService.translate('match.events.goal'),
-      point: this.i18nService.translate('match.events.goal'),
-      substitution: this.i18nService.translate('match.events.substitution'),
-      yellow_card: this.i18nService.translate('match.events.yellowCard'),
-      red_card: this.i18nService.translate('match.events.redCard'),
-      assist: this.i18nService.translate('match.events.assist') || 'Assist',
-      foul: this.i18nService.translate('match.events.foul') || 'Foul',
-    };
-    return labels[type] || type;
+    const safeType = type?.trim();
+    return safeType || 'Evento';
   }
 }
