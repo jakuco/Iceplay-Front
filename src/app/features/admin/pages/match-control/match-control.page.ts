@@ -21,8 +21,7 @@ import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { forkJoin, Subscription } from 'rxjs';
-
+import { forkJoin, Subscription, map } from 'rxjs';
 import { MatchService } from '../../../../core/services/match.service';
 import {
   MatchEventService,
@@ -37,8 +36,10 @@ import {
   UpdateMatchApiDto,
 } from '../../../../core/models/match.model';
 import {
+  MatchEvent,
   MatchEventViewModel,
   CreateMatchEventDto,
+  mapEventToViewModel,
 } from '../../../../core/models/event.model';
 import type { TypeMatchEvent } from '../../../../core/models/sport-config.model';
 import type { PlayerApiResponse } from '../../../../core/models/player.model';
@@ -484,6 +485,7 @@ export default class MatchControlPage implements OnInit, OnDestroy {
 
   private baselineHomeScore = 0;
   private baselineAwayScore = 0;
+  private readonly SCORE_LABELS = new Set(['Gol', 'Gol por penal']);
 
   homeTeam = signal<LocalTeam>({
     side: 'home',
@@ -628,34 +630,58 @@ export default class MatchControlPage implements OnInit, OnDestroy {
     const pd = DEFAULT_PERIOD_DURATION;
 
     this.sseSubscription?.unsubscribe();
-    this.sseSubscription = this.matchEventService
-      .connectToMatchStream(matchId, homeTeamId, pd)
-      .subscribe({
-        next: (msg: SSEMatchEvent) => {
-          if (msg.type === 'add') {
-            this.events.update((list) => {
-              if (list.some((e) => e.id === msg.event.id)) return list;
-              return [...list, msg.event].sort((a, b) => a.timeRaw - b.timeRaw);
-            });
-            this.recomputeScoreFromEvents();
-          } else {
-            this.events.update((list) =>
-              list.filter((e) => String(e.id) !== msg.eventId)
-            );
-            this.recomputeScoreFromEvents();
-          }
-        },
-        error: (err) => console.error('SSE error', err),
-      });
+    this.events.set([]);
+
+    const connectSSE = () => {
+      this.sseSubscription = this.matchEventService
+        .connectToMatchStream(matchId, homeTeamId, pd)
+        .subscribe({
+          next: (msg: SSEMatchEvent) => {
+            if (msg.type === 'add') {
+              this.events.update((list) => {
+                if (list.some((e) => String(e.id) === String(msg.event.id))) return list;
+                return [...list, msg.event].sort((a, b) => a.timeRaw - b.timeRaw);
+              });
+              this.recomputeScoreFromEvents();
+            } else {
+              this.events.update((list) =>
+                list.filter((e) => String(e.id) !== String(msg.eventId))
+              );
+              this.recomputeScoreFromEvents();
+            }
+          },
+          error: (err) => console.error('SSE error', err),
+        });
+    };
+
+    this.matchEventService.getMatchEvents(matchId).pipe(
+      map((rawEvents: MatchEvent[]) =>
+        rawEvents
+          .map((e) => mapEventToViewModel(e, homeTeamId, pd))
+          .sort((a, b) => a.timeRaw - b.timeRaw)
+      )
+    ).subscribe({
+      next: (viewModels) => {
+        this.events.set(viewModels);
+        this.recomputeScoreFromEvents();
+        connectSSE();
+      },
+      error: (err) => {
+        console.error('Error loading historical events', err);
+        connectSSE();
+      },
+    });
   }
 
   private recomputeScoreFromEvents(): void {
     const evts = this.events();
+
     const homePoints = evts.filter(
-      (e) => e.category === 'scoring' && e.isHomeTeam
+      (e) => this.SCORE_LABELS.has((e.typeLabel ?? '').trim()) && e.isHomeTeam
     ).length;
+
     const awayPoints = evts.filter(
-      (e) => e.category === 'scoring' && !e.isHomeTeam
+      (e) => this.SCORE_LABELS.has((e.typeLabel ?? '').trim()) && !e.isHomeTeam
     ).length;
 
     this.homeTeam.update((t) => ({ ...t, score: this.baselineHomeScore + homePoints }));

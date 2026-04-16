@@ -521,8 +521,7 @@ export default class MatchDetails implements OnDestroy {
   ): DisplayEvent[] {
     return events
       .map((event) => {
-        const isHomeTeam = String(event.teamId ?? '') === String(homeTeam.id);
-        const team = isHomeTeam ? homeTeam : awayTeam;
+        const team = event.isHomeTeam ? homeTeam : awayTeam;
 
         return {
           minute: event.timeFormatted,
@@ -539,16 +538,16 @@ export default class MatchDetails implements OnDestroy {
       });
   }
 
-  private safeTypeLabel(typeLabel: string | null | undefined): string {
-    return (typeLabel ?? '').trim();
-  }
+    private safeTypeLabel(typeLabel: string | null | undefined): string {
+      return (typeLabel ?? '').trim();
+    }
 
-  private toDate(value: string | Date | null | undefined): Date | null {
-    if (!value) return null;
-    if (value instanceof Date) return isNaN(value.getTime()) ? null : value;
-    const parsed = new Date(value);
-    return isNaN(parsed.getTime()) ? null : parsed;
-  }
+    private toDate(value: string | Date | null | undefined): Date | null {
+      if (!value) return null;
+      if (value instanceof Date) return isNaN(value.getTime()) ? null : value;
+      const parsed = new Date(value);
+      return isNaN(parsed.getTime()) ? null : parsed;
+    }
 
   private mapMatchStatus(status: string): 'scheduled' | 'live' | 'finished' {
     if (

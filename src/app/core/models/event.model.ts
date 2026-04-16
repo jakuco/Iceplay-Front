@@ -255,15 +255,24 @@ export function mapEventToViewModel(
     periodDuration
   );
 
+  const typeMatchEvent = event.typeMatchEvent ?? {
+    id: event.typeMatchEventId,
+    label: 'Evento',
+    category: 'other',
+    isActive: true,
+    icon: 'event',
+    color: 'var(--mat-sys-on-surface-variant)',
+  };
+
   return {
     id: event.id,
     matchId: event.matchId,
     typeId: event.typeMatchEventId,
-    typeLabel: event.typeMatchEvent.label,
-    typeIcon: event.typeMatchEvent.icon ?? 'event',
+    typeLabel: typeMatchEvent.label ?? 'Evento',
+    typeIcon: typeMatchEvent.icon ?? 'event',
     typeColor:
-      event.typeMatchEvent.color ?? 'var(--mat-sys-on-surface-variant)',
-    category: event.typeMatchEvent.category,
+      typeMatchEvent.color ?? 'var(--mat-sys-on-surface-variant)',
+    category: typeMatchEvent.category ?? 'other',
     period,
     minute,
     extraMinute,
@@ -275,7 +284,7 @@ export function mapEventToViewModel(
     teamInfo: event.team,
     relatedEventMatchId: event.relatedEventMatch ?? event.relatedEventMatchId,
     description: event.description,
-    isHomeTeam: event.teamId === homeTeamId,
+    isHomeTeam: String(event.teamId ?? '') === String(homeTeamId ?? ''),
   };
 }
 
