@@ -311,8 +311,14 @@ export default class MatchDetails implements OnDestroy {
       (m as { actualStartTime?: string | Date | null }).actualStartTime
     );
 
-    const homeScore = Number((m as { homeScore?: number | null }).homeScore ?? 0);
-    const awayScore = Number((m as { awayScore?: number | null }).awayScore ?? 0);
+    const isLiveStatus = this.mapMatchStatus(m.status) === 'live';
+    const evts = this.events();
+    const homeScore = isLiveStatus
+      ? evts.filter((e) => e.category === 'scoring' && e.isHomeTeam).length
+      : Number((m as { homeScore?: number | null }).homeScore ?? 0);
+    const awayScore = isLiveStatus
+      ? evts.filter((e) => e.category === 'scoring' && !e.isHomeTeam).length
+      : Number((m as { awayScore?: number | null }).awayScore ?? 0);
 
     return {
       id: String(m.id),
@@ -410,14 +416,16 @@ export default class MatchDetails implements OnDestroy {
     const homeTeamId = String(this.homeTeam()?.id ?? '');
     const PERIOD_DURATION_SECONDS = 2700;
 
-    if (isLive) {
-      // Live match: use SSE for real-time events
+    const subscribeToSSE = () => {
       this.eventSubscription = this.matchEventService
         .connectToMatchStream(matchId, homeTeamId, PERIOD_DURATION_SECONDS)
         .subscribe({
           next: (msg) => {
             if (msg.type === 'add') {
-              this.events.update((current) => [...current, msg.event]);
+              this.events.update((current) => {
+                if (current.some((e) => e.id === msg.event.id)) return current;
+                return [...current, msg.event];
+              });
             } else {
               this.events.update((current) => current.filter((e) => e.id !== msg.eventId));
             }
@@ -426,8 +434,28 @@ export default class MatchDetails implements OnDestroy {
             console.error('Error loading events via SSE', error);
           },
         });
+    };
+
+    if (isLive) {
+      // Bootstrap historical events via REST first, then connect SSE for new events.
+      // SSE catch-up only triggers on reconnect (Last-Event-ID header); on first connect
+      // there is no catch-up, so new clients entering a live match need the REST load.
+      this.matchEventService.getMatchEvents(matchId).pipe(
+        map((rawEvents: MatchEvent[]) =>
+          rawEvents.map((e) => mapEventToViewModel(e, homeTeamId, PERIOD_DURATION_SECONDS))
+        )
+      ).subscribe({
+        next: (viewModels) => {
+          this.events.set(viewModels);
+          subscribeToSSE();
+        },
+        error: (error) => {
+          console.error('Error bootstrapping live match events', error);
+          subscribeToSSE();
+        },
+      });
     } else {
-      // Finished/scheduled: fetch historical events via REST
+      // Finished/scheduled: fetch historical events via REST only
       this.matchEventService.getMatchEvents(matchId).pipe(
         map((rawEvents: MatchEvent[]) =>
           rawEvents.map((e) => mapEventToViewModel(e, homeTeamId, PERIOD_DURATION_SECONDS))
