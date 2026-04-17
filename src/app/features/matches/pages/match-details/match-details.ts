@@ -13,20 +13,20 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatTabsModule } from '@angular/material/tabs';
 import { RouterLink } from '@angular/router';
 import { Subscription, forkJoin, of, map, type Observable } from 'rxjs';
-import { I18nService } from '../../../../core/services/i18n.service';
-import { TranslatePipe } from '../../../../core/pipes/translate.pipe';
-import { MatchService } from '../../../../core/services/match.service';
-import { MatchEventService } from '../../../../core/services/match-event.service';
-import { TeamService } from '../../../../core/services/team.service';
-import { ChampionshipService } from '../../../../core/services/championship.service';
-import { MatchByIdResponse } from '../../../../core/models/match.model';
+import { I18nService } from '@core/services/i18n.service';
+import { TranslatePipe } from '@core/pipes/translate.pipe';
+import { MatchService } from '@core/services/match.service';
+import { MatchEventService } from '@core/services/match-event.service';
+import { TeamService } from '@core/services/team.service';
+import { ChampionshipService } from '@core/services/championship.service';
+import { MatchByIdResponse } from '@core/models/match.model';
 import {
   MatchEvent,
   MatchEventViewModel,
   mapEventToViewModel,
-} from '../../../../core/models/event.model';
-import { TeamApiResponse } from '../../../../core/models/team.model';
-import { Championship } from '../../../../core/models/championship.model';
+} from '@core/models/event.model';
+import { TeamProfile } from '@core/models/team.model';
+import { Championship } from '@core/models/championship.model';
 
 interface DisplayMatch {
   id: string;
@@ -39,7 +39,7 @@ interface DisplayMatch {
   awayScore?: number;
   date: Date;
   league: string;
-  events?: DisplayEvent[];
+  events?: MatchEventViewModel[];
 }
 
 interface DisplayEvent {
@@ -180,7 +180,7 @@ interface DisplayEvent {
                           <th
                             class="px-4 py-3 text-left text-xs font-medium tracking-wider uppercase"
                           >
-                            Jugador
+                            {{ 'match.table.player' | translate }}
                           </th>
                           <th
                             class="px-4 py-3 text-left text-xs font-medium tracking-wider uppercase"
@@ -190,27 +190,25 @@ interface DisplayEvent {
                         </tr>
                       </thead>
                       <tbody class="divide-y divide-(--mat-sys-outline-variant)">
-                        @for (event of m.events; track event.minute + event.type + event.teamName + event.playerName) {
+                        @for (event of m.events; track event.id) {
                           <tr>
-                            <td
-                              class="text-secondary px-4 py-3 font-mono text-sm font-bold whitespace-nowrap"
-                            >
-                              {{ event.minute }}
+                            <td class="text-secondary px-4 py-3 font-mono text-sm whitespace-nowrap">
+                              {{ event.timeFormatted }}
                             </td>
                             <td class="px-4 py-3 whitespace-nowrap">
                               <span
                                 class="inline-flex items-center gap-2 text-sm font-semibold"
-                                [style.color]="getEventColor(event.type)"
+                                [style.color]="event.typeColor"
                               >
-                                <mat-icon class="text-base!">{{ getEventIcon(event.type) }}</mat-icon>
-                                {{ event.type }}
+                                <mat-icon class="text-base!">{{ getEventIcon(event.typeLabel) }}</mat-icon>
+                                {{ event.typeLabel }}
                               </span>
                             </td>
                             <td class="px-4 py-3 text-sm whitespace-nowrap">
-                              {{ event.playerName }}
+                              {{ playerName(event) }}
                             </td>
                             <td class="text-secondary px-4 py-3 text-sm whitespace-nowrap">
-                              {{ event.teamName }}
+                              {{ event.isHomeTeam ? match()?.homeTeam?.name ?? 'Local' : match()?.awayTeam?.name ?? 'Visitante' }}
                             </td>
                           </tr>
                         }
@@ -293,8 +291,8 @@ export default class MatchDetails implements OnDestroy {
   matchId = input.required<string>();
 
   private matchData = signal<MatchByIdResponse | null>(null);
-  private homeTeam = signal<TeamApiResponse | null>(null);
-  private awayTeam = signal<TeamApiResponse | null>(null);
+  private homeTeam = signal<TeamProfile | null>(null);
+  private awayTeam = signal<TeamProfile | null>(null);
   private championship = signal<Championship | null>(null);
   private events = signal<MatchEventViewModel[]>([]);
   private eventSubscription?: Subscription;
@@ -363,7 +361,7 @@ export default class MatchDetails implements OnDestroy {
       awayScore,
       date: scheduledStart,
       league: champ?.name ?? 'Campeonato',
-      events: this.transformEvents(evts, home, away),
+      events: evts,
     };
   });
 
@@ -396,8 +394,8 @@ export default class MatchDetails implements OnDestroy {
           match.status === 'penalties';
 
         forkJoin({
-          homeTeam: this.teamService.getTeamById(String(match.homeTeamId)),
-          awayTeam: this.teamService.getTeamById(String(match.awayTeamId)),
+          homeTeam: this.teamService.getTeamWithPlayers(String(match.homeTeamId)),
+          awayTeam: this.teamService.getTeamWithPlayers(String(match.awayTeamId)),
           championship: this.resolveChampionship(match),
         }).subscribe({
           next: ({ homeTeam, awayTeam, championship }) => {
@@ -446,7 +444,7 @@ export default class MatchDetails implements OnDestroy {
             if (msg.type === 'add') {
               this.events.update((current) => {
                 if (current.some((e) => e.id === msg.event.id)) return current;
-                return [...current, msg.event];
+                return [...current, msg.event].sort((a, b) => a.timeRaw - b.timeRaw);
               });
             } else {
               this.events.update((current) => current.filter((e) => e.id !== msg.eventId));
@@ -466,7 +464,9 @@ export default class MatchDetails implements OnDestroy {
         .getMatchEvents(matchId)
         .pipe(
           map((rawEvents: MatchEvent[]) =>
-            rawEvents.map((e) => mapEventToViewModel(e, homeTeamId, PERIOD_DURATION_SECONDS))
+            rawEvents
+              .map((e) => mapEventToViewModel(e, homeTeamId, PERIOD_DURATION_SECONDS))
+              .sort((a, b) => a.timeRaw - b.timeRaw)
           )
         )
         .subscribe({
@@ -485,7 +485,9 @@ export default class MatchDetails implements OnDestroy {
         .getMatchEvents(matchId)
         .pipe(
           map((rawEvents: MatchEvent[]) =>
-            rawEvents.map((e) => mapEventToViewModel(e, homeTeamId, PERIOD_DURATION_SECONDS))
+            rawEvents
+              .map((e) => mapEventToViewModel(e, homeTeamId, PERIOD_DURATION_SECONDS))
+              .sort((a, b) => a.timeRaw - b.timeRaw)
           )
         )
         .subscribe({
@@ -500,24 +502,39 @@ export default class MatchDetails implements OnDestroy {
   }
 
   /**
-   * Builds a display name from MatchEventViewModel.playerInfo.
-   * playerInfo carries firstName/lastName/nickName from the backend FullEventDTO.
-   * Falls back to playerId if no name available.
+   * Builds a display name from MatchEventViewModel.playerInfo when available.
+   * Falls back to the loaded team roster.
+   * Falls back to playerId if no name is available.
    */
   private resolvePlayerName(event: MatchEventViewModel): string {
-    const info = event.playerInfo;
+    const info = (event as {
+      playerInfo?: { firstName?: string; lastName?: string; nickName?: string };
+    }).playerInfo;
+
     if (info) {
       const fullName = [info.firstName, info.lastName].filter(Boolean).join(' ').trim();
       if (fullName) return fullName;
       if (info.nickName) return info.nickName;
     }
+
+    const team = event.isHomeTeam ? this.homeTeam() : this.awayTeam();
+    const p = team?.players?.find((pl) => String(pl.id) === String(event.playerId));
+
+    if (p) {
+      const fullName = [p.firstName, p.lastName].filter(Boolean).join(' ').trim();
+      if (p.number !== undefined && p.number !== null) {
+        return `#${p.number} ${fullName}`.trim();
+      }
+      return fullName || '—';
+    }
+
     return event.playerId ? `#${String(event.playerId)}` : '—';
   }
 
   private transformEvents(
     events: MatchEventViewModel[],
-    homeTeam: TeamApiResponse,
-    awayTeam: TeamApiResponse
+    homeTeam: TeamProfile,
+    awayTeam: TeamProfile
   ): DisplayEvent[] {
     return events
       .map((event) => {
@@ -538,16 +555,16 @@ export default class MatchDetails implements OnDestroy {
       });
   }
 
-    private safeTypeLabel(typeLabel: string | null | undefined): string {
-      return (typeLabel ?? '').trim();
-    }
+  private safeTypeLabel(typeLabel: string | null | undefined): string {
+    return (typeLabel ?? '').trim();
+  }
 
-    private toDate(value: string | Date | null | undefined): Date | null {
-      if (!value) return null;
-      if (value instanceof Date) return isNaN(value.getTime()) ? null : value;
-      const parsed = new Date(value);
-      return isNaN(parsed.getTime()) ? null : parsed;
-    }
+  private toDate(value: string | Date | null | undefined): Date | null {
+    if (!value) return null;
+    if (value instanceof Date) return isNaN(value.getTime()) ? null : value;
+    const parsed = new Date(value);
+    return isNaN(parsed.getTime()) ? null : parsed;
+  }
 
   private mapMatchStatus(status: string): 'scheduled' | 'live' | 'finished' {
     if (
@@ -577,15 +594,15 @@ export default class MatchDetails implements OnDestroy {
   // Keys are the Spanish labels that come from the backend typeMatchEvent.label.
   getEventIcon(type: string): string {
     const icons: Record<string, string> = {
-      'Gol': 'sports_soccer',
+      Gol: 'sports_soccer',
       'Gol por penal': 'sports_soccer',
       'Gol recibido': 'sports_soccer',
       'Gol recibido por penal': 'sports_soccer',
-      'Asistencia': 'sports_soccer',
+      Asistencia: 'sports_soccer',
       'Tarjeta Amarilla': 'square',
       'Tarjeta Roja': 'square',
-      'Sustitución': 'swap_vert',
-      'Falta': 'warning',
+      Sustitución: 'swap_vert',
+      Falta: 'warning',
       'MVP de Partido': 'star',
     };
     return icons[type] ?? 'event';
@@ -593,17 +610,21 @@ export default class MatchDetails implements OnDestroy {
 
   getEventColor(type: string): string {
     const colors: Record<string, string> = {
-      'Gol': '#4ade80',
+      Gol: '#4ade80',
       'Gol por penal': '#4ade80',
       'Gol recibido': '#f87171',
       'Gol recibido por penal': '#f87171',
-      'Asistencia': '#60a5fa',
+      Asistencia: '#60a5fa',
       'Tarjeta Amarilla': '#facc15',
       'Tarjeta Roja': '#f87171',
-      'Sustitución': 'var(--mat-sys-on-surface-variant)',
-      'Falta': '#f59e0b',
+      Sustitución: 'var(--mat-sys-on-surface-variant)',
+      Falta: '#f59e0b',
       'MVP de Partido': '#f59e0b',
     };
     return colors[type] ?? 'var(--mat-sys-on-surface-variant)';
+  }
+
+  playerName(event: MatchEventViewModel): string {
+    return this.resolvePlayerName(event);
   }
 }

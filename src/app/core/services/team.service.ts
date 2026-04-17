@@ -1,6 +1,6 @@
 import { Injectable, inject } from '@angular/core';
 import { ApiService } from './api.service';
-import { Observable, of, throwError } from 'rxjs';
+import { forkJoin, Observable, of, throwError } from 'rxjs';
 import { map, catchError } from 'rxjs/operators';
 
 import {
@@ -13,8 +13,9 @@ import {
 import {
   Player,
   CreatePlayerDto,
-  PlayerApiPaginatedResponse,
+  PlayerApiResponse,
 } from '../models/player.model';
+import { ApiEndpoints } from '@core/constants/endpoints.const';
 
 export interface CsvImportResult {
   teamsImported: number;
@@ -60,7 +61,7 @@ export class TeamService {
     organizationId?: string;
     championshipId?: string;
   }): Observable<TeamApiResponse[]> {
-    return this.api.get<TeamApiResponse[]>('teams/all', filters).pipe(
+    return this.api.get<TeamApiResponse[]>(ApiEndpoints.TEAMS.ALL, filters).pipe(
       catchError((error) => this.handleError('Error fetching all teams', error))
     );
   }
@@ -77,7 +78,7 @@ export class TeamService {
   // Backend confirmado
   // ─────────────────────────────────────────
   getTeamById(id: string): Observable<TeamApiResponse> {
-    return this.api.get<TeamApiResponse>(`teams/${id}`).pipe(
+    return this.api.get<TeamApiResponse>(ApiEndpoints.TEAMS.BY_ID(id)).pipe(
       catchError((error) => this.handleError('Error fetching team', error))
     );
   }
@@ -85,12 +86,19 @@ export class TeamService {
   // ─────────────────────────────────────────
   // COMPOSICIÓN FRONT (NO BACKEND)
   // El backend no retorna players embebidos en el team.
-  // ⚠️ GET /players?teamId= no filtra realmente en backend actual.
-  // Por seguridad, players se deja vacío.
+  // Se compone team + players en frontend:
+  //   GET /teams/:id
+  //   GET /players?teamId=...
+  //
+  // Backend confirmado para players por team:
+  //   responde { players: [] } SIN paginación.
   // ─────────────────────────────────────────
   getTeamWithPlayers(id: string): Observable<TeamProfile> {
-    return this.getTeamById(id).pipe(
-      map((team) => {
+    return forkJoin({
+      team: this.getTeamById(id),
+      playersResponse: this.getAllPlayers(id),
+    }).pipe(
+      map(({ team, playersResponse }) => {
         return {
           id: team.id,
           name: team.name,
@@ -114,7 +122,7 @@ export class TeamService {
           createdAt: new Date(),
           updatedAt: new Date(),
 
-          players: [] as Player[],
+          players: this.extractPlayers(playersResponse),
           groups: [],
 
           stats: {
@@ -136,12 +144,32 @@ export class TeamService {
     );
   }
 
+  private extractPlayers(response: { players: PlayerApiResponse[] }): Player[] {
+    const players: Player[] = [];
+
+    players.push(
+      ...response.players.map((p) => {
+        return {
+          ...p,
+          createdAt: new Date(p.createdAt),
+          updatedAt: new Date(p.updatedAt),
+        } as Player;
+      })
+    );
+
+    return players;
+  }
+
   // ─────────────────────────────────────────
   // POST /teams
   // Backend: { name, championshipId, location?, logoUrl?, foundedYear? }
   // Campos extra son ignorados por el backend.
   // ─────────────────────────────────────────
-  createTeam(data: { name: string; championshipId: string; [key: string]: any }): Observable<TeamApiResponse> {
+  createTeam(data: {
+    name: string;
+    championshipId: string;
+    [key: string]: any;
+  }): Observable<TeamApiResponse> {
     return this.api.post<TeamApiResponse>('teams', data).pipe(
       catchError((error) => this.handleError('Error creating team', error))
     );
@@ -171,11 +199,18 @@ export class TeamService {
   }
 
   // ─────────────────────────────────────────
-  // NO CONFIRMADO EN BACKEND COMO FILTRO FUNCIONAL
-  // GET /players acepta la query teamId, pero el backend actual la ignora.
+  // GET /players?teamId=
+  // Backend confirmado:
+  //   responde { players: [] } SIN paginación.
   // ─────────────────────────────────────────
-  getPlayers(teamId: string): Observable<PlayerApiPaginatedResponse> {
-    return this.api.get<PlayerApiPaginatedResponse>('players', { teamId }).pipe(
+  getPlayers(teamId: string): Observable<{ players: PlayerApiResponse[] }> {
+    return this.api.get<{ players: PlayerApiResponse[] }>(ApiEndpoints.PLAYERS.BASE, { teamId }).pipe(
+      catchError((error) => this.handleError('Error fetching players', error))
+    );
+  }
+
+  getAllPlayers(teamId: string): Observable<{ players: PlayerApiResponse[] }> {
+    return this.api.get<{ players: PlayerApiResponse[] }>(ApiEndpoints.PLAYERS.BASE, { teamId }).pipe(
       catchError((error) => this.handleError('Error fetching players', error))
     );
   }
@@ -190,7 +225,7 @@ export class TeamService {
       organizationId: string;
     }
   ): Observable<Player> {
-    return this.api.post<Player>('players', player).pipe(
+    return this.api.post<Player>(ApiEndpoints.PLAYERS.BASE, player).pipe(
       catchError((error) => this.handleError('Error creating player', error))
     );
   }

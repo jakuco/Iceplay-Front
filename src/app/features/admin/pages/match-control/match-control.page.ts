@@ -22,27 +22,28 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { forkJoin, Subscription, map } from 'rxjs';
-import { MatchService } from '../../../../core/services/match.service';
+
+import { MatchService } from '@core/services/match.service';
 import {
   MatchEventService,
   SSEMatchEvent,
-} from '../../../../core/services/match-event.service';
-import { TeamService } from '../../../../core/services/team.service';
-import { PlayerService } from '../../../../core/services/player.service';
+} from '@core/services/match-event.service';
+import { TeamService } from '@core/services/team.service';
+import { PlayerService } from '@core/services/player.service';
 
 import {
   MatchByIdResponse,
   MatchStatus,
   UpdateMatchApiDto,
-} from '../../../../core/models/match.model';
+} from '@core/models/match.model';
 import {
   MatchEvent,
   MatchEventViewModel,
   CreateMatchEventDto,
   mapEventToViewModel,
-} from '../../../../core/models/event.model';
-import type { TypeMatchEvent } from '../../../../core/models/sport-config.model';
-import type { PlayerApiResponse } from '../../../../core/models/player.model';
+} from '@core/models/event.model';
+import type { TypeMatchEvent } from '@core/models/sport-config.model';
+import type { PlayerApiResponse } from '@core/models/player.model';
 
 const DEFAULT_PERIOD_DURATION = 2700;
 
@@ -519,7 +520,7 @@ export default class MatchControlPage implements OnInit, OnDestroy {
   private timerInterval?: ReturnType<typeof setInterval>;
   private sseSubscription?: Subscription;
 
-  protected String = String;
+    protected String = String;
 
   formattedTime = computed(() => {
     const m = Math.floor(this.elapsedSeconds() / 60);
@@ -870,13 +871,3 @@ export default class MatchControlPage implements OnInit, OnDestroy {
     return p ? `#${p.number} ${p.name}` : '—';
   }
 }
-
-/*
-  Se eliminaron únicamente los merge conflict markers para que el archivo vuelva a ser válido:
-  <<<<<<<
-  =======
-  >>>>>>>
-
-  El bloque comentado legacy que venía después del conflicto estaba truncado en lo que compartiste,
-  así que no era posible reconstruirlo completo sin inventar contenido.
-*/
