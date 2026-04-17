@@ -393,6 +393,12 @@ export class ChampionshipService {
         return {
           championshipId: 0,
           sportId,
+          // NOTE: El backend no tiene source of truth para `defaultValue`/`value`
+          // a nivel de regla global (schema `match_rules` sólo guarda {id, name};
+          // `sport_match_rules` es un join puro sin columna de valor). El único
+          // valor real vive en `match_rules_championship_sports.value` (override
+          // por campeonato) y se mergea en getRules(). Aquí `defaultValue` es
+          // sólo un placeholder hasta que exista una fuente real en DB.
           rules: rules.map((rule) => {
             const base = this.toNumeric(rule.defaultValue ?? rule.value ?? 0, 0);
             return {
