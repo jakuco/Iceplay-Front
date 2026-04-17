@@ -20,7 +20,15 @@ export interface SSEEventRemove {
   eventId: string;
 }
 
-export type SSEMatchEvent = SSEEventAdd | SSEEventRemove;
+export interface SSEEventScore {
+  type: 'score';
+  event: {
+    homeScore: number;
+    awayScore: number;
+  };
+}
+
+export type SSEMatchEvent = SSEEventAdd | SSEEventRemove | SSEEventScore;
 
 @Injectable({
   providedIn: 'root',
@@ -75,6 +83,12 @@ export class MatchEventService {
         });
       });
 
+      source.addEventListener('score', (e: MessageEvent) => {
+        this.ngZone.run(() => {
+          observer.next({ type: 'score', event: JSON.parse(e.data) });
+        });
+      });
+
       source.onerror = (err) => {
         console.error('SSE error:', err);
       };
@@ -92,12 +106,27 @@ export class MatchEventService {
     homeTeamId: string,
     periodDuration: number,
     onAdd: (event: MatchEventViewModel) => void,
-    onDelete: (eventId: string) => void
+    onDelete: (eventId: string) => void,
+    onScore: (score: { homeScore: number; awayScore: number }) => void
   ): () => void {
     const sub = this.connectToMatchStream(matchId, homeTeamId, periodDuration).subscribe({
       next: (msg) => {
-        if (msg.type === 'add') onAdd(msg.event);
-        else onDelete(msg.eventId);
+        switch (msg.type) {
+          case 'add':
+            onAdd(msg.event);
+            break;
+
+          case 'remove':
+            onDelete(msg.eventId);
+            break;
+
+          case 'score':
+            onScore(msg.event);
+            break;
+
+          default:
+            console.warn("Unknown event type:", JSON.stringify(msg));
+        }
       },
       error: (err) => console.error('SSE subscription error:', err),
     });

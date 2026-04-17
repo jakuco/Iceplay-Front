@@ -639,35 +639,45 @@ export default class MatchControlPage implements OnInit, OnDestroy {
       .connectToMatchStream(matchId, homeTeamId, pd)
       .subscribe({
         next: (msg: SSEMatchEvent) => {
-          if (msg.type === 'add') {
-            this.events.update((list) => {
-              if (list.some((e) => e.id === msg.event.id)) return list;
-              return [...list, msg.event].sort((a, b) => a.timeRaw - b.timeRaw);
-            });
-            this.recomputeScoreFromEvents();
-          } else {
-            this.events.update((list) =>
-              list.filter((e) => String(e.id) !== msg.eventId)
-            );
-            this.recomputeScoreFromEvents();
+          switch (msg.type) {
+            case "add":
+              this.events.update((list) => {
+                if (list.some((e) => e.id === msg.event.id)) return list;
+                return [...list, msg.event].sort((a, b) => a.timeRaw - b.timeRaw);
+              });
+              break;
+
+            case "remove":
+              this.events.update((list) =>
+                list.filter((e) => String(e.id) !== msg.eventId)
+              );
+              break;
+
+            case "score":
+              this.homeTeam.update((t) => ({ ...t, score: msg.event.homeScore }));
+              this.awayTeam.update((t) => ({ ...t, score: msg.event.awayScore }));
+              break;
+
+            default:
+              console.warn("Unknown event type:", JSON.stringify(msg));
           }
         },
         error: (err) => console.error('SSE error', err),
       });
   }
 
-  private recomputeScoreFromEvents(): void {
-    const evts = this.events();
-    const homePoints = evts.filter(
-      (e) => e.category === 'scoring' && e.isHomeTeam
-    ).length;
-    const awayPoints = evts.filter(
-      (e) => e.category === 'scoring' && !e.isHomeTeam
-    ).length;
+  // private recomputeScoreFromEvents(): void {
+  //   const evts = this.events();
+  //   const homePoints = evts.filter(
+  //     (e) => e.category === 'scoring' && e.isHomeTeam
+  //   ).length;
+  //   const awayPoints = evts.filter(
+  //     (e) => e.category === 'scoring' && !e.isHomeTeam
+  //   ).length;
 
-    this.homeTeam.update((t) => ({ ...t, score: this.baselineHomeScore + homePoints }));
-    this.awayTeam.update((t) => ({ ...t, score: this.baselineAwayScore + awayPoints }));
-  }
+  //   this.homeTeam.update((t) => ({ ...t, score: this.baselineHomeScore + homePoints }));
+  //   this.awayTeam.update((t) => ({ ...t, score: this.baselineAwayScore + awayPoints }));
+  // }
 
   logEvent(eventType: TypeMatchEvent, player: LocalPlayer, side: 'home' | 'away'): void {
     const match = this.matchData();

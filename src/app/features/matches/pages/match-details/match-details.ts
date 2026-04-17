@@ -286,6 +286,13 @@ export default class MatchDetails implements OnDestroy {
   private matchData = signal<MatchByIdResponse | null>(null);
   private homeTeam = signal<TeamProfile | null>(null);
   private awayTeam = signal<TeamProfile | null>(null);
+
+  // TODO: Someone check this.
+  // I have no clue where the scores are supposed to go, so I'm leaving them here for now
+  private liveHomeScore = signal(0);
+  private liveAwayScore = signal(0);
+  // ============================
+
   private championship = signal<Championship | null>(null);
   private events = signal<MatchEventViewModel[]>([]);
   private eventSubscription?: Subscription;
@@ -307,8 +314,11 @@ export default class MatchDetails implements OnDestroy {
       (m as { actualStartTime?: string | Date | null }).actualStartTime
     );
 
-    const homeScore = Number((m as { homeScore?: number | null }).homeScore ?? 0);
-    const awayScore = Number((m as { awayScore?: number | null }).awayScore ?? 0);
+    //const homeScore = Number((m as { homeScore?: number | null }).homeScore ?? 0);
+    //const awayScore = Number((m as { awayScore?: number | null }).awayScore ?? 0);
+
+    const homeScore = this.liveHomeScore();
+    const awayScore = this.liveAwayScore();
 
     return {
       id: String(m.id),
@@ -419,11 +429,22 @@ export default class MatchDetails implements OnDestroy {
       .connectToMatchStream(matchId, homeTeamId, PERIOD_DURATION_SECONDS)
       .subscribe({
         next: (msg) => {
-          // TODO: Score event and parsing
-          if (msg.type === 'add') {
-            this.events.update((current) => [...current, msg.event]);
-          } else {
-            this.events.update((current) => current.filter((e) => e.id !== msg.eventId));
+          switch(msg.type) {
+            case 'add':
+              this.events.update((current) => [...current, msg.event]);
+              break;
+
+            case 'remove':
+              this.events.update((current) => current.filter((e) => e.id !== msg.eventId));
+              break;
+
+            case 'score':
+              this.liveHomeScore.set(msg.event.homeScore);
+              this.liveAwayScore.set(msg.event.awayScore);
+              break;
+
+            default:
+              console.warn('Unknown event type', JSON.stringify(msg));
           }
         },
         error: (error) => {
