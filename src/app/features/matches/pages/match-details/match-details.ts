@@ -154,76 +154,63 @@ interface DisplayEvent {
         </div>
 
         <!-- Tabs -->
-        <mat-tab-group>
-          <mat-tab [label]="'match.tabs.summary' | translate">
-            <div class="py-4">
-              <h2 class="mb-4 text-xl font-bold">{{ 'match.matchEvents' | translate }}</h2>
+        <mat-tab [label]="'match.tabs.summary' | translate">
+          <div class="py-4">
+            <h2 class="mb-4 text-xl font-bold">{{ 'match.matchEvents' | translate }}</h2>
 
-              @if (m.events && m.events.length > 0) {
-                <div class="card overflow-hidden rounded-xl border border-(--mat-sys-outline-variant)">
-                  <div class="overflow-x-auto">
-                    <table class="w-full">
-                      <thead>
-                        <tr class="table-header">
-                          <th class="w-24 px-4 py-3 text-left text-xs uppercase tracking-wider">
-                            {{ 'match.table.time' | translate }}
-                          </th>
-                          <th class="w-32 px-4 py-3 text-left text-xs uppercase tracking-wider">
-                            {{ 'match.table.event' | translate }}
-                          </th>
-                          <th class="px-4 py-3 text-left text-xs uppercase tracking-wider">
-                            {{ 'match.table.player' | translate }}
-                          </th>
-                          <th class="px-4 py-3 text-left text-xs uppercase tracking-wider">
-                            {{ 'match.table.team' | translate }}
-                          </th>
+            @if (m.events && m.events.length > 0) {
+              <div class="card overflow-hidden rounded-xl border border-(--mat-sys-outline-variant)">
+                <div class="overflow-x-auto">
+                  <table class="w-full">
+                    <thead>
+                      <tr class="table-header">
+                        <th class="w-24 px-4 py-3 text-left text-xs uppercase tracking-wider">
+                          {{ 'match.table.time' | translate }}
+                        </th>
+                        <th class="w-32 px-4 py-3 text-left text-xs uppercase tracking-wider">
+                          {{ 'match.table.event' | translate }}
+                        </th>
+                        <th class="px-4 py-3 text-left text-xs uppercase tracking-wider">
+                          {{ 'match.table.player' | translate }}
+                        </th>
+                        <th class="px-4 py-3 text-left text-xs uppercase tracking-wider">
+                          {{ 'match.table.team' | translate }}
+                        </th>
+                      </tr>
+                    </thead>
+
+                    <tbody class="divide-y divide-(--mat-sys-outline-variant)">
+                      @for (event of m.events; track event.id) {
+                        <tr>
+                          <td class="text-secondary px-4 py-3 font-mono text-sm whitespace-nowrap">
+                            {{ event.timeFormatted }}
+                          </td>
+
+                          <td class="px-4 py-3 text-sm whitespace-nowrap">
+                            {{ event.typeLabel }}
+                          </td>
+
+                          <td class="px-4 py-3 text-sm whitespace-nowrap">
+                            {{ playerName(event) }}
+                          </td>
+
+                          <td class="text-secondary px-4 py-3 text-sm whitespace-nowrap">
+                            {{ event.isHomeTeam ? m.homeTeam.name : m.awayTeam.name }}
+                          </td>
                         </tr>
-                      </thead>
-
-                      <tbody class="divide-y divide-(--mat-sys-outline-variant)">
-                        @for (event of m.events; track event.id) {
-                          <tr>
-                            <td class="text-secondary px-4 py-3 font-mono text-sm whitespace-nowrap">
-                              {{ event.timeFormatted }}
-                            </td>
-
-                            <td class="px-4 py-3 text-sm whitespace-nowrap">
-                              {{ event.typeLabel }}
-                            </td>
-
-                            <td class="px-4 py-3 text-sm whitespace-nowrap">
-                              {{ playerName(event) }}
-                            </td>
-
-                            <td class="text-secondary px-4 py-3 text-sm whitespace-nowrap">
-                              {{ event.isHomeTeam ? m.homeTeam.name : m.awayTeam.name }}
-                            </td>
-                          </tr>
-                        }
-                      </tbody>
-                    </table>
-                  </div>
+                      }
+                    </tbody>
+                  </table>
                 </div>
-              } @else {
-                <div class="card rounded-xl p-8 text-center">
-                  <mat-icon class="mb-2 text-5xl! opacity-50">event_note</mat-icon>
-                  <p class="text-secondary">{{ 'match.noEvents' | translate }}</p>
-                </div>
-              } @else {
-                <div class="card rounded-xl p-8 text-center">
-                  <mat-icon class="mb-2 text-5xl! opacity-50">event_note</mat-icon>
-                  <p class="text-secondary">{{ 'match.noEvents' | translate }}</p>
-                </div>
-              }
-              
-                 @else {
-                <div class="card rounded-xl p-8 text-center">
-                  <mat-icon class="mb-2 text-5xl! opacity-50">event_note</mat-icon>
-                  <p class="text-secondary">{{ 'match.noEvents' | translate }}</p>
-                </div>
-              }
-            </div>
-          </mat-tab>
+              </div>
+            } @else {
+              <div class="card rounded-xl p-8 text-center">
+                <mat-icon class="mb-2 text-5xl! opacity-50">event_note</mat-icon>
+                <p class="text-secondary">{{ 'match.noEvents' | translate }}</p>
+              </div>
+            }
+          </div>
+        </mat-tab>
 
           <mat-tab [label]="'match.tabs.statistics' | translate">
             <div class="py-4">
