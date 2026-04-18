@@ -606,19 +606,27 @@ export class ChampionshipService {
    * Solicita URLs firmadas para subida directa desde frontend a R2.
    *
    * Payload enviado:
-   * { keys: string[] }
+   * { uploads: [{ key: string, mimeType: string }, ...] }
    *
    * Respuesta esperada:
    * - { key1: 'https://signed-url-1', key2: 'https://signed-url-2' }
    * o
    * - { uploads: { key1: 'https://signed-url-1', key2: 'https://signed-url-2' } }
    */
-  requestSignedUploadUrls(keys: string[]): Observable<Record<string, string>> {
-    const normalized = Array.from(new Set(keys.map((k) => k.trim()).filter(Boolean)));
+  requestSignedUploadUrls(uploads: Array<{ key: string; mimeType: string }>): Observable<Record<string, string>> {
+    const normalized = Array.from(
+      new Map(
+        uploads
+          .filter(u => u.key && u.key.trim())
+          .map(u => [u.key.trim(), { key: u.key.trim(), mimeType: u.mimeType }])
+      ).values()
+    );
     if (normalized.length === 0) return of({});
-
-    return this.api.post<unknown>('files/generate-presigned-urls', { keys: normalized }).pipe(
-      map((response) => this.extractSignedUploadMap(response)),
+    return this.api.post<unknown>('files/generate-presigned-urls', { uploads: normalized }).pipe(
+      map((response) => {
+        return this.extractSignedUploadMap(response);
+      }
+      ),
       catchError((error) => this.handleError('Error requesting signed upload urls', error)),
     );
   }
@@ -627,14 +635,8 @@ export class ChampionshipService {
    * Ejecuta PUT directo al signed URL de R2 (sin baseUrl de API).
    */
   uploadFileToSignedUrl(signedUrl: string, file: File): Observable<void> {
-    const headers = new HttpHeaders({
-      'Content-Type': file.type || 'application/octet-stream',
-    });
 
-    return this.http.put(signedUrl, file, {
-      headers,
-      responseType: 'text',
-    }).pipe(
+    return this.http.put(signedUrl, file).pipe(
       map(() => void 0),
       catchError((error) => this.handleError('Error uploading file to signed url', error)),
     );
