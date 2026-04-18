@@ -175,20 +175,24 @@ interface DisplayEvent {
                           <th class="px-4 py-3 text-left text-xs uppercase tracking-wider">Equipo</th>
                         </tr>
                       </thead>
+
                       <tbody class="divide-y divide-(--mat-sys-outline-variant)">
                         @for (event of m.events; track event.id) {
                           <tr>
                             <td class="text-secondary px-4 py-3 font-mono text-sm whitespace-nowrap">
                               {{ event.timeFormatted }}
                             </td>
+
                             <td class="px-4 py-3 whitespace-nowrap">
-                              <span class="inline-flex items-center gap-2 text-sm font-semibold">
+                              <span class="text-sm font-semibold">
                                 {{ event.typeLabel }}
                               </span>
                             </td>
+
                             <td class="px-4 py-3 text-sm whitespace-nowrap">
                               {{ playerName(event) }}
                             </td>
+
                             <td class="text-secondary px-4 py-3 text-sm whitespace-nowrap">
                               {{ event.isHomeTeam ? m.homeTeam.name : m.awayTeam.name }}
                             </td>
