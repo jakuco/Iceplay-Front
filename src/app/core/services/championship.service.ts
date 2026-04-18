@@ -1,3 +1,4 @@
+import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Injectable, inject, signal } from '@angular/core';
 import { Observable, forkJoin, of, throwError } from 'rxjs';
 import { catchError, map, switchMap } from 'rxjs/operators';
@@ -41,6 +42,7 @@ import type { DbId } from '../models/db.types';
 @Injectable({ providedIn: 'root' })
 export class ChampionshipService {
   private api = inject(ApiService);
+  private http = inject(HttpClient);
 
   private _socialNetworks = signal<SocialNetwork[]>([]);
   private _loadingSocialNetworks = signal(false);
@@ -278,12 +280,12 @@ export class ChampionshipService {
    * ]
    */
   getPhases(championshipId: string): Observable<Phase[]> {
-  return this.api.get<unknown>('phases/all', { championshipId }).pipe(
-    map((response) => this.extractCollection(response, 'phases') as BackendPhase[]),
-    map((items) => items.map((item) => this.mapBackendPhase(item))),
-    catchError((error) => this.handleError('Error fetching phases', error)),
-  );
-}
+    return this.api.get<unknown>('phases/all', { championshipId }).pipe(
+      map((response) => this.extractCollection(response, 'phases') as BackendPhase[]),
+      map((items) => items.map((item) => this.mapBackendPhase(item))),
+      catchError((error) => this.handleError('Error fetching phases', error)),
+    );
+  }
 
   /**
    * GET /championships/:id/fixture
@@ -296,7 +298,7 @@ export class ChampionshipService {
   ): Observable<ChampionshipFixture> {
     const params: Record<string, string | number> = {};
     if (filters?.phaseId != null) params['phaseId'] = filters.phaseId;
-    if (filters?.round   != null) params['round']   = filters.round;
+    if (filters?.round != null) params['round'] = filters.round;
     return this.api.get<ChampionshipFixture>(
       `championships/${championshipId}/fixture`,
       params,
@@ -572,6 +574,44 @@ export class ChampionshipService {
   deletePlayer(playerId: string): Observable<void> {
     return this.api.delete<void>(`players/${playerId}`).pipe(
       catchError((error) => this.handleError('Error deleting player', error)),
+    );
+  }
+
+  /**
+   * Solicita URLs firmadas para subida directa desde frontend a R2.
+   *
+   * Payload enviado:
+   * { keys: string[] }
+   *
+   * Respuesta esperada:
+   * - { key1: 'https://signed-url-1', key2: 'https://signed-url-2' }
+   * o
+   * - { uploads: { key1: 'https://signed-url-1', key2: 'https://signed-url-2' } }
+   */
+  requestSignedUploadUrls(keys: string[]): Observable<Record<string, string>> {
+    const normalized = Array.from(new Set(keys.map((k) => k.trim()).filter(Boolean)));
+    if (normalized.length === 0) return of({});
+
+    return this.api.post<unknown>('files/generate-presigned-urls', { keys: normalized }).pipe(
+      map((response) => this.extractSignedUploadMap(response)),
+      catchError((error) => this.handleError('Error requesting signed upload urls', error)),
+    );
+  }
+
+  /**
+   * Ejecuta PUT directo al signed URL de R2 (sin baseUrl de API).
+   */
+  uploadFileToSignedUrl(signedUrl: string, file: File): Observable<void> {
+    const headers = new HttpHeaders({
+      'Content-Type': file.type || 'application/octet-stream',
+    });
+
+    return this.http.put(signedUrl, file, {
+      headers,
+      responseType: 'text',
+    }).pipe(
+      map(() => void 0),
+      catchError((error) => this.handleError('Error uploading file to signed url', error)),
     );
   }
 
@@ -871,6 +911,25 @@ export class ChampionshipService {
     }
 
     return [];
+  }
+
+  private extractSignedUploadMap(response: unknown): Record<string, string> {
+    if (!response || typeof response !== 'object') {
+      return {};
+    }
+
+    const boxed = response as Record<string, unknown>;
+    const candidate = boxed['uploads'] && typeof boxed['uploads'] === 'object'
+      ? boxed['uploads'] as Record<string, unknown>
+      : boxed;
+
+    const out: Record<string, string> = {};
+    for (const [key, value] of Object.entries(candidate)) {
+      if (typeof value === 'string' && value.trim().length > 0) {
+        out[key] = value;
+      }
+    }
+    return out;
   }
 
   private parseChampionshipDates(c: Championship): Championship {

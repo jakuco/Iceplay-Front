@@ -8,7 +8,7 @@ import {
 } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { ActivatedRoute, Router } from '@angular/router';
-import { Observable, forkJoin, of, map } from 'rxjs';
+import { Observable, forkJoin, lastValueFrom, of, map } from 'rxjs';
 import { catchError } from 'rxjs/operators';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
@@ -63,6 +63,14 @@ import {
 type PageMode = 'create' | 'edit' | 'view';
 
 interface NavTab { id: string; label: string; icon: string; count: number | null; }
+
+interface PendingAssetUpload {
+  teamIndex: number;
+  playerIndex: number | null;
+  key: string;
+  file: File;
+  target: 'logo' | 'player-photo';
+}
 
 
 // ─────────────────────────────────────────────────────────────
@@ -480,19 +488,222 @@ export default class ChampionshipFormPage implements OnInit {
 
   runSaveAllSections(id: string): void {
     this.isSaving.set(true);
-    this.saveAllSections(id).subscribe({
-      next: () => {
+    this.uploadPendingTeamAssets(id)
+      .then(() => lastValueFrom(this.saveAllSections(id)))
+      .then(() => {
         this.pendingRetryId.set(null);
         this.isDirty.set(false);
         this.isSaving.set(false);
         this.snackBar.open('Campeonato creado', 'Cerrar', { duration: 3000 });
         this.router.navigate(['/admin/championships', id]);
-      },
-      error: () => {
+      })
+      .catch((error: unknown) => {
+        console.error('Error saving championship sections', error);
         this.isSaving.set(false);
         this.pendingRetryId.set(id);
-      },
+        this.snackBar.open('Error al subir archivos o guardar secciones. Puedes reintentar.', 'Cerrar', { duration: 4000 });
+      });
+  }
+
+  private async uploadPendingTeamAssets(championshipId: string): Promise<void> {
+    const teams = this.teamsData();
+    if (teams.length === 0) return;
+
+    const uploads = await this.collectPendingTeamAssetUploads(championshipId, teams);
+    if (uploads.length === 0) return;
+
+    const signedByKey = await lastValueFrom(
+      this.championshipSvc.requestSignedUploadUrls(uploads.map((upload) => upload.key)),
+    );
+
+    const missingKeys = uploads
+      .map((upload) => upload.key)
+      .filter((key) => !signedByKey[key]);
+
+    if (missingKeys.length > 0) {
+      throw new Error(`Missing signed urls for ${missingKeys.length} file(s)`);
+    }
+
+    await lastValueFrom(
+      forkJoin(
+        uploads.map((upload) =>
+          this.championshipSvc.uploadFileToSignedUrl(signedByKey[upload.key], upload.file),
+        ),
+      ),
+    );
+
+    const nextTeams = teams.map((team) => ({
+      ...team,
+      players: team.players.map((player) => ({ ...player })),
+    }));
+
+    for (const upload of uploads) {
+      const targetTeam = nextTeams[upload.teamIndex];
+      if (!targetTeam) continue;
+
+      if (upload.target === 'logo') {
+        targetTeam.logoUrl = upload.key;
+        continue;
+      }
+
+      if (upload.playerIndex === null) continue;
+      const targetPlayer = targetTeam.players[upload.playerIndex];
+      if (!targetPlayer) continue;
+      targetPlayer.photoUrl = upload.key;
+    }
+
+    this.teamsData.set(nextTeams);
+  }
+
+  private async collectPendingTeamAssetUploads(
+    championshipId: string,
+    teams: TeamItem[],
+  ): Promise<PendingAssetUpload[]> {
+    const uploads: PendingAssetUpload[] = [];
+    const usedKeys = new Set<string>();
+
+    for (let teamIndex = 0; teamIndex < teams.length; teamIndex++) {
+      const team = teams[teamIndex];
+      const teamAny = team as TeamItem & { logoFile?: File };
+      const teamSegment = this.sanitizePathSegment(team.slug || this.toSlug(team.name) || `team-${teamIndex + 1}`);
+
+      const logoFile = await this.resolveFileFromAssetSource(
+        teamAny.logoFile,
+        team.logoUrl,
+        `${teamSegment}-logo`,
+      );
+      if (logoFile) {
+        const key = this.buildUniqueUploadKey(
+          championshipId,
+          teamSegment,
+          this.sanitizeFileName(logoFile.name),
+          usedKeys,
+        );
+        uploads.push({
+          teamIndex,
+          playerIndex: null,
+          key,
+          file: logoFile,
+          target: 'logo',
+        });
+      }
+
+      for (let playerIndex = 0; playerIndex < team.players.length; playerIndex++) {
+        const player = team.players[playerIndex] as typeof team.players[number] & { photoFile?: File };
+        const playerName = `${player.firstName || 'player'}_${player.lastName || playerIndex + 1}`;
+        const playerFile = await this.resolveFileFromAssetSource(
+          player.photoFile,
+          player.photoUrl ?? null,
+          this.sanitizePathSegment(playerName),
+        );
+
+        if (!playerFile) continue;
+
+        const key = this.buildUniqueUploadKey(
+          championshipId,
+          teamSegment,
+          this.sanitizeFileName(playerFile.name),
+          usedKeys,
+        );
+        uploads.push({
+          teamIndex,
+          playerIndex,
+          key,
+          file: playerFile,
+          target: 'player-photo',
+        });
+      }
+    }
+
+    return uploads;
+  }
+
+  private async resolveFileFromAssetSource(
+    explicitFile: File | undefined,
+    currentUrl: string | null | undefined,
+    fallbackBaseName: string,
+  ): Promise<File | null> {
+    if (explicitFile) return explicitFile;
+    if (!currentUrl || !currentUrl.startsWith('blob:')) return null;
+
+    const response = await fetch(currentUrl);
+    if (!response.ok) {
+      throw new Error(`Unable to resolve blob url: ${currentUrl}`);
+    }
+
+    const blob = await response.blob();
+    const extension = this.mimeToExtension(blob.type);
+    const fileName = `${fallbackBaseName}${extension}`;
+    return new File([blob], fileName, {
+      type: blob.type || 'application/octet-stream',
+      lastModified: Date.now(),
     });
+  }
+
+  private buildUniqueUploadKey(
+    championshipId: string,
+    teamSegment: string,
+    fileName: string,
+    usedKeys: Set<string>,
+  ): string {
+    const championshipSegment = this.sanitizePathSegment(championshipId);
+    const safeFileName = this.sanitizeFileName(fileName);
+    const baseKey = `${championshipSegment}/${teamSegment}/${safeFileName}`;
+
+    if (!usedKeys.has(baseKey)) {
+      usedKeys.add(baseKey);
+      return baseKey;
+    }
+
+    const dot = safeFileName.lastIndexOf('.');
+    const name = dot >= 0 ? safeFileName.slice(0, dot) : safeFileName;
+    const ext = dot >= 0 ? safeFileName.slice(dot) : '';
+
+    let counter = 2;
+    while (true) {
+      const candidate = `${championshipSegment}/${teamSegment}/${name}-${counter}${ext}`;
+      if (!usedKeys.has(candidate)) {
+        usedKeys.add(candidate);
+        return candidate;
+      }
+      counter += 1;
+    }
+  }
+
+  private sanitizePathSegment(value: string): string {
+    return value
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-zA-Z0-9._-]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .toLowerCase() || 'asset';
+  }
+
+  private sanitizeFileName(fileName: string): string {
+    const trimmed = fileName.trim();
+    if (!trimmed) return `file-${Date.now()}`;
+
+    const normalized = trimmed
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[\\/]+/g, '-')
+      .replace(/\s+/g, '_')
+      .replace(/[^a-zA-Z0-9._-]+/g, '-');
+
+    return normalized || `file-${Date.now()}`;
+  }
+
+  private mimeToExtension(mimeType: string): string {
+    const map: Record<string, string> = {
+      'image/jpeg': '.jpg',
+      'image/jpg': '.jpg',
+      'image/png': '.png',
+      'image/webp': '.webp',
+      'image/gif': '.gif',
+      'image/svg+xml': '.svg',
+      'application/pdf': '.pdf',
+    };
+    return map[mimeType] ?? '';
   }
 
   private saveAllSections(id: string, mode: 'create' | 'edit' = 'create'): Observable<void> {
