@@ -399,6 +399,7 @@ export default class ChampionshipFormPage implements OnInit {
       return;
     }
     const user = this.authService.currentUser();
+    console.log('DEBUG USER:', user);
     if (!user?.organizationId) {
       this.snackBar.open('Organización no disponible', 'Cerrar', { duration: 3000 });
       return;
