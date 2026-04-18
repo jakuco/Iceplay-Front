@@ -463,83 +463,83 @@ export default class ChampionshipDetailPage implements OnInit, OnDestroy {
           status: p.status,
           league: p.leagueConfig
             ? {
+              winsPoints: 3,
+              drawPoints: 1,
+              lossPoints: 0,
+              totalRounds: 10,
+              legs: p.leagueConfig.legs,
+              advanceCount: p.leagueConfig.advanceCount,
+              tiebreakOrder: 'points,goal_difference,goals_for,h2h,fair_play,draw',
+            }
+            : p.phaseType === PhaseType.League
+              ? {
                 winsPoints: 3,
                 drawPoints: 1,
                 lossPoints: 0,
                 totalRounds: 10,
-                legs: p.leagueConfig.legs,
-                advanceCount: p.leagueConfig.advanceCount,
+                legs: 1,
+                advanceCount: 4,
                 tiebreakOrder: 'points,goal_difference,goals_for,h2h,fair_play,draw',
               }
-            : p.phaseType === PhaseType.League
-              ? {
-                  winsPoints: 3,
-                  drawPoints: 1,
-                  lossPoints: 0,
-                  totalRounds: 10,
-                  legs: 1,
-                  advanceCount: 4,
-                  tiebreakOrder: 'points,goal_difference,goals_for,h2h,fair_play,draw',
-                }
               : undefined,
           knockout: p.knockoutConfig
             ? {
-                legs: p.knockoutConfig.legs,
-                bracketSize: 8,
-                thirdPlaceMatch: p.knockoutConfig.thirdPlaceMatch,
-                seeding: p.knockoutConfig.seeding,
-                awayGoalsRule: p.knockoutConfig.awayGoalsRule,
-                tieBreak: p.knockoutConfig.tieBreak,
-              }
+              legs: p.knockoutConfig.legs,
+              bracketSize: 8,
+              thirdPlaceMatch: p.knockoutConfig.thirdPlaceMatch,
+              seeding: p.knockoutConfig.seeding,
+              awayGoalsRule: p.knockoutConfig.awayGoalsRule,
+              tieBreak: p.knockoutConfig.tieBreak,
+            }
             : p.phaseType === PhaseType.Knockout
               ? {
-                  legs: 1,
-                  bracketSize: 8,
-                  thirdPlaceMatch: false,
-                  seeding: 'ranking',
-                  awayGoalsRule: false,
-                  tieBreak: 'penalties',
-                }
+                legs: 1,
+                bracketSize: 8,
+                thirdPlaceMatch: false,
+                seeding: 'ranking',
+                awayGoalsRule: false,
+                tieBreak: 'penalties',
+              }
               : undefined,
           groups: p.groupsConfig
             ? {
-                numGroups: p.groupsConfig.numGroups,
-                teamsPerGroup: p.groupsConfig.teamsPerGroup,
-                legs: p.groupsConfig.legs,
-                advancePerGroup: p.groupsConfig.advancePerGroup,
-                advanceBestThirds: p.groupsConfig.advanceBestThirds,
-                tiebreakOrder: p.groupsConfig.tiebreakOrder,
-              }
+              numGroups: p.groupsConfig.numGroups,
+              teamsPerGroup: p.groupsConfig.teamsPerGroup,
+              legs: p.groupsConfig.legs,
+              advancePerGroup: p.groupsConfig.advancePerGroup,
+              advanceBestThirds: p.groupsConfig.advanceBestThirds,
+              tiebreakOrder: p.groupsConfig.tiebreakOrder,
+            }
             : p.phaseType === PhaseType.Groups
               ? {
-                  numGroups: 4,
-                  teamsPerGroup: 4,
-                  legs: 1,
-                  advancePerGroup: 2,
-                  advanceBestThirds: 0,
-                  tiebreakOrder: 'points,diff,gf,h2h,random',
-                }
+                numGroups: 4,
+                teamsPerGroup: 4,
+                legs: 1,
+                advancePerGroup: 2,
+                advanceBestThirds: 0,
+                tiebreakOrder: 'points,diff,gf,h2h,random',
+              }
               : undefined,
           swiss: p.swissConfig
             ? {
-                numRounds: p.swissConfig.numRounds,
-                pairingSystem: p.swissConfig.pairingSystem,
-                firstRound: p.swissConfig.firstRound,
-                allowRematch: p.swissConfig.allowRematch,
-                tiebreakOrder: p.swissConfig.tiebreakOrder,
-                directAdvancedCount: p.swissConfig.directAdvancedCount,
-                playoffCount: p.swissConfig.playoffCount,
-              }
+              numRounds: p.swissConfig.numRounds,
+              pairingSystem: p.swissConfig.pairingSystem,
+              firstRound: p.swissConfig.firstRound,
+              allowRematch: p.swissConfig.allowRematch,
+              tiebreakOrder: p.swissConfig.tiebreakOrder,
+              directAdvancedCount: p.swissConfig.directAdvancedCount,
+              playoffCount: p.swissConfig.playoffCount,
+            }
             : p.phaseType === PhaseType.Swiss
               ? {
-                  numRounds: 7,
-                  pairingSystem: 'random',
-                  firstRound: 'random',
-                  allowRematch: false,
-                  tiebreakOrder: 'points,goal_difference,goals_for,h2h,fair_play,draw',
-                  directAdvancedCount: 2,
-                  playoffCount: 4,
-                }
+                numRounds: 7,
+                pairingSystem: 'random',
+                firstRound: 'random',
+                allowRematch: false,
+                tiebreakOrder: 'points,goal_difference,goals_for,h2h,fair_play,draw',
+                directAdvancedCount: 2,
+                playoffCount: 4,
+              }
               : undefined,
         }));
 
@@ -547,7 +547,6 @@ export default class ChampionshipDetailPage implements OnInit, OnDestroy {
         this.activeFormat.set(this.inferFormat(mapped));
 
         this.reloadFixture(false);
-
         this.championshipSvc.getTeams(id).subscribe({
           next: profiles => {
             const teamsMapped: TeamItem[] = profiles.map(p => ({

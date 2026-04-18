@@ -5,6 +5,7 @@ import {
 } from '@angular/common/http';
 import { inject } from '@angular/core';
 import { catchError, from, switchMap, throwError } from 'rxjs';
+import { environment } from '../../../environments/environment';
 
 import { AuthService } from '../services/auth.service';
 
@@ -12,7 +13,19 @@ const retriedAfterRefresh = new HttpContextToken<boolean>(() => false);
 
 const skipBearerAndRefreshOn401 = /\/auth\/(login|refresh|logout)(?:\?|#|$)/i;
 
+function isApiRequest(url: string): boolean {
+  if (!url) return false;
+  if (url.startsWith('http://') || url.startsWith('https://')) {
+    return url.startsWith(environment.baseUrl);
+  }
+  return true;
+}
+
 export const authInterceptor: HttpInterceptorFn = (req, next) => {
+  if (!isApiRequest(req.url)) {
+    return next(req);
+  }
+
   if (skipBearerAndRefreshOn401.test(req.url)) {
     return next(req);
   }

@@ -498,7 +498,6 @@ export default class ChampionshipFormPage implements OnInit {
         this.router.navigate(['/admin/championships', id]);
       })
       .catch((error: unknown) => {
-        console.error('Error saving championship sections', error);
         this.isSaving.set(false);
         this.pendingRetryId.set(id);
         this.snackBar.open('Error al subir archivos o guardar secciones. Puedes reintentar.', 'Cerrar', { duration: 4000 });
@@ -513,7 +512,12 @@ export default class ChampionshipFormPage implements OnInit {
     if (uploads.length === 0) return;
 
     const signedByKey = await lastValueFrom(
-      this.championshipSvc.requestSignedUploadUrls(uploads.map((upload) => upload.key)),
+      this.championshipSvc.requestSignedUploadUrls(
+        uploads.map((upload) => ({
+          key: upload.key,
+          mimeType: upload.file.type || 'application/octet-stream',
+        }))
+      ),
     );
 
     const missingKeys = uploads
