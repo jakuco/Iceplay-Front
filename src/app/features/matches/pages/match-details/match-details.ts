@@ -160,55 +160,43 @@ interface DisplayEvent {
               <h2 class="mb-4 text-xl font-bold">{{ 'match.matchEvents' | translate }}</h2>
 
               @if (m.events && m.events.length > 0) {
-                <div
-                  class="card overflow-hidden rounded-xl border border-(--mat-sys-outline-variant)"
-                >
+                <div class="card overflow-hidden rounded-xl border border-(--mat-sys-outline-variant)">
                   <div class="overflow-x-auto">
                     <table class="w-full">
                       <thead>
                         <tr class="table-header">
-                          <th
-                            class="w-24 px-4 py-3 text-left text-xs font-medium tracking-wider uppercase"
-                          >
+                          <th class="w-24 px-4 py-3 text-left text-xs uppercase tracking-wider">
                             {{ 'match.table.time' | translate }}
                           </th>
-                          <th
-                            class="w-40 px-4 py-3 text-left text-xs font-medium tracking-wider uppercase"
-                          >
+                          <th class="w-32 px-4 py-3 text-left text-xs uppercase tracking-wider">
                             {{ 'match.table.event' | translate }}
                           </th>
-                          <th
-                            class="px-4 py-3 text-left text-xs font-medium tracking-wider uppercase"
-                          >
+                          <th class="px-4 py-3 text-left text-xs uppercase tracking-wider">
                             {{ 'match.table.player' | translate }}
                           </th>
-                          <th
-                            class="px-4 py-3 text-left text-xs font-medium tracking-wider uppercase"
-                          >
+                          <th class="px-4 py-3 text-left text-xs uppercase tracking-wider">
                             {{ 'match.table.team' | translate }}
                           </th>
                         </tr>
                       </thead>
+
                       <tbody class="divide-y divide-(--mat-sys-outline-variant)">
                         @for (event of m.events; track event.id) {
                           <tr>
                             <td class="text-secondary px-4 py-3 font-mono text-sm whitespace-nowrap">
                               {{ event.timeFormatted }}
                             </td>
-                            <td class="px-4 py-3 whitespace-nowrap">
-                              <span
-                                class="inline-flex items-center gap-2 text-sm font-semibold"
-                                [style.color]="event.typeColor"
-                              >
-                                <mat-icon class="text-base!">{{ getEventIcon(event.typeLabel) }}</mat-icon>
-                                {{ event.typeLabel }}
-                              </span>
+
+                            <td class="px-4 py-3 text-sm whitespace-nowrap">
+                              {{ event.typeLabel }}
                             </td>
+
                             <td class="px-4 py-3 text-sm whitespace-nowrap">
                               {{ playerName(event) }}
                             </td>
+
                             <td class="text-secondary px-4 py-3 text-sm whitespace-nowrap">
-                              {{ event.isHomeTeam ? match()?.homeTeam?.name ?? 'Local' : match()?.awayTeam?.name ?? 'Visitante' }}
+                              {{ event.isHomeTeam ? m.homeTeam.name : m.awayTeam.name }}
                             </td>
                           </tr>
                         }
@@ -217,6 +205,18 @@ interface DisplayEvent {
                   </div>
                 </div>
               } @else {
+                <div class="card rounded-xl p-8 text-center">
+                  <mat-icon class="mb-2 text-5xl! opacity-50">event_note</mat-icon>
+                  <p class="text-secondary">{{ 'match.noEvents' | translate }}</p>
+                </div>
+              } @else {
+                <div class="card rounded-xl p-8 text-center">
+                  <mat-icon class="mb-2 text-5xl! opacity-50">event_note</mat-icon>
+                  <p class="text-secondary">{{ 'match.noEvents' | translate }}</p>
+                </div>
+              }
+              
+                 @else {
                 <div class="card rounded-xl p-8 text-center">
                   <mat-icon class="mb-2 text-5xl! opacity-50">event_note</mat-icon>
                   <p class="text-secondary">{{ 'match.noEvents' | translate }}</p>
@@ -507,29 +507,39 @@ export default class MatchDetails implements OnDestroy {
    * Falls back to playerId if no name is available.
    */
   private resolvePlayerName(event: MatchEventViewModel): string {
-    const info = (event as {
-      playerInfo?: { firstName?: string; lastName?: string; nickName?: string };
-    }).playerInfo;
+  const info = (event as {
+    playerInfo?: { firstName?: string; lastName?: string; nickName?: string; number?: number };
+  }).playerInfo;
 
-    if (info) {
-      const fullName = [info.firstName, info.lastName].filter(Boolean).join(' ').trim();
-      if (fullName) return fullName;
-      if (info.nickName) return info.nickName;
+  if (info) {
+    const fullName = [info.firstName, info.lastName].filter(Boolean).join(' ').trim();
+
+    if (fullName) {
+      return info.number !== undefined && info.number !== null
+        ? `#${info.number} ${fullName}`.trim()
+        : fullName;
     }
 
-    const team = event.isHomeTeam ? this.homeTeam() : this.awayTeam();
-    const p = team?.players?.find((pl) => String(pl.id) === String(event.playerId));
-
-    if (p) {
-      const fullName = [p.firstName, p.lastName].filter(Boolean).join(' ').trim();
-      if (p.number !== undefined && p.number !== null) {
-        return `#${p.number} ${fullName}`.trim();
-      }
-      return fullName || '—';
+    if (info.nickName) {
+      return info.number !== undefined && info.number !== null
+        ? `#${info.number} ${info.nickName}`.trim()
+        : info.nickName;
     }
-
-    return event.playerId ? `#${String(event.playerId)}` : '—';
   }
+
+  const team = event.isHomeTeam ? this.homeTeam() : this.awayTeam();
+  const p = team?.players?.find((pl) => String(pl.id) === String(event.playerId));
+
+  if (p) {
+    const fullName = [p.firstName, p.lastName].filter(Boolean).join(' ').trim();
+    if (p.number !== undefined && p.number !== null) {
+      return `#${p.number} ${fullName}`.trim();
+    }
+    return fullName || '—';
+  }
+
+  return event.playerId ? `#${String(event.playerId)}` : '—';
+}
 
   private transformEvents(
     events: MatchEventViewModel[],
