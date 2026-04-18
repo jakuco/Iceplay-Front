@@ -267,6 +267,7 @@ interface DisplayEvent {
               </div>
             </div>
           </mat-tab>
+        </mat-tab-group>
       </div>
     } @else {
       <div class="flex min-h-[50vh] flex-col items-center justify-center gap-4">
