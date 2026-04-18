@@ -213,22 +213,60 @@ interface DisplayEvent {
 
           <mat-tab [label]="'match.tabs.statistics' | translate">
             <div class="py-4">
-              <p class="text-secondary">{{ 'match.comingSoon.statistics' | translate }}</p>
-            </div>
-          </mat-tab>
+              <h2 class="mb-4 text-lg font-bold">Estadísticas del partido</h2>
 
-          <mat-tab [label]="'match.tabs.lineups' | translate">
-            <div class="py-4">
-              <p class="text-secondary">{{ 'match.comingSoon.lineups' | translate }}</p>
-            </div>
-          </mat-tab>
+              <div class="card overflow-hidden rounded-xl border border-(--mat-sys-outline-variant)">
+                @if (m.events && m.events.length === 0) {
+                  <div class="text-secondary p-8 text-center">
+                    <mat-icon class="mb-2 size-12! text-5xl! opacity-50">sports_soccer</mat-icon>
+                    <p>No hay eventos registrados aún.</p>
+                  </div>
+                } @else if (m.events && m.events.length > 0) {
+                  <div class="overflow-x-auto">
+                    <table class="w-full">
+                      <thead>
+                        <tr class="table-header">
+                          <th class="w-24 px-4 py-3 text-left text-xs uppercase tracking-wider">Tiempo</th>
+                          <th class="w-32 px-4 py-3 text-left text-xs uppercase tracking-wider">Evento</th>
+                          <th class="px-4 py-3 text-left text-xs uppercase tracking-wider">Jugador</th>
+                          <th class="px-4 py-3 text-left text-xs uppercase tracking-wider">Equipo</th>
+                        </tr>
+                      </thead>
 
-          <mat-tab [label]="'match.tabs.h2h' | translate">
-            <div class="py-4">
-              <p class="text-secondary">{{ 'match.comingSoon.h2h' | translate }}</p>
+                      <tbody class="divide-y divide-(--mat-sys-outline-variant)">
+                        @for (event of m.events; track event.id) {
+                          <tr>
+                            <td class="text-secondary px-4 py-3 font-mono text-sm whitespace-nowrap">
+                              {{ event.timeFormatted }}
+                            </td>
+
+                            <td class="px-4 py-3 whitespace-nowrap">
+                              <span class="text-sm font-semibold">
+                                {{ event.typeLabel }}
+                              </span>
+                            </td>
+
+                            <td class="px-4 py-3 text-sm whitespace-nowrap">
+                              {{ playerName(event) }}
+                            </td>
+
+                            <td class="text-secondary px-4 py-3 text-sm whitespace-nowrap">
+                              {{ event.isHomeTeam ? m.homeTeam.name : m.awayTeam.name }}
+                            </td>
+                          </tr>
+                        }
+                      </tbody>
+                    </table>
+                  </div>
+                } @else {
+                  <div class="text-secondary p-8 text-center">
+                    <mat-icon class="mb-2 size-12! text-5xl! opacity-50">sports_soccer</mat-icon>
+                    <p>No hay eventos registrados aún.</p>
+                  </div>
+                }
+              </div>
             </div>
           </mat-tab>
-        </mat-tab-group>
       </div>
     } @else {
       <div class="flex min-h-[50vh] flex-col items-center justify-center gap-4">
