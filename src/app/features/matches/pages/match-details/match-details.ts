@@ -169,18 +169,10 @@ interface DisplayEvent {
                     <table class="w-full">
                       <thead>
                         <tr class="table-header">
-                          <th class="w-24 px-4 py-3 text-left text-xs uppercase tracking-wider">
-                            Tiempo
-                          </th>
-                          <th class="w-32 px-4 py-3 text-left text-xs uppercase tracking-wider">
-                            Evento
-                          </th>
-                          <th class="px-4 py-3 text-left text-xs uppercase tracking-wider">
-                            Jugador
-                          </th>
-                          <th class="px-4 py-3 text-left text-xs uppercase tracking-wider">
-                            Equipo
-                          </th>
+                          <th class="w-24 px-4 py-3 text-left text-xs uppercase tracking-wider">Tiempo</th>
+                          <th class="w-32 px-4 py-3 text-left text-xs uppercase tracking-wider">Evento</th>
+                          <th class="px-4 py-3 text-left text-xs uppercase tracking-wider">Jugador</th>
+                          <th class="px-4 py-3 text-left text-xs uppercase tracking-wider">Equipo</th>
                         </tr>
                       </thead>
                       <tbody class="divide-y divide-(--mat-sys-outline-variant)">
