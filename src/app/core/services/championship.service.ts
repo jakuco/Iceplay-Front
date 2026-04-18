@@ -33,6 +33,7 @@ import {
   UpdateChampionshipDto,
   UpdateChampionshipStatusDto,
   ChampionshipFixture,
+  ChampionshipLeaders,
 } from '../models/championship.model';
 import type { Position } from '../models/sport-config.model';
 import { TeamProfile, TeamUpsertDto } from '../models/team.model';
@@ -304,6 +305,30 @@ export class ChampionshipService {
       params,
     ).pipe(
       catchError((error) => this.handleError('Error fetching fixture', error)),
+    );
+  }
+
+  /**
+   * GET /championships/:id/leaders
+   *
+   * Devuelve los líderes individuales del campeonato, calculados
+   * desde match_events reales filtrando por phases.championshipId.
+   *
+   * Respuesta backend:
+   * {
+   *   championshipId, championshipName,
+   *   leaders: {
+   *     topScorer, topAssist, topMvp,
+   *     topPenaltyScorer, topYellowCards, topRedCards
+   *   }
+   * }
+   * Cada leader = { playerId, playerName, teamId, teamName, value } | null.
+   */
+  getLeaders(championshipId: string): Observable<ChampionshipLeaders> {
+    return this.api.get<ChampionshipLeaders>(
+      `championships/${championshipId}/leaders`,
+    ).pipe(
+      catchError((error) => this.handleError('Error fetching leaders', error)),
     );
   }
 
@@ -924,61 +949,4 @@ export class ChampionshipService {
       : boxed;
 
     const out: Record<string, string> = {};
-    for (const [key, value] of Object.entries(candidate)) {
-      if (typeof value === 'string' && value.trim().length > 0) {
-        out[key] = value;
-      }
-    }
-    return out;
-  }
-
-  private parseChampionshipDates(c: Championship): Championship {
-    const parse = (v: Date | string | null): Date | null =>
-      v && typeof v === 'string' ? new Date(v) : (v as Date | null);
-    return {
-      ...c,
-      status: this.normalizeChampionshipStatus(c.status),
-      startDate: parse(c.startDate),
-      endDate: parse(c.endDate),
-      registrationStartDate: parse(c.registrationStartDate),
-      registrationEndDate: parse(c.registrationEndDate),
-      createdAt: parse(c.createdAt) as Date,
-      updatedAt: parse(c.updatedAt) as Date,
-    };
-  }
-
-  private normalizeChampionshipStatus(status: Championship['status'] | string | number): ChampionshipStatus {
-    if (typeof status === 'number') {
-      if (status in ChampionshipStatus) {
-        return status as ChampionshipStatus;
-      }
-      return ChampionshipStatus.Draft;
-    }
-
-    const normalized = String(status).trim().toLowerCase();
-    const byName: Record<string, ChampionshipStatus> = {
-      draft: ChampionshipStatus.Draft,
-      registration: ChampionshipStatus.Registration,
-      active: ChampionshipStatus.Active,
-      finished: ChampionshipStatus.Finished,
-      cancelled: ChampionshipStatus.Cancelled,
-      '0': ChampionshipStatus.Draft,
-      '1': ChampionshipStatus.Registration,
-      '2': ChampionshipStatus.Active,
-      '3': ChampionshipStatus.Finished,
-      '4': ChampionshipStatus.Cancelled,
-    };
-
-    return byName[normalized] ?? ChampionshipStatus.Draft;
-  }
-
-  private toNumeric(value: unknown, fallback: number): number {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : fallback;
-  }
-
-  private handleError(message: string, error: unknown): Observable<never> {
-    console.error(message, error);
-    return throwError(() => new Error(`${message}: ${(error as Error).message ?? String(error)}`));
-  }
-}
+    for (const [key, value] of Object.ent

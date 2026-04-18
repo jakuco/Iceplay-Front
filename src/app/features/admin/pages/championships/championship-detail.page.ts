@@ -13,7 +13,13 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 
 import { ChampionshipService } from '../../../../core/services/championship.service';
 import { MatchService } from '../../../../core/services/match.service';
-import { ChampionshipFixture, FixturePhaseData, FixtureMatch } from '../../../../core/models/championship.model';
+import {
+  ChampionshipFixture,
+  FixturePhaseData,
+  FixtureMatch,
+  ChampionshipLeaders,
+  LeaderRow,
+} from '../../../../core/models/championship.model';
 import {
   ChampionshipPhasesComponent,
   ChampionshipFormat,
@@ -187,6 +193,43 @@ import {
                     }
                   </div>
                 }
+              }
+            </div>
+          </mat-tab>
+
+          <mat-tab label="Estadísticas">
+            <div class="tab-content">
+              @if (leadersLoading()) {
+                <div class="leaders-loading">
+                  <mat-spinner diameter="32" />
+                </div>
+              } @else if (leadersError()) {
+                <p class="text-secondary">No se pudieron cargar las estadísticas.</p>
+              } @else {
+                <div class="leaders-grid">
+                  @for (card of leaderCards(); track card.key) {
+                    <div class="leader-card">
+                      <div class="leader-card__header">
+                        <mat-icon class="leader-card__icon">{{ card.icon }}</mat-icon>
+                        <h4 class="leader-card__title">{{ card.title }}</h4>
+                      </div>
+                      @if (card.leader) {
+                        <div class="leader-card__body">
+                          <div class="leader-card__name">{{ card.leader.playerName }}</div>
+                          @if (card.leader.teamName) {
+                            <div class="leader-card__team">{{ card.leader.teamName }}</div>
+                          }
+                          <div class="leader-card__value">
+                            <span class="leader-card__count">{{ card.leader.value }}</span>
+                            <span class="leader-card__unit">{{ card.unit }}</span>
+                          </div>
+                        </div>
+                      } @else {
+                        <div class="leader-card__empty">Sin datos</div>
+                      }
+                    </div>
+                  }
+                </div>
               }
             </div>
           </mat-tab>
@@ -392,6 +435,89 @@ import {
     .fixture-action-btn--cancel { color: var(--mat-sys-error); }
     .fixture-action-btn--cancel:hover { background: var(--mat-sys-error-container); }
     .fixture-action-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .leaders-loading {
+      display: flex;
+      justify-content: center;
+      padding: 2rem 0;
+    }
+
+    .leaders-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 0.75rem;
+    }
+
+    .leader-card {
+      display: flex;
+      flex-direction: column;
+      gap: 0.6rem;
+      padding: 1rem;
+      background: var(--mat-sys-surface);
+      border: 1px solid var(--mat-sys-outline-variant);
+      border-radius: 12px;
+      min-height: 140px;
+    }
+
+    .leader-card__header {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .leader-card__icon {
+      color: var(--mat-sys-primary);
+    }
+
+    .leader-card__title {
+      font-size: 0.85rem;
+      font-weight: 600;
+      margin: 0;
+      color: var(--mat-sys-on-surface);
+    }
+
+    .leader-card__body {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+
+    .leader-card__name {
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--mat-sys-on-surface);
+    }
+
+    .leader-card__team {
+      font-size: 0.8rem;
+      color: var(--mat-sys-on-surface-variant);
+    }
+
+    .leader-card__value {
+      display: flex;
+      align-items: baseline;
+      gap: 0.35rem;
+      margin-top: 0.25rem;
+    }
+
+    .leader-card__count {
+      font-size: 1.5rem;
+      font-weight: 800;
+      color: var(--mat-sys-primary);
+      line-height: 1;
+    }
+
+    .leader-card__unit {
+      font-size: 0.75rem;
+      color: var(--mat-sys-on-surface-variant);
+      text-transform: lowercase;
+    }
+
+    .leader-card__empty {
+      font-size: 0.8rem;
+      color: var(--mat-sys-on-surface-variant);
+      font-style: italic;
+    }
   `,
 })
 export default class ChampionshipDetailPage implements OnInit, OnDestroy {
@@ -416,10 +542,33 @@ export default class ChampionshipDetailPage implements OnInit, OnDestroy {
   rules = signal<ChampionshipRuleItem[]>([]);
   fixtureData = signal<ChampionshipFixture>({});
   private fixtureSubscription: Subscription | null = null;
+  private leadersSubscription: Subscription | null = null;
   editingMatchId = signal<number | null>(null);
   editingValue = signal<string>('');
   editingStatus = signal<string>('');
   savingMatchId = signal<number | null>(null);
+
+  leaders = signal<ChampionshipLeaders | null>(null);
+  leadersLoading = signal(false);
+  leadersError = signal(false);
+
+  /**
+   * Convierte `leaders` en la lista ordenada de cards para el template.
+   * Labels/iconos alineados con las categorías del backend.
+   */
+  leaderCards = computed(() => {
+    const data = this.leaders()?.leaders ?? null;
+    const leader = (row: LeaderRow | null | undefined): LeaderRow | null => row ?? null;
+
+    return [
+      { key: 'topScorer',        title: 'Goleador',           icon: 'sports_soccer',   unit: 'goles',         leader: leader(data?.topScorer) },
+      { key: 'topAssist',        title: 'Máximo asistente',   icon: 'handshake',       unit: 'asistencias',   leader: leader(data?.topAssist) },
+      { key: 'topMvp',           title: 'Más MVPs',           icon: 'emoji_events',    unit: 'mvps',          leader: leader(data?.topMvp) },
+      { key: 'topPenaltyScorer', title: 'Goles de penal',     icon: 'adjust',          unit: 'penales',       leader: leader(data?.topPenaltyScorer) },
+      { key: 'topYellowCards',   title: 'Tarjetas amarillas', icon: 'warning',         unit: 'amarillas',     leader: leader(data?.topYellowCards) },
+      { key: 'topRedCards',      title: 'Tarjetas rojas',     icon: 'block',           unit: 'rojas',         leader: leader(data?.topRedCards) },
+    ];
+  });
 
   fixturePhases = computed(() =>
     Object.entries(this.fixtureData()).map(([phaseName, data]: [string, FixturePhaseData]) => ({
@@ -547,6 +696,7 @@ export default class ChampionshipDetailPage implements OnInit, OnDestroy {
         this.activeFormat.set(this.inferFormat(mapped));
 
         this.reloadFixture(false);
+        this.reloadLeaders();
 
         this.championshipSvc.getTeams(id).subscribe({
           next: profiles => {
@@ -622,8 +772,29 @@ export default class ChampionshipDetailPage implements OnInit, OnDestroy {
     });
   }
 
+  reloadLeaders(): void {
+    const id = this.id();
+    this.leadersSubscription?.unsubscribe();
+    this.leadersLoading.set(true);
+    this.leadersError.set(false);
+    this.leadersSubscription = this.championshipSvc.getLeaders(id).subscribe({
+      next: data => {
+        this.leaders.set(data);
+        this.leadersLoading.set(false);
+        this.cdr.markForCheck();
+      },
+      error: () => {
+        this.leaders.set(null);
+        this.leadersLoading.set(false);
+        this.leadersError.set(true);
+        this.cdr.markForCheck();
+      },
+    });
+  }
+
   ngOnDestroy(): void {
     this.fixtureSubscription?.unsubscribe();
+    this.leadersSubscription?.unsubscribe();
   }
 
   startEditDate(match: FixtureMatch): void {

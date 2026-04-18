@@ -602,3 +602,38 @@ export interface PaginatedChampionships {
   limit: number;
   totalPages: number;
 }
+
+// ─────────────────────────────────────────────────────────────
+// LEADERS — estadísticas individuales por campeonato
+// Contrato real: GET /championships/:id/leaders
+// Agrega match_events.isActive = true con playerId NOT NULL y
+// phases.championshipId = :id. Desempate: playerId UUIDv7 más antiguo.
+// ─────────────────────────────────────────────────────────────
+
+export interface LeaderRow {
+  playerId: DbId;
+  playerName: string;
+  teamId: DbId | null;
+  teamName: string | null;
+  /** Conteo de eventos agregados para esta categoría. */
+  value: number;
+}
+
+export interface ChampionshipLeaders {
+  championshipId: DbId;
+  championshipName: string;
+  leaders: {
+    /** Gol + Gol por Penal. */
+    topScorer: LeaderRow | null;
+    /** Asistencia. */
+    topAssist: LeaderRow | null;
+    /** MVP de Partido. null si el tipo no está seedeado. */
+    topMvp: LeaderRow | null;
+    /** Solo Gol por Penal. */
+    topPenaltyScorer: LeaderRow | null;
+    /** Tarjeta Amarilla. */
+    topYellowCards: LeaderRow | null;
+    /** Tarjeta Roja. */
+    topRedCards: LeaderRow | null;
+  };
+}
