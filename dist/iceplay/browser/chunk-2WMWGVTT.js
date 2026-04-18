@@ -1,0 +1,1 @@
+import"./chunk-7CGTOI24.js";var t=[{path:"login",loadComponent:()=>import("./chunk-O2DDJBMZ.js"),title:"Iniciar Sesi\xF3n - IcePlay"},{path:"",redirectTo:"login",pathMatch:"full"}],o=t;export{o as default};

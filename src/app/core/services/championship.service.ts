@@ -940,15 +940,98 @@ export class ChampionshipService {
     return [];
   }
 
-  private extractSignedUploadMap(response: unknown): Record<string, string> {
+      private extractSignedUploadMap(response: unknown): Record<string, string> {
     if (!response || typeof response !== 'object') {
       return {};
     }
 
     const boxed = response as Record<string, unknown>;
-    const candidate = boxed['uploads'] && typeof boxed['uploads'] === 'object'
-      ? boxed['uploads'] as Record<string, unknown>
-      : boxed;
+    const candidate =
+      boxed['uploads'] && typeof boxed['uploads'] === 'object'
+        ? (boxed['uploads'] as Record<string, unknown>)
+        : boxed;
 
     const out: Record<string, string> = {};
-    for (const [key, value] of Object.ent
+
+    for (const [key, value] of Object.entries(candidate)) {
+      if (typeof value === 'string' && value.trim()) {
+        out[String(key)] = value;
+        continue;
+      }
+
+      if (value && typeof value === 'object') {
+        const nested = value as Record<string, unknown>;
+        const signedUrl =
+          nested['signedUrl'] ??
+          nested['url'] ??
+          nested['uploadUrl'] ??
+          nested['presignedUrl'];
+
+        if (typeof signedUrl === 'string' && signedUrl.trim()) {
+          out[String(key)] = signedUrl;
+        }
+      }
+    }
+
+    return out;
+  }
+
+  private parseChampionshipDates(championship: Championship): Championship {
+    return {
+      ...championship,
+      registrationStartDate: this.toDateOrNull(championship.registrationStartDate),
+      registrationEndDate: this.toDateOrNull(championship.registrationEndDate),
+      startDate: this.toDateOrNull(championship.startDate),
+      endDate: this.toDateOrNull(championship.endDate),
+      createdAt: this.toDate(championship.createdAt),
+      updatedAt: this.toDate(championship.updatedAt),
+    };
+  }
+
+  private toDate(value: unknown): Date {
+    if (value instanceof Date) {
+      return Number.isNaN(value.getTime()) ? new Date() : value;
+    }
+
+    const parsed = new Date(String(value));
+    return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
+  }
+
+  private toDateOrNull(value: unknown): Date | null {
+    if (value == null || value === '') {
+      return null;
+    }
+
+    if (value instanceof Date) {
+      return Number.isNaN(value.getTime()) ? null : value;
+    }
+
+    const parsed = new Date(String(value));
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  private toNumeric(value: unknown, fallback = 0): number {
+    if (typeof value === 'number') {
+      return Number.isFinite(value) ? value : fallback;
+    }
+
+    if (typeof value === 'string') {
+      const normalized = value.trim();
+      if (!normalized) return fallback;
+
+      const parsed = Number(normalized);
+      return Number.isFinite(parsed) ? parsed : fallback;
+    }
+
+    if (typeof value === 'boolean') {
+      return value ? 1 : 0;
+    }
+
+    return fallback;
+  }
+
+  private handleError(message: string, error: unknown): Observable<never> {
+    console.error(`[ChampionshipService] ${message}`, error);
+    return throwError(() => error instanceof Error ? error : new Error(message));
+  }
+}

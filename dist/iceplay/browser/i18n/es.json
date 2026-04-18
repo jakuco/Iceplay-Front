@@ -40,6 +40,7 @@
       "time": "Tiempo",
       "event": "Evento",
       "description": "Descripción",
+      "player": "Jugador",
       "team": "Equipo"
     },
     "events": {
