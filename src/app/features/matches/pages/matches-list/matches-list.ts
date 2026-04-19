@@ -167,11 +167,12 @@ interface LightweightTeam {
               class="flex items-center justify-between border-b border-(--mat-sys-outline-variant) p-4"
             >
               <div class="flex items-center gap-3">
-                <img
-                  [src]="league.flagUrl"
-                  [alt]="league.country + ' flag'"
-                  class="h-auto w-6 rounded-sm"
-                />
+                <div class="league-logo">
+                  <span class="league-initial">
+                    {{ league.name.charAt(0) }}
+                  </span>
+                </div>
+
                 <a
                   class="league-link text-lg font-bold"
                   [routerLink]="['/championship', league.id]"
@@ -273,7 +274,29 @@ interface LightweightTeam {
       color: var(--mat-sys-primary);
       text-decoration: underline;
     }
-      
+
+    .league-logo {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+
+      background: linear-gradient(135deg, #7a0000, #b91c1c, #dc2626);
+      border: 1px solid rgba(255,255,255,0.1);
+      color: #facc15;
+
+      font-weight: 800;
+      font-size: 14px;
+
+      box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+    }
+
+    .league-initial {
+      text-transform: uppercase;
+    }
+
     .card {
       background-color: var(--mat-sys-surface-container);
     }
