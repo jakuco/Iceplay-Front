@@ -649,17 +649,27 @@ export interface ChampionshipLeaders {
   leaderboard: Record<LeaderboardCategory, LeaderRow[]>;
 }
 
+/**
+ * Fila de la tabla de posiciones.
+ * Contrato snake_case producido por el backend (`GET /championships/:id/standings`).
+ */
 export interface ChampionshipStanding {
   phase_id: number;
-  championship_id: string;
+  phase_name: string;
   team_id: string;
   team_name: string;
-  pj: number | string;
-  pg: number | string;
-  pe: number | string;
-  pp: number | string;
-  gf: number | string;
-  gc: number | string;
-  dg: number | string;
-  pts: number | string;
+  pj: number;
+  pg: number;
+  pe: number;
+  pp: number;
+  gf: number;
+  gc: number;
+  dg: number;
+  pts: number;
+}
+
+export interface ChampionshipStandingsResponse {
+  championshipId: DbId;
+  championshipName: string;
+  standings: ChampionshipStanding[];
 }

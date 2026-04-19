@@ -21,6 +21,7 @@ import {
   LeaderRow,
   LeaderboardCategory,
   ChampionshipStanding,
+  ChampionshipRulesResponse,
 } from '../../../../core/models/championship.model';
 import {
   ChampionshipPhasesComponent,
@@ -968,170 +969,139 @@ export default class ChampionshipDetailPage implements OnInit, OnDestroy {
 
   reloadLeaders(): void {
     const id = this.id();
-    this.leadersSubscription?.unsubscribe();
     this.leadersLoading.set(true);
     this.leadersError.set(false);
+    this.leadersSubscription?.unsubscribe();
     this.leadersSubscription = this.championshipSvc.getLeaders(id).subscribe({
-      next: data => {
-        this.leaders.set(data);
+      next: leaders => {
+        this.leaders.set(leaders);
         this.leadersLoading.set(false);
         this.cdr.markForCheck();
       },
       error: () => {
-        this.leaders.set(null);
-        this.leadersLoading.set(false);
         this.leadersError.set(true);
+        this.leadersLoading.set(false);
         this.cdr.markForCheck();
       },
     });
   }
-    reloadStandings(): void {
-      const id = this.id();
-      this.standingsLoading.set(true);
-      this.standingsError.set(false);
 
-      this.championshipSvc.getStandings(id).subscribe({
-        next: (data: ChampionshipStanding[]) => {
-          this.standings.set(data);
-          this.standingsLoading.set(false);
-          this.cdr.markForCheck();
-        },
-        error: () => {
-          this.standings.set([]);
-          this.standingsLoading.set(false);
-          this.standingsError.set(true);
-          this.cdr.markForCheck();
-        },
-      });
+  private standingsSubscription: Subscription | null = null;
+
+  reloadStandings(): void {
+    const id = this.id();
+    this.standingsLoading.set(true);
+    this.standingsError.set(false);
+    this.standingsSubscription?.unsubscribe();
+    this.standingsSubscription = this.championshipSvc.getStandings(id).subscribe({
+      next: rows => {
+        this.standings.set(rows ?? []);
+        this.standingsLoading.set(false);
+        this.cdr.markForCheck();
+      },
+      error: () => {
+        this.standingsError.set(true);
+        this.standingsLoading.set(false);
+        this.cdr.markForCheck();
+      },
+    });
+  }
+
+  toNumber(value: unknown, fallback = 0): number {
+    if (typeof value === 'number') return Number.isFinite(value) ? value : fallback;
+    if (typeof value === 'string') {
+      const n = Number(value);
+      return Number.isFinite(n) ? n : fallback;
     }
+    return fallback;
+  }
 
-  ngOnDestroy(): void {
-    this.fixtureSubscription?.unsubscribe();
-    this.leadersSubscription?.unsubscribe();
+  private toRuleItem(
+    r: ChampionshipRulesResponse['rules'][number],
+  ): ChampionshipRuleItem {
+    const isBool = r.defaultValue === 0 || r.defaultValue === 1;
+    return {
+      matchRuleId: Number(r.matchRuleId),
+      name: r.name,
+      label: r.name,
+      description: '',
+      category: 'match',
+      categoryLabel: 'Partido',
+      valueType: isBool ? 'boolean' : 'number',
+      defaultValue: Number(r.defaultValue),
+      currentValue: Number(r.currentValue),
+      isOverridden: Boolean(r.isOverridden),
+    };
+  }
+
+  private inferFormat(phases: PhaseCardData[]): ChampionshipFormat | null {
+    if (!phases.length) return null;
+    const types = phases.map(p => p.phaseType);
+    if (types.includes(PhaseType.Groups) && types.includes(PhaseType.Knockout)) return 'groups_knockout';
+    if (types.includes(PhaseType.Swiss) && types.includes(PhaseType.Knockout)) return 'swiss_playoff';
+    if (types.every(t => t === PhaseType.League)) return 'league';
+    if (types.every(t => t === PhaseType.Knockout)) return 'knockout';
+    return null;
   }
 
   startEditDate(match: FixtureMatch): void {
     this.editingMatchId.set(match.id);
-    this.editingValue.set(this.toDatetimeLocal(match.scheduledStart));
     this.editingStatus.set(match.status ?? 'scheduled');
+    if (match.scheduledStart) {
+      const d = new Date(match.scheduledStart);
+      if (!Number.isNaN(d.getTime())) {
+        const pad = (n: number) => String(n).padStart(2, '0');
+        const local = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+        this.editingValue.set(local);
+      } else {
+        this.editingValue.set('');
+      }
+    } else {
+      this.editingValue.set('');
+    }
   }
 
   cancelEdit(): void {
     this.editingMatchId.set(null);
     this.editingValue.set('');
     this.editingStatus.set('');
+    this.savingMatchId.set(null);
   }
 
   saveMatchDate(match: FixtureMatch): void {
     const raw = this.editingValue();
-    if (!raw) return;
+    const status = this.editingStatus();
+    if (!match?.id) return;
+
+    const payload: Record<string, unknown> = {};
+    if (raw) {
+      const d = new Date(raw);
+      if (!Number.isNaN(d.getTime())) {
+        payload['scheduledStart'] = d.toISOString();
+        payload['date'] = d.toISOString();
+      }
+    }
+    if (status) payload['status'] = status;
 
     this.savingMatchId.set(match.id);
-    const iso = new Date(raw).toISOString();
-    const newStatus = this.editingStatus();
-
-    this.matchSvc.updateMatch(String(match.id), { scheduledStart: iso, status: newStatus }).subscribe({
+    this.matchSvc.updateMatch(String(match.id), payload as any).subscribe({
       next: () => {
-        const current = this.fixtureData();
-        const updated: ChampionshipFixture = {};
-
-        for (const [phaseName, phaseData] of Object.entries(current) as [string, FixturePhaseData][]) {
-          const updatedRounds: Record<string, FixtureMatch[]> = {};
-
-          for (const [roundNum, roundMatches] of Object.entries(phaseData.rounds) as [string, FixtureMatch[]][]) {
-            updatedRounds[roundNum] = roundMatches.map(m =>
-              m.id === match.id ? { ...m, scheduledStart: iso, status: newStatus } : m,
-            );
-          }
-
-          updated[phaseName] = { ...phaseData, rounds: updatedRounds };
-        }
-
-        this.fixtureData.set(updated);
-        this.editingMatchId.set(null);
         this.savingMatchId.set(null);
-        this.editingStatus.set('');
-        this.snackBar.open('Partido actualizado', 'Ok', { duration: 2500 });
-        this.cdr.markForCheck();
+        this.cancelEdit();
+        this.reloadFixture(false);
+        this.reloadStandings();
       },
       error: () => {
         this.savingMatchId.set(null);
-        this.snackBar.open('Error al actualizar la fecha', 'Cerrar', { duration: 3000 });
+        this.snackBar.open('Error al guardar los cambios', 'Cerrar', { duration: 3000 });
         this.cdr.markForCheck();
       },
     });
   }
 
-  private toDatetimeLocal(iso: string | null): string {
-    if (!iso) return '';
-
-    const d = new Date(iso);
-    const pad = (n: number) => String(n).padStart(2, '0');
-
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-  }
-    toNumber(value: number | string | null | undefined): number {
-    return Number(value ?? 0);
-  }
-
-  private inferFormat(phases: PhaseCardData[]): ChampionshipFormat | null {
-    const types = new Set(phases.map(p => p.phaseType));
-
-    if (types.has(PhaseType.Swiss)) return 'swiss_playoff';
-    if (types.has(PhaseType.Groups)) return 'groups_knockout';
-    if (types.has(PhaseType.Knockout) && !types.has(PhaseType.League)) return 'knockout';
-    if (types.has(PhaseType.League)) return 'league';
-
-    return null;
-  }
-
-  private toRuleItem(rule: {
-    matchRuleId: number | string;
-    name: string;
-    defaultValue: number;
-    currentValue: number;
-    isOverridden: boolean;
-  }): ChampionshipRuleItem {
-    const isBoolean = this.isBooleanRule(rule.name);
-    const label = this.humanizeRuleName(rule.name);
-
-    return {
-      matchRuleId: Number(rule.matchRuleId),
-      name: rule.name,
-      label,
-      description: `Configuracion para ${label.toLowerCase()}.`,
-      category: this.getRuleCategory(rule.name),
-      categoryLabel: this.getRuleCategoryLabel(rule.name),
-      valueType: (isBoolean ? 'boolean' : 'number') as RuleValueType,
-      defaultValue: Number(rule.defaultValue),
-      currentValue: Number(rule.currentValue),
-      isOverridden: Boolean(rule.isOverridden),
-      min: isBoolean ? undefined : 0,
-      max: isBoolean ? undefined : 999,
-    };
-  }
-
-  private humanizeRuleName(name: string): string {
-    return name.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-  }
-
-  private isBooleanRule(name: string): boolean {
-    return name.startsWith('allow_')
-      || name.startsWith('enable_')
-      || name.includes('penalty')
-      || name.includes('extra_time');
-  }
-
-  private getRuleCategory(name: string): string {
-    if (name.includes('player') || name.includes('substitution')) return 'players';
-    if (name.includes('card') || name.includes('match') || name.includes('duration')) return 'match';
-    return 'additional';
-  }
-
-  private getRuleCategoryLabel(name: string): string {
-    const cat = this.getRuleCategory(name);
-    if (cat === 'players') return 'Jugadores';
-    if (cat === 'match') return 'Partido';
-    return 'Opciones Adicionales';
+  ngOnDestroy(): void {
+    this.fixtureSubscription?.unsubscribe();
+    this.leadersSubscription?.unsubscribe();
+    this.standingsSubscription?.unsubscribe();
   }
 }

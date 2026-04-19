@@ -21,6 +21,7 @@ import { ChampionshipService } from '../../../core/services/championship.service
 import {
   ChampionshipFixture,
   ChampionshipLeaders,
+  ChampionshipStanding,
   FixtureMatch,
   FixturePhaseData,
   LeaderRow,
@@ -177,7 +178,59 @@ import {
 
           <mat-tab label="Tabla">
             <div class="tab-content">
-              <p class="text-secondary">Próximamente: tabla de posiciones.</p>
+              @if (standingsLoading()) {
+                <div class="leaders-loading">
+                  <mat-spinner diameter="32" />
+                </div>
+              } @else if (standingsError()) {
+                <p class="text-secondary">No se pudo cargar la tabla de posiciones.</p>
+              } @else if (standingsByPhase().length === 0) {
+                <p class="text-secondary">No hay partidos finalizados para calcular la tabla.</p>
+              } @else {
+                @for (phase of standingsByPhase(); track phase.phaseId) {
+                  <div class="fixture-phase">
+                    <h3 class="fixture-phase-title">
+                      {{ phase.phaseName }}
+                      <span class="fixture-phase-meta">· {{ phase.rows.length }} equipos</span>
+                    </h3>
+
+                    <div class="standings-table-wrapper">
+                      <table class="standings-table">
+                        <thead>
+                          <tr>
+                            <th>#</th>
+                            <th>Equipo</th>
+                            <th>PJ</th>
+                            <th>PG</th>
+                            <th>PE</th>
+                            <th>PP</th>
+                            <th>GF</th>
+                            <th>GC</th>
+                            <th>DG</th>
+                            <th>PTS</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          @for (row of phase.rows; track row.team_id; let i = $index) {
+                            <tr>
+                              <td>{{ i + 1 }}</td>
+                              <td class="standings-team">{{ row.team_name }}</td>
+                              <td>{{ toNumber(row.pj) }}</td>
+                              <td>{{ toNumber(row.pg) }}</td>
+                              <td>{{ toNumber(row.pe) }}</td>
+                              <td>{{ toNumber(row.pp) }}</td>
+                              <td>{{ toNumber(row.gf) }}</td>
+                              <td>{{ toNumber(row.gc) }}</td>
+                              <td>{{ toNumber(row.dg) }}</td>
+                              <td class="standings-points">{{ toNumber(row.pts) }}</td>
+                            </tr>
+                          }
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                }
+              }
             </div>
           </mat-tab>
 
@@ -328,26 +381,19 @@ import {
     .leader-card {
       display: flex;
       flex-direction: column;
-      gap: 0.6rem;
-      padding: 1rem;
+      gap: 0.5rem;
+      padding: 0.9rem 1rem;
       background: var(--mat-sys-surface);
       border: 1px solid var(--mat-sys-outline-variant);
-      border-radius: 12px;
-      min-height: 140px;
-      color: inherit;
+      border-radius: 10px;
       text-decoration: none;
-      cursor: pointer;
-      transition: border-color 0.15s ease, transform 0.1s ease;
+      color: inherit;
+      transition: background-color 0.15s ease, transform 0.15s ease;
     }
 
     .leader-card:hover {
-      border-color: var(--mat-sys-primary);
+      background: var(--mat-sys-surface-container-high);
       transform: translateY(-1px);
-    }
-
-    .leader-card:focus-visible {
-      outline: 2px solid var(--mat-sys-primary);
-      outline-offset: 2px;
     }
 
     .leader-card__header {
@@ -360,33 +406,30 @@ import {
       color: var(--mat-sys-primary);
     }
 
-    .leader-card__chevron {
-      margin-left: auto;
-      color: var(--mat-sys-on-surface-variant);
-      opacity: 0.6;
-    }
-
     .leader-card__title {
-      font-size: 0.85rem;
+      flex: 1;
+      font-size: 0.875rem;
       font-weight: 600;
       margin: 0;
-      color: var(--mat-sys-on-surface);
+    }
+
+    .leader-card__chevron {
+      color: var(--mat-sys-on-surface-variant);
     }
 
     .leader-card__body {
       display: flex;
       flex-direction: column;
-      gap: 0.25rem;
+      gap: 0.2rem;
     }
 
     .leader-card__name {
       font-size: 1rem;
       font-weight: 700;
-      color: var(--mat-sys-on-surface);
     }
 
     .leader-card__team {
-      font-size: 0.8rem;
+      font-size: 0.75rem;
       color: var(--mat-sys-on-surface-variant);
     }
 
@@ -394,7 +437,7 @@ import {
       display: flex;
       align-items: baseline;
       gap: 0.35rem;
-      margin-top: 0.25rem;
+      margin-top: 0.2rem;
     }
 
     .leader-card__count {
@@ -415,6 +458,57 @@ import {
       color: var(--mat-sys-on-surface-variant);
       font-style: italic;
     }
+
+    .standings-table-wrapper {
+      overflow-x: auto;
+      border: 1px solid var(--mat-sys-outline-variant);
+      border-radius: 10px;
+      background: var(--mat-sys-surface);
+    }
+
+    .standings-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.85rem;
+    }
+
+    .standings-table th,
+    .standings-table td {
+      padding: 0.5rem 0.75rem;
+      text-align: center;
+      border-bottom: 1px solid var(--mat-sys-outline-variant);
+    }
+
+    .standings-table th {
+      background: var(--mat-sys-surface-container-high);
+      font-weight: 700;
+      color: var(--mat-sys-on-surface);
+      text-transform: uppercase;
+      font-size: 0.7rem;
+      letter-spacing: 0.04em;
+    }
+
+    .standings-table tbody tr:last-child td {
+      border-bottom: none;
+    }
+
+    .standings-table tbody tr:hover {
+      background: var(--mat-sys-surface-container-lowest);
+    }
+
+    .standings-team {
+      text-align: left !important;
+      font-weight: 600;
+    }
+
+    .standings-points {
+      font-weight: 800;
+      color: var(--mat-sys-primary);
+    }
+
+    .text-secondary {
+      color: var(--mat-sys-on-surface-variant);
+    }
   `,
 })
 export default class ChampionshipDetailPage implements OnInit, OnDestroy {
@@ -424,129 +518,171 @@ export default class ChampionshipDetailPage implements OnInit, OnDestroy {
   id = input.required<string>();
 
   loading = signal(true);
-
   championshipName = signal('Campeonato');
   championshipSeason = signal('');
 
   fixtureData = signal<ChampionshipFixture>({});
-  leaders = signal<ChampionshipLeaders | null>(null);
 
+  leaders = signal<ChampionshipLeaders | null>(null);
   leadersLoading = signal(false);
   leadersError = signal(false);
 
-  private detailSubscription: Subscription | null = null;
+  standings = signal<ChampionshipStanding[]>([]);
+  standingsLoading = signal(false);
+  standingsError = signal(false);
 
-  leaderCards = computed<Array<{
-    key: string;
-    category: LeaderboardCategory;
-    title: string;
-    icon: string;
-    unit: string;
-    leader: LeaderRow | null;
-  }>>(() => {
-    const data = this.leaders()?.leaders ?? null;
-    const leader = (row: LeaderRow | null | undefined): LeaderRow | null => row ?? null;
+  private fixtureSubscription: Subscription | null = null;
+  private leadersSubscription: Subscription | null = null;
+  private standingsSubscription: Subscription | null = null;
+
+  fixturePhases = computed(() =>
+    Object.entries(this.fixtureData()).map(([phaseName, data]: [string, FixturePhaseData]) => ({
+      name: phaseName,
+      phaseId: data.phaseId,
+      phaseType: data.phaseType,
+      status: data.status,
+      totalMatches: data.totalMatches,
+      roundList: Object.entries(data.rounds)
+        .sort(([a], [b]) => Number(a) - Number(b))
+        .map(([roundNum, matches]: [string, FixtureMatch[]]) => ({
+          number: Number(roundNum),
+          matches,
+        })),
+    }))
+  );
+
+  leaderCards = computed<
+    Array<{
+      key: string;
+      category: LeaderboardCategory;
+      title: string;
+      icon: string;
+      unit: string;
+      leader: LeaderRow | null;
+    }>
+  >(() => {
+    const data = this.leaders();
+    const top = (k: keyof NonNullable<ChampionshipLeaders['leaders']>): LeaderRow | null =>
+      data?.leaders?.[k] ?? null;
 
     return [
-      {
-        key: 'topScorer',
-        category: 'scorers',
-        title: 'Goleador',
-        icon: 'sports_soccer',
-        unit: 'goles',
-        leader: leader(data?.topScorer),
-      },
-      {
-        key: 'topAssist',
-        category: 'assisters',
-        title: 'Máximo asistente',
-        icon: 'handshake',
-        unit: 'asistencias',
-        leader: leader(data?.topAssist),
-      },
-      {
-        key: 'topMvp',
-        category: 'mvps',
-        title: 'Más MVPs',
-        icon: 'emoji_events',
-        unit: 'mvps',
-        leader: leader(data?.topMvp),
-      },
-      {
-        key: 'topPenaltyScorer',
-        category: 'penaltyScorers',
-        title: 'Goles de penal',
-        icon: 'adjust',
-        unit: 'penales',
-        leader: leader(data?.topPenaltyScorer),
-      },
-      {
-        key: 'topYellowCards',
-        category: 'yellowCards',
-        title: 'Tarjetas amarillas',
-        icon: 'warning',
-        unit: 'amarillas',
-        leader: leader(data?.topYellowCards),
-      },
-      {
-        key: 'topRedCards',
-        category: 'redCards',
-        title: 'Tarjetas rojas',
-        icon: 'block',
-        unit: 'rojas',
-        leader: leader(data?.topRedCards),
-      },
+      { key: 'topScorer',        category: 'scorers',        title: 'Goleador',            icon: 'sports_soccer', unit: 'goles',       leader: top('topScorer') },
+      { key: 'topAssist',        category: 'assisters',      title: 'Máximo asistente',    icon: 'handshake',     unit: 'asistencias', leader: top('topAssist') },
+      { key: 'topMvp',           category: 'mvps',           title: 'Más MVPs',            icon: 'emoji_events',  unit: 'mvps',        leader: top('topMvp') },
+      { key: 'topPenaltyScorer', category: 'penaltyScorers', title: 'Goles de penal',      icon: 'adjust',        unit: 'penales',     leader: top('topPenaltyScorer') },
+      { key: 'topYellowCards',   category: 'yellowCards',    title: 'Tarjetas amarillas',  icon: 'warning',       unit: 'amarillas',   leader: top('topYellowCards') },
+      { key: 'topRedCards',      category: 'redCards',       title: 'Tarjetas rojas',      icon: 'block',         unit: 'rojas',       leader: top('topRedCards') },
     ];
   });
 
-  fixturePhases = computed(() =>
-    (Object.entries(this.fixtureData()) as [string, FixturePhaseData][])
-      .map(([phaseName, data]) => ({
-        name: phaseName,
-        phaseId: data.phaseId,
-        phaseType: data.phaseType,
-        status: data.status,
-        totalMatches: data.totalMatches,
-        roundList: (Object.entries(data.rounds) as [string, FixtureMatch[]][])
-          .sort(([a], [b]) => Number(a) - Number(b))
-          .map(([roundNum, matches]) => ({
-            number: Number(roundNum),
-            matches,
-          })),
-      }))
-  );
+  standingsByPhase = computed(() => {
+    const rows = this.standings();
+    const grouped = new Map<number, { phaseId: number; phaseName: string; rows: ChampionshipStanding[] }>();
+
+    for (const row of rows) {
+      const phaseId = Number(row.phase_id);
+      const bucket = grouped.get(phaseId);
+      if (bucket) {
+        bucket.rows.push(row);
+      } else {
+        grouped.set(phaseId, {
+          phaseId,
+          phaseName: row.phase_name ?? `Fase ${phaseId}`,
+          rows: [row],
+        });
+      }
+    }
+
+    return [...grouped.values()];
+  });
+
+  toNumber(value: unknown, fallback = 0): number {
+    if (typeof value === 'number') return Number.isFinite(value) ? value : fallback;
+    if (typeof value === 'string') {
+      const n = Number(value);
+      return Number.isFinite(n) ? n : fallback;
+    }
+    return fallback;
+  }
 
   ngOnInit(): void {
     const id = this.id();
 
-    this.leadersLoading.set(true);
-    this.leadersError.set(false);
-
-    this.detailSubscription = forkJoin({
+    forkJoin({
       detail: this.championshipSvc.getChampionshipById(id),
-      fixture: this.championshipSvc.getFixture(id),
-      leaders: this.championshipSvc.getLeaders(id),
     }).subscribe({
-      next: ({ detail, fixture, leaders }) => {
+      next: ({ detail }) => {
         this.championshipName.set(detail.name);
         this.championshipSeason.set(detail.season ?? '');
-        this.fixtureData.set(fixture);
-        this.leaders.set(leaders);
-        this.leadersLoading.set(false);
-        this.leadersError.set(false);
         this.loading.set(false);
         this.cdr.markForCheck();
       },
       error: () => {
         this.loading.set(false);
+        this.cdr.markForCheck();
+      },
+    });
+
+    this.reloadFixture();
+    this.reloadLeaders();
+    this.reloadStandings();
+  }
+
+  reloadFixture(): void {
+    const id = this.id();
+    this.fixtureSubscription?.unsubscribe();
+    this.fixtureSubscription = this.championshipSvc.getFixture(id).subscribe({
+      next: fixture => {
+        this.fixtureData.set(fixture);
+        this.cdr.markForCheck();
+      },
+      error: () => {
+        this.cdr.markForCheck();
+      },
+    });
+  }
+
+  reloadLeaders(): void {
+    const id = this.id();
+    this.leadersLoading.set(true);
+    this.leadersError.set(false);
+    this.leadersSubscription?.unsubscribe();
+    this.leadersSubscription = this.championshipSvc.getLeaders(id).subscribe({
+      next: data => {
+        this.leaders.set(data);
         this.leadersLoading.set(false);
+        this.cdr.markForCheck();
+      },
+      error: () => {
         this.leadersError.set(true);
+        this.leadersLoading.set(false);
+        this.cdr.markForCheck();
+      },
+    });
+  }
+
+  reloadStandings(): void {
+    const id = this.id();
+    this.standingsLoading.set(true);
+    this.standingsError.set(false);
+    this.standingsSubscription?.unsubscribe();
+    this.standingsSubscription = this.championshipSvc.getStandings(id).subscribe({
+      next: rows => {
+        this.standings.set(rows ?? []);
+        this.standingsLoading.set(false);
+        this.cdr.markForCheck();
+      },
+      error: () => {
+        this.standingsError.set(true);
+        this.standingsLoading.set(false);
         this.cdr.markForCheck();
       },
     });
   }
 
   ngOnDestroy(): void {
-    this.detailSubscription?.unsubscribe();
+    this.fixtureSubscription?.unsubscribe();
+    this.leadersSubscription?.unsubscribe();
+    this.standingsSubscription?.unsubscribe();
   }
 }

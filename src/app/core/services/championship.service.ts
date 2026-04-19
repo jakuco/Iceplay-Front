@@ -35,6 +35,7 @@ import {
   ChampionshipFixture,
   ChampionshipLeaders,
   ChampionshipStanding,
+  ChampionshipStandingsResponse,
 } from '../models/championship.model';
 
 import type { Position } from '../models/sport-config.model';
@@ -341,9 +342,10 @@ export class ChampionshipService {
      * Se espera un arreglo de filas, una por equipo/fase.
      */
     getStandings(championshipId: string): Observable<ChampionshipStanding[]> {
-      return this.api.get<ChampionshipStanding[]>(
+      return this.api.get<ChampionshipStandingsResponse | ChampionshipStanding[]>(
         `championships/${championshipId}/standings`,
       ).pipe(
+        map((res) => Array.isArray(res) ? res : (res?.standings ?? [])),
         catchError((error) => this.handleError('Error fetching standings', error)),
       );
     }
@@ -1042,22 +1044,17 @@ export class ChampionshipService {
     }
 
     if (typeof value === 'string') {
-      const normalized = value.trim();
-      if (!normalized) return fallback;
-
-      const parsed = Number(normalized);
-      return Number.isFinite(parsed) ? parsed : fallback;
-    }
-
-    if (typeof value === 'boolean') {
-      return value ? 1 : 0;
+      const n = Number(value);
+      return Number.isFinite(n) ? n : fallback;
     }
 
     return fallback;
   }
 
   private handleError(message: string, error: unknown): Observable<never> {
-    console.error(`[ChampionshipService] ${message}`, error);
-    return throwError(() => error instanceof Error ? error : new Error(message));
+    console.error(message, error);
+    const errorMessage =
+      error instanceof Error ? error.message : String(error ?? 'Unknown error');
+    return throwError(() => new Error(`${message}: ${errorMessage}`));
   }
 }

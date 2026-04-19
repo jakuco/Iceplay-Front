@@ -74,12 +74,10 @@ export const routes: Routes = [
   {
     path: 'cup/:cupName',
     loadComponent: () => import('./features/cup/cup.page'),
-    title: 'Cup Overview - IcePlay',
+    title: 'Cup',
   },
 
-  //* Catch-all redirect
-  {
-    path: '**',
-    redirectTo: 'matches',
-  },
+  //* Root fallback
+  { path: '', redirectTo: 'matches', pathMatch: 'full' },
+  { path: '**', redirectTo: 'matches' },
 ];

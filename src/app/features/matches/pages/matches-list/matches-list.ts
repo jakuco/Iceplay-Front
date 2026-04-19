@@ -789,32 +789,24 @@ export default class MatchesList {
   }
 
   private getDayNames(locale: string): string[] {
-    const baseDate = new Date(2024, 0, 7);
-    const days: string[] = [];
-
+    const ref = new Date(2024, 0, 7); // Sunday
+    const formatter = new Intl.DateTimeFormat(locale, { weekday: 'short' });
+    const names: string[] = [];
     for (let i = 0; i < 7; i++) {
-      const date = new Date(baseDate);
-      date.setDate(baseDate.getDate() + i);
-      const dayName = date
-        .toLocaleDateString(locale, { weekday: 'short' })
-        .toUpperCase();
-      days.push(dayName);
+      const d = new Date(ref);
+      d.setDate(ref.getDate() + i);
+      names.push(formatter.format(d));
     }
-
-    return days;
+    return names;
   }
 
   private getMonthNames(locale: string): string[] {
-    const months: string[] = [];
-
+    const formatter = new Intl.DateTimeFormat(locale, { month: 'short' });
+    const names: string[] = [];
     for (let i = 0; i < 12; i++) {
-      const date = new Date(2024, i, 1);
-      const monthName = date
-        .toLocaleDateString(locale, { month: 'short' })
-        .toUpperCase();
-      months.push(monthName);
+      names.push(formatter.format(new Date(2024, i, 1)));
     }
-
-    return months;
+    return names;
   }
 }
+

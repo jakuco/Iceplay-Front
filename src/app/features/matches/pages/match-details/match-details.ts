@@ -367,67 +367,68 @@ export default class MatchDetails implements OnDestroy {
   championshipId = computed(() => this.championship()?.id ?? null);
 
   leaderCards = computed<Array<{
-    key: string;
-    category: LeaderboardCategory;
-    title: string;
-    icon: string;
-    unit: string;
-    leader: LeaderRow | null;
-  }>>(() => {
-    const data = this.leaders()?.leaders ?? null;
-    const leader = (row: LeaderRow | null | undefined): LeaderRow | null => row ?? null;
+  key: string;
+  category: LeaderboardCategory;
+  title: string;
+  icon: string;
+  unit: string;
+  leader: LeaderRow | null;
+}>>(() => {
+  const data = this.leaders()?.leaderboard ?? null;
+  const first = (rows: LeaderRow[] | null | undefined): LeaderRow | null =>
+    rows && rows.length > 0 ? rows[0] : null;
 
-    return [
-      {
-        key: 'topScorer',
-        category: 'scorers',
-        title: 'Goleador',
-        icon: 'sports_soccer',
-        unit: 'goles',
-        leader: leader(data?.topScorer),
-      },
-      {
-        key: 'topAssist',
-        category: 'assisters',
-        title: 'Asistencias',
-        icon: 'handshake',
-        unit: 'asistencias',
-        leader: leader(data?.topAssist),
-      },
-      {
-        key: 'topMvp',
-        category: 'mvps',
-        title: 'MVPs',
-        icon: 'emoji_events',
-        unit: 'mvps',
-        leader: leader(data?.topMvp),
-      },
-      {
-        key: 'topPenaltyScorer',
-        category: 'penaltyScorers',
-        title: 'Goles de penal',
-        icon: 'adjust',
-        unit: 'penales',
-        leader: leader(data?.topPenaltyScorer),
-      },
-      {
-        key: 'topYellow',
-        category: 'yellowCards',
-        title: 'Tarjetas Amarillas',
-        icon: 'warning',
-        unit: 'amarillas',
-        leader: leader(data?.topYellowCards),
-      },
-      {
-        key: 'topRed',
-        category: 'redCards',
-        title: 'Tarjetas Rojas',
-        icon: 'block',
-        unit: 'rojas',
-        leader: leader(data?.topRedCards),
-      },
-    ];
-  });
+  return [
+    {
+      key: 'topScorer',
+      category: 'scorers',
+      title: 'Goleador',
+      icon: 'sports_soccer',
+      unit: 'goles',
+      leader: first(data?.scorers),
+    },
+    {
+      key: 'topAssist',
+      category: 'assisters',
+      title: 'Asistencias',
+      icon: 'handshake',
+      unit: 'asistencias',
+      leader: first(data?.assisters),
+    },
+    {
+      key: 'topMvp',
+      category: 'mvps',
+      title: 'MVPs',
+      icon: 'emoji_events',
+      unit: 'mvps',
+      leader: first(data?.mvps),
+    },
+    {
+      key: 'topPenaltyScorer',
+      category: 'penaltyScorers',
+      title: 'Goles de penal',
+      icon: 'adjust',
+      unit: 'penales',
+      leader: first(data?.penaltyScorers),
+    },
+    {
+      key: 'topYellow',
+      category: 'yellowCards',
+      title: 'Tarjetas Amarillas',
+      icon: 'warning',
+      unit: 'amarillas',
+      leader: first(data?.yellowCards),
+    },
+    {
+      key: 'topRed',
+      category: 'redCards',
+      title: 'Tarjetas Rojas',
+      icon: 'block',
+      unit: 'rojas',
+      leader: first(data?.redCards),
+    },
+  ];
+});
 
   isLoading = signal(true);
 
@@ -751,20 +752,16 @@ export default class MatchDetails implements OnDestroy {
   getEventColor(type: string): string {
     const colors: Record<string, string> = {
       Gol: '#4ade80',
-      'Gol por penal': '#4ade80',
+      'Gol por penal': '#22c55e',
       'Gol recibido': '#f87171',
-      'Gol recibido por penal': '#f87171',
+      'Gol recibido por penal': '#ef4444',
       Asistencia: '#60a5fa',
       'Tarjeta Amarilla': '#facc15',
-      'Tarjeta Roja': '#f87171',
-      Sustitución: 'var(--mat-sys-on-surface-variant)',
-      Falta: '#f59e0b',
+      'Tarjeta Roja': '#ef4444',
+      Sustitución: '#a78bfa',
+      Falta: '#fb923c',
       'MVP de Partido': '#f59e0b',
     };
-    return colors[type] ?? 'var(--mat-sys-on-surface-variant)';
-  }
-
-  playerName(event: MatchEventViewModel): string {
-    return this.resolvePlayerName(event);
+    return colors[type] ?? '#94a3b8';
   }
 }
