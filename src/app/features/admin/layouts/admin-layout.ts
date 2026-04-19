@@ -45,24 +45,6 @@ interface NavItem {
           <span class="badge">Admin</span>
         </div>
 
-        <!--  BORRAR ESTO SÍ O SÍ -->
-        <div class="header-center">
-          <a routerLink="/admin" class="fa1ls-logo">
-            <span class="letter">F</span>
-            <span class="a-mark">
-              <span class="face face-left"></span>
-              <span class="face face-right"></span>
-              <span class="face face-bottom"></span>
-            </span>
-            <span class="letter">1</span>
-            <span class="letter">L</span>
-            <span class="letter">S</span>
-            <span class="corp">CORP</span>
-          </a>
-        </div>
-
-
-
         <div class="header-actions">
           <!-- Theme Toggle -->
           <button matIconButton [matMenuTriggerFor]="themeMenu" matTooltip="Cambiar tema">
@@ -190,61 +172,6 @@ interface NavItem {
       display: flex;
       align-items: center;
       justify-content: center;
-    }
-
-    .fa1ls-logo {
-      display: inline-flex;
-      align-items: flex-end;
-      gap: 0.08rem;
-      text-decoration: none;
-      user-select: none;
-      white-space: nowrap;
-    }
-
-    .fa1ls-logo .letter {
-      font-weight: 800;
-      font-size: 1.35rem;
-      line-height: 1;
-      letter-spacing: 0.02em;
-      color: #251d3a;
-    }
-
-    .fa1ls-logo .a-mark {
-      position: relative;
-      width: 1.15rem;
-      height: 1.1rem;
-      margin: 0 0.06rem 0.1rem 0.06rem;
-      display: inline-block;
-    }
-
-    .fa1ls-logo .face {
-      position: absolute;
-      inset: 0;
-    }
-
-    .fa1ls-logo .face-left {
-      background: #f37019;
-      clip-path: polygon(50% 0%, 0% 100%, 50% 78%);
-    }
-
-    .fa1ls-logo .face-right {
-      background: #fc8200;
-      clip-path: polygon(50% 0%, 50% 78%, 100% 100%);
-    }
-
-    .fa1ls-logo .face-bottom {
-      background: #d95a0a;
-      clip-path: polygon(0% 100%, 50% 78%, 100% 100%, 50% 92%);
-    }
-
-    .fa1ls-logo .corp {
-      font-weight: 800;
-      font-size: 0.62rem;
-      line-height: 1;
-      color: #fc8200;
-      margin-left: 0.2rem;
-      margin-bottom: 0.1rem;
-      letter-spacing: 0.06em;
     }
 
     @media (max-width: 1024px) {
