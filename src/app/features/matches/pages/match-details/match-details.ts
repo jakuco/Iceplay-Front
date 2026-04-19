@@ -153,7 +153,7 @@ interface DisplayEvent {
           </div>
         </div>
 
-        <!-- Tabs -->
+       <!-- Tabs -->
         <mat-tab-group>
           <mat-tab [label]="'match.tabs.summary' | translate">
             <div class="py-4">
@@ -212,28 +212,31 @@ interface DisplayEvent {
           </mat-tab>
 
           <mat-tab [label]="'match.tabs.statistics' | translate">
-            <h2 class="mb-4 text-lg font-bold">Estadísticas individuales</h2>
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="py-4">
+              <h2 class="mb-4 text-lg font-bold">Estadísticas individuales</h2>
 
-              <div class="card p-4">
-                <p class="text-sm text-secondary">Goleador</p>
-                <p class="font-bold text-lg">{{ topScorer()?.playerName || '-' }}</p>
-                <p class="text-primary text-xl">{{ topScorer()?.value || 0 }} goles</p>
+              <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="card p-4">
+                  <p class="text-sm text-secondary">Goleador</p>
+                  <p class="font-bold text-lg">{{ topScorer()?.playerName || '-' }}</p>
+                  <p class="text-secondary text-sm">{{ topScorer()?.teamName || '-' }}</p>
+                  <p class="text-primary text-xl">{{ topScorer()?.value || 0 }} goles</p>
+                </div>
+
+                <div class="card p-4">
+                  <p class="text-sm text-secondary">Asistencias</p>
+                  <p class="font-bold text-lg">{{ topAssist()?.playerName || '-' }}</p>
+                  <p class="text-secondary text-sm">{{ topAssist()?.teamName || '-' }}</p>
+                  <p class="text-primary text-xl">{{ topAssist()?.value || 0 }}</p>
+                </div>
+
+                <div class="card p-4">
+                  <p class="text-sm text-secondary">Tarjetas Amarillas</p>
+                  <p class="font-bold text-lg">{{ topYellow()?.playerName || '-' }}</p>
+                  <p class="text-secondary text-sm">{{ topYellow()?.teamName || '-' }}</p>
+                  <p class="text-primary text-xl">{{ topYellow()?.value || 0 }}</p>
+                </div>
               </div>
-
-              <div class="card p-4">
-                <p class="text-sm text-secondary">Asistencias</p>
-                <p class="font-bold text-lg">{{ topAssist()?.playerName || '-' }}</p>
-                <p class="text-primary text-xl">{{ topAssist()?.value || 0 }}</p>
-              </div>
-
-              <div class="card p-4">
-                <p class="text-sm text-secondary">Tarjetas Amarillas</p>
-                <p class="font-bold text-lg">{{ topYellow()?.playerName || '-' }}</p>
-                <p class="text-primary text-xl">{{ topYellow()?.value || 0 }}</p>
-              </div>
-
-            </div>
             </div>
           </mat-tab>
         </mat-tab-group>

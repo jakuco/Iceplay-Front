@@ -29,8 +29,8 @@ import {
 
 @Component({
   selector: 'app-championship-detail',
-  changeDetection: ChangeDetectionStrategy.OnPush,
   standalone: true,
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     RouterLink,
     DatePipe,
@@ -78,12 +78,15 @@ import {
 
                         <div class="fixture-matches">
                           @for (match of round.matches; track match.id) {
-                            <div class="fixture-match" [class.fixture-match--played]="match.status === 'finished'">
+                            <div
+                              class="fixture-match"
+                              [class.fixture-match--played]="match.status === 'finished'"
+                            >
                               <div class="fixture-team fixture-team--home">
                                 @if (match.homeTeam?.logoUrl) {
                                   <img
-                                    [src]="match.homeTeam.logoUrl"
-                                    [alt]="match.homeTeam.name"
+                                    [src]="match.homeTeam!.logoUrl"
+                                    [alt]="match.homeTeam!.name"
                                     class="fixture-logo"
                                   />
                                 }
@@ -92,10 +95,16 @@ import {
 
                               <div class="fixture-score">
                                 @if (match.status === 'finished') {
-                                  <span class="score-value">{{ match.homeScore }} – {{ match.awayScore }}</span>
+                                  <span class="score-value">
+                                    {{ match.homeScore }} – {{ match.awayScore }}
+                                  </span>
                                 } @else {
                                   <span class="score-pending">
-                                    {{ match.scheduledStart ? (match.scheduledStart | date:'dd/MM HH:mm') : 'vs' }}
+                                    {{
+                                      match.scheduledStart
+                                        ? (match.scheduledStart | date:'dd/MM HH:mm')
+                                        : 'vs'
+                                    }}
                                   </span>
                                 }
                               </div>
@@ -103,8 +112,8 @@ import {
                               <div class="fixture-team fixture-team--away">
                                 @if (match.awayTeam?.logoUrl) {
                                   <img
-                                    [src]="match.awayTeam.logoUrl"
-                                    [alt]="match.awayTeam.name"
+                                    [src]="match.awayTeam!.logoUrl"
+                                    [alt]="match.awayTeam!.name"
                                     class="fixture-logo"
                                   />
                                 }
@@ -425,8 +434,6 @@ export default class ChampionshipDetailPage implements OnInit, OnDestroy {
   leadersLoading = signal(false);
   leadersError = signal(false);
 
-  private fixtureSubscription: Subscription | null = null;
-  private leadersSubscription: Subscription | null = null;
   private detailSubscription: Subscription | null = null;
 
   leaderCards = computed<Array<{
@@ -500,7 +507,7 @@ export default class ChampionshipDetailPage implements OnInit, OnDestroy {
         phaseType: data.phaseType,
         status: data.status,
         totalMatches: data.totalMatches,
-        roundList: (Object.entries(data.rounds) as [string, FixtureMatch][][] | [string, FixtureMatch[]][])
+        roundList: (Object.entries(data.rounds) as [string, FixtureMatch[]][])
           .sort(([a], [b]) => Number(a) - Number(b))
           .map(([roundNum, matches]) => ({
             number: Number(roundNum),
@@ -511,6 +518,9 @@ export default class ChampionshipDetailPage implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     const id = this.id();
+
+    this.leadersLoading.set(true);
+    this.leadersError.set(false);
 
     this.detailSubscription = forkJoin({
       detail: this.championshipSvc.getChampionshipById(id),
@@ -537,8 +547,6 @@ export default class ChampionshipDetailPage implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
-    this.fixtureSubscription?.unsubscribe();
-    this.leadersSubscription?.unsubscribe();
     this.detailSubscription?.unsubscribe();
   }
 }
