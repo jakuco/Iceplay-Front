@@ -61,6 +61,11 @@ export const routes: Routes = [
     title: 'Championship Detail',
   },
   {
+    path: 'championship/:id/ranking/:category',
+    loadComponent: () => import('./features/user/page/championship-ranking.page'),
+    title: 'Championship Ranking',
+  },
+  {
     path: 'ui-showcase',
     loadComponent: () =>
       import('./features/ui-dumb/pages/ui-showcase.page').then((m) => m.UiShowcasePage),
