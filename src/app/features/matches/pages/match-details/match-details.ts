@@ -749,7 +749,7 @@ export default class MatchDetails implements OnDestroy {
     return icons[type] ?? 'event';
   }
 
-  getEventColor(type: string): string {
+    getEventColor(type: string): string {
     const colors: Record<string, string> = {
       Gol: '#4ade80',
       'Gol por penal': '#22c55e',
@@ -763,5 +763,9 @@ export default class MatchDetails implements OnDestroy {
       'MVP de Partido': '#f59e0b',
     };
     return colors[type] ?? '#94a3b8';
+  }
+
+  playerName(event: MatchEventViewModel): string {
+    return this.resolvePlayerName(event);
   }
 }
