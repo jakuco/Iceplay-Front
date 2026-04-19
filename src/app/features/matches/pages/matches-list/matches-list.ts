@@ -171,15 +171,15 @@ interface LightweightTeam {
                   <div class="triangle"></div>
                 </div>
 
-                <a
-                  class="league-link text-lg font-bold"
+                <span
+                  class="league-link text-lg font-bold cursor-pointer"
                   [routerLink]="['/championship', league.id]"
                 >
                   {{ league.name }}
-                </a>
+                </span>
               </div>
-              <button matIconButton aria-label="More options">
-                <mat-icon>more_vert</mat-icon>
+              <button matIconButton aria-label="More options" class="cursor-pointer" [routerLink]="['/championship', league.id]">
+                <mat-icon>info</mat-icon>
               </button>
             </div>
 
@@ -189,10 +189,13 @@ interface LightweightTeam {
                   class="match-row flex cursor-pointer items-center justify-between p-4"
                   [routerLink]="['/match', match.id]"
                 >
-                  <div class="flex w-2/5 items-center justify-end gap-3 text-right">
+                  <div
+                    class="team-side home-team flex w-[42%] min-w-0 items-center justify-end gap-2 text-right sm:w-2/5 sm:gap-3"
+                  >
                     <span
-                      class="hidden text-sm font-medium sm:inline-block"
+                      class="team-name truncate text-xs font-medium sm:text-sm"
                       [class.text-red-500]="match.status === 'live'"
+                      [attr.title]="match.homeTeam.name"
                     >
                       {{ match.homeTeam.name }}
                     </span>
@@ -200,20 +203,20 @@ interface LightweightTeam {
                       [src]="match.homeTeam.logo"
                       (error)="match.homeTeam.logo = defaultTeamLogoUrl"
                       [alt]="match.homeTeam.name"
-                      class="h-7 w-7"
+                      class="h-6 w-6 shrink-0 sm:h-7 sm:w-7"
                     />
                   </div>
 
-                  <div class="w-1/5 text-center">
+                  <div class="match-status mx-1 w-[16%] min-w-[56px] text-center sm:w-1/5">
                     @switch (match.status) {
                       @case ('scheduled') {
                         <div class="status-badge scheduled">
-                          <span class="text-sm font-bold">{{ match.time }}</span>
+                          <span class="text-xs font-bold sm:text-sm">{{ match.time }}</span>
                         </div>
                       }
                       @case ('live') {
                         <div class="status-badge live">
-                          <span class="text-sm font-bold">
+                          <span class="text-xs font-bold sm:text-sm">
                             {{ match.homeScore }} - {{ match.awayScore }}
                           </span>
                         </div>
@@ -234,14 +237,19 @@ interface LightweightTeam {
                     }
                   </div>
 
-                  <div class="flex w-2/5 items-center justify-start gap-3 text-left">
+                  <div
+                    class="team-side away-team flex w-[42%] min-w-0 items-center justify-start gap-2 text-left sm:w-2/5 sm:gap-3"
+                  >
                     <img
                       [src]="match.awayTeam.logo"
                       (error)="match.awayTeam.logo = defaultTeamLogoUrl"
                       [alt]="match.awayTeam.name"
-                      class="h-7 w-7"
+                      class="h-6 w-6 shrink-0 sm:h-7 sm:w-7"
                     />
-                    <span class="hidden text-sm font-medium sm:inline-block">
+                    <span
+                      class="team-name truncate text-xs font-medium sm:text-sm"
+                      [attr.title]="match.awayTeam.name"
+                    >
                       {{ match.awayTeam.name }}
                     </span>
                   </div>
@@ -270,7 +278,6 @@ interface LightweightTeam {
 
     .league-link:hover {
       color: var(--mat-sys-primary);
-      text-decoration: underline;
     }
       .triangle {
         width: 0;
@@ -359,6 +366,44 @@ interface LightweightTeam {
 
       &.finished {
         background-color: var(--mat-sys-surface-container-high);
+      }
+    }
+
+    .team-name {
+      line-height: 1.2;
+    }
+
+    @media (max-width: 640px) {
+      .match-row {
+        padding: 15px 10px;
+        gap: 4px;
+      }
+
+      .team-side {
+        min-width: 0;
+      }
+
+      .team-name {
+        font-size: 0.75rem;
+      }
+
+      .status-badge {
+        padding: 3px 8px;
+        border-radius: 5px;
+      }
+    }
+
+    @media (max-width: 380px) {
+      .match-row {
+        padding: 15px 10px;
+      }
+
+      .team-name {
+        font-size: 0.6875rem;
+      }
+
+      .match-status {
+        min-width: 50px;
       }
     }
 
@@ -581,39 +626,39 @@ export default class MatchesList {
   }
 
   private buildSyntheticChampionshipListItem(
-  id: string,
-  meta: ScheduleByDateChampionshipMeta
-): ChampionshipListItem {
-  const name =
-    meta.name && String(meta.name).trim() !== '' ? meta.name : 'Competición';
+    id: string,
+    meta: ScheduleByDateChampionshipMeta
+  ): ChampionshipListItem {
+    const name =
+      meta.name && String(meta.name).trim() !== '' ? meta.name : 'Competición';
 
-  const org = meta.organization;
+    const org = meta.organization;
 
-  return {
-    id,
-    name,
-    slug: id,
-    season: '',
-    logo: null,
-    status: ChampionshipStatus.Active,
-    startDate: null,
-    endDate: null,
-    maxTeams: 0,
-    teamCount: 0,
-    phaseCount: 0,
-    organization: {
-      id: org?.id ?? 'schedule',
-      name: org?.name ?? '',
-      logo: org?.logo ?? undefined,
-      country: org?.country ?? 'Ecuador',
-    },
-    sport: {
-      id: 0,
-      name: '',
-      icon: 'sports',
-    },
-  };
-}
+    return {
+      id,
+      name,
+      slug: id,
+      season: '',
+      logo: null,
+      status: ChampionshipStatus.Active,
+      startDate: null,
+      endDate: null,
+      maxTeams: 0,
+      teamCount: 0,
+      phaseCount: 0,
+      organization: {
+        id: org?.id ?? 'schedule',
+        name: org?.name ?? '',
+        logo: org?.logo ?? undefined,
+        country: org?.country ?? 'Ecuador',
+      },
+      sport: {
+        id: 0,
+        name: '',
+        icon: 'sports',
+      },
+    };
+  }
 
   private ingestScheduleTeams(
     m: ScheduleMatchDto,
@@ -631,19 +676,19 @@ export default class MatchesList {
         id,
         snippet
           ? {
-              id: snippet.id,
-              championshipId,
-              name: snippet.name,
-              shortname: snippet.shortname ?? snippet.name,
-              logoUrl: snippet.logoUrl ?? this.defaultTeamLogoUrl,
-            }
+            id: snippet.id,
+            championshipId,
+            name: snippet.name,
+            shortname: snippet.shortname ?? snippet.name,
+            logoUrl: snippet.logoUrl ?? this.defaultTeamLogoUrl,
+          }
           : {
-              id: fallbackId,
-              championshipId,
-              name: '—',
-              shortname: '—',
-              logoUrl: this.defaultTeamLogoUrl,
-            }
+            id: fallbackId,
+            championshipId,
+            name: '—',
+            shortname: '—',
+            logoUrl: this.defaultTeamLogoUrl,
+          }
       );
     };
 
