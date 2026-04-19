@@ -1,15 +1,3 @@
-// ─────────────────────────────────────────────────────────────
-// user/page/championship-ranking.page.ts
-//
-// Ruta: /championship/:id/ranking/:category
-//
-// Reutiliza el endpoint existente GET /championships/:id/leaders,
-// que además de `leaders` devuelve `leaderboard` (listas ordenadas
-// por categoría). Aplica slicing:
-//   · top 10 → scorers, assisters
-//   · top 5  → mvps, penaltyScorers, yellowCards, redCards
-// El botón "Volver" usa Location.back() para regresar al origen.
-// ─────────────────────────────────────────────────────────────
 import {
   ChangeDetectionStrategy,
   ChangeDetectorRef,
@@ -38,9 +26,7 @@ interface CategoryMeta {
   title: string;
   icon: string;
   unit: string;
-  /** Columna "valor" del header de la tabla. */
   valueLabel: string;
-  /** Tamaño máximo del ranking mostrado. */
   limit: number;
 }
 
@@ -59,6 +45,7 @@ const VALID_CATEGORIES: ReadonlySet<LeaderboardCategory> = new Set<LeaderboardCa
 
 @Component({
   selector: 'app-championship-ranking',
+  standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     MatIconModule,
@@ -229,9 +216,7 @@ export default class ChampionshipRankingPage implements OnInit, OnDestroy {
   private readonly cdr = inject(ChangeDetectorRef);
   private readonly location = inject(Location);
 
-  /** UUID del campeonato (route param `:id`). */
   id = input.required<string>();
-  /** Categoría seleccionada (route param `:category`). */
   category = input.required<string>();
 
   loading = signal(true);
@@ -241,7 +226,6 @@ export default class ChampionshipRankingPage implements OnInit, OnDestroy {
 
   private subscription: Subscription | null = null;
 
-  /** Categoría validada; si es inválida cae a `scorers` como default seguro. */
   private readonly safeCategory = computed<LeaderboardCategory>(() => {
     const raw = this.category() as LeaderboardCategory;
     return VALID_CATEGORIES.has(raw) ? raw : 'scorers';

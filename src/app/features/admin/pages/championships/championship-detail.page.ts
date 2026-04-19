@@ -217,14 +217,18 @@ import {
                         <h4 class="leader-card__title">{{ card.title }}</h4>
                         <mat-icon class="leader-card__chevron">chevron_right</mat-icon>
                       </div>
-                      @if (card.leader) {
+                      @if (card.leaders.length > 0) {
                         <div class="leader-card__body">
-                          <div class="leader-card__name">{{ card.leader.playerName }}</div>
-                          @if (card.leader.teamName) {
-                            <div class="leader-card__team">{{ card.leader.teamName }}</div>
+                          @for (player of card.leaders.slice(0,3); track player.playerId) {
+                            <div class="leader-card__name">
+                              {{ player.playerName }} ({{ player.value }})
+                            </div>
+                          }
+                          @if (card.leaders[0].teamName) {
+                            <div class="leader-card__team">{{ card.leaders[0].teamName }}</div>
                           }
                           <div class="leader-card__value">
-                            <span class="leader-card__count">{{ card.leader.value }}</span>
+                            <span class="leader-card__count">{{ card.leaders[0].value }}</span>
                             <span class="leader-card__unit">{{ card.unit }}</span>
                           </div>
                         </div>
@@ -580,26 +584,60 @@ export default class ChampionshipDetailPage implements OnInit, OnDestroy {
    * Convierte `leaders` en la lista ordenada de cards para el template.
    * Labels/iconos alineados con las categorías del backend.
    */
-  leaderCards = computed<Array<{
-    key: string;
-    category: LeaderboardCategory;
-    title: string;
-    icon: string;
-    unit: string;
-    leader: LeaderRow | null;
-  }>>(() => {
-    const data = this.leaders()?.leaders ?? null;
-    const leader = (row: LeaderRow | null | undefined): LeaderRow | null => row ?? null;
+  leaderCards = computed(() => {
+  const data = this.leaders();
 
-    return [
-      { key: 'topScorer',        category: 'scorers',        title: 'Goleador',           icon: 'sports_soccer', unit: 'goles',        leader: leader(data?.topScorer) },
-      { key: 'topAssist',        category: 'assisters',      title: 'Máximo asistente',   icon: 'handshake',     unit: 'asistencias',  leader: leader(data?.topAssist) },
-      { key: 'topMvp',           category: 'mvps',           title: 'Más MVPs',           icon: 'emoji_events',  unit: 'mvps',         leader: leader(data?.topMvp) },
-      { key: 'topPenaltyScorer', category: 'penaltyScorers', title: 'Goles de penal',     icon: 'adjust',        unit: 'penales',      leader: leader(data?.topPenaltyScorer) },
-      { key: 'topYellowCards',   category: 'yellowCards',    title: 'Tarjetas amarillas', icon: 'warning',       unit: 'amarillas',    leader: leader(data?.topYellowCards) },
-      { key: 'topRedCards',      category: 'redCards',       title: 'Tarjetas rojas',     icon: 'block',         unit: 'rojas',        leader: leader(data?.topRedCards) },
-    ];
-  });
+  return [
+    {
+      key: 'topScorer',
+      category: 'scorers',
+      title: 'Goleador',
+      icon: 'sports_soccer',
+      unit: 'goles',
+      leaders: data?.leaderboard?.scorers ?? []
+    },
+    {
+      key: 'topAssist',
+      category: 'assisters',
+      title: 'Máximo asistente',
+      icon: 'handshake',
+      unit: 'asistencias',
+      leaders: data?.leaderboard?.assisters ?? []
+    },
+    {
+      key: 'topMvp',
+      category: 'mvps',
+      title: 'Más MVPs',
+      icon: 'emoji_events',
+      unit: 'mvps',
+      leaders: data?.leaderboard?.mvps ?? []
+    },
+    {
+      key: 'topPenaltyScorer',
+      category: 'penaltyScorers',
+      title: 'Goles de penal',
+      icon: 'adjust',
+      unit: 'penales',
+      leaders: data?.leaderboard?.penaltyScorers ?? []
+    },
+    {
+      key: 'topYellowCards',
+      category: 'yellowCards',
+      title: 'Tarjetas amarillas',
+      icon: 'warning',
+      unit: 'amarillas',
+      leaders: data?.leaderboard?.yellowCards ?? []
+    },
+    {
+      key: 'topRedCards',
+      category: 'redCards',
+      title: 'Tarjetas rojas',
+      icon: 'block',
+      unit: 'rojas',
+      leaders: data?.leaderboard?.redCards ?? []
+    }
+  ];
+});
 
   fixturePhases = computed(() =>
     Object.entries(this.fixtureData()).map(([phaseName, data]: [string, FixturePhaseData]) => ({

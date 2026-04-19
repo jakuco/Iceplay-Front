@@ -212,59 +212,28 @@ interface DisplayEvent {
           </mat-tab>
 
           <mat-tab [label]="'match.tabs.statistics' | translate">
-            <div class="py-4">
-              <h2 class="mb-4 text-lg font-bold">Estadísticas del partido</h2>
+            <h2 class="mb-4 text-lg font-bold">Estadísticas individuales</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
 
-              <div class="card overflow-hidden rounded-xl border border-(--mat-sys-outline-variant)">
-                @if (m.events && m.events.length === 0) {
-                  <div class="text-secondary p-8 text-center">
-                    <mat-icon class="mb-2 size-12! text-5xl! opacity-50">sports_soccer</mat-icon>
-                    <p>No hay eventos registrados aún.</p>
-                  </div>
-                } @else if (m.events && m.events.length > 0) {
-                  <div class="overflow-x-auto">
-                    <table class="w-full">
-                      <thead>
-                        <tr class="table-header">
-                          <th class="w-24 px-4 py-3 text-left text-xs uppercase tracking-wider">Tiempo</th>
-                          <th class="w-32 px-4 py-3 text-left text-xs uppercase tracking-wider">Evento</th>
-                          <th class="px-4 py-3 text-left text-xs uppercase tracking-wider">Jugador</th>
-                          <th class="px-4 py-3 text-left text-xs uppercase tracking-wider">Equipo</th>
-                        </tr>
-                      </thead>
-
-                      <tbody class="divide-y divide-(--mat-sys-outline-variant)">
-                        @for (event of m.events; track event.id) {
-                          <tr>
-                            <td class="text-secondary px-4 py-3 font-mono text-sm whitespace-nowrap">
-                              {{ event.timeFormatted }}
-                            </td>
-
-                            <td class="px-4 py-3 whitespace-nowrap">
-                              <span class="text-sm font-semibold">
-                                {{ event.typeLabel }}
-                              </span>
-                            </td>
-
-                            <td class="px-4 py-3 text-sm whitespace-nowrap">
-                              {{ playerName(event) }}
-                            </td>
-
-                            <td class="text-secondary px-4 py-3 text-sm whitespace-nowrap">
-                              {{ event.isHomeTeam ? m.homeTeam.name : m.awayTeam.name }}
-                            </td>
-                          </tr>
-                        }
-                      </tbody>
-                    </table>
-                  </div>
-                } @else {
-                  <div class="text-secondary p-8 text-center">
-                    <mat-icon class="mb-2 size-12! text-5xl! opacity-50">sports_soccer</mat-icon>
-                    <p>No hay eventos registrados aún.</p>
-                  </div>
-                }
+              <div class="card p-4">
+                <p class="text-sm text-secondary">Goleador</p>
+                <p class="font-bold text-lg">{{ topScorer()?.playerName || '-' }}</p>
+                <p class="text-primary text-xl">{{ topScorer()?.value || 0 }} goles</p>
               </div>
+
+              <div class="card p-4">
+                <p class="text-sm text-secondary">Asistencias</p>
+                <p class="font-bold text-lg">{{ topAssist()?.playerName || '-' }}</p>
+                <p class="text-primary text-xl">{{ topAssist()?.value || 0 }}</p>
+              </div>
+
+              <div class="card p-4">
+                <p class="text-sm text-secondary">Tarjetas Amarillas</p>
+                <p class="font-bold text-lg">{{ topYellow()?.playerName || '-' }}</p>
+                <p class="text-primary text-xl">{{ topYellow()?.value || 0 }}</p>
+              </div>
+
+            </div>
             </div>
           </mat-tab>
         </mat-tab-group>
@@ -321,11 +290,15 @@ export default class MatchDetails implements OnDestroy {
   private championship = signal<Championship | null>(null);
   private events = signal<MatchEventViewModel[]>([]);
   private eventSubscription?: Subscription;
+  private leaders = signal<any>(null);
+  topScorer = computed(() => this.leaders()?.leaders?.topScorer);
+  topAssist = computed(() => this.leaders()?.leaders?.topAssist);
+  topYellow = computed(() => this.leaders()?.leaders?.topYellowCards);
   isLoading = signal(true);
 
   // Exact labels that increment the scoreboard. No partial matches.
   // Match backend labels exactly (championship.service.ts → PEN_SCORE = "Gol por Penal").
-  private readonly SCORE_LABELS = new Set(['Gol', 'Gol por Penal']);
+  private readonly SCORE_LABELS = new Set(['gol', 'gol por penal']);
 
   match = computed<DisplayMatch | null>(() => {
     const m = this.matchData();
@@ -346,11 +319,13 @@ export default class MatchDetails implements OnDestroy {
     // Score derived from loaded events (works for live bootstrap + finished + refresh).
     // The DB homeScore/awayScore is only reliably updated when status → "finished";
     // during live play it stays at 0. We always prefer events when available.
+    const normalize = (s: string) => s.toLowerCase().trim();
     const homeScoreFromEvents = evts.filter(
-      (e) => this.SCORE_LABELS.has(this.safeTypeLabel(e.typeLabel)) && e.isHomeTeam
+      (e) => this.SCORE_LABELS.has(normalize(this.safeTypeLabel(e.typeLabel))) && e.isHomeTeam
     ).length;
+
     const awayScoreFromEvents = evts.filter(
-      (e) => this.SCORE_LABELS.has(this.safeTypeLabel(e.typeLabel)) && !e.isHomeTeam
+      (e) => this.SCORE_LABELS.has(normalize(this.safeTypeLabel(e.typeLabel))) && !e.isHomeTeam
     ).length;
 
     const backendHomeScore = Number((m as { homeScore?: number | null }).homeScore ?? 0);
@@ -425,6 +400,12 @@ export default class MatchDetails implements OnDestroy {
           championship: this.resolveChampionship(match),
         }).subscribe({
           next: ({ homeTeam, awayTeam, championship }) => {
+            if (championship?.id) {
+              this.championshipService.getLeaders(String(championship.id)).subscribe({
+                next: (data) => this.leaders.set(data),
+                error: (err) => console.error('Error loading leaders', err)
+              });
+            }
             this.homeTeam.set(homeTeam);
             this.awayTeam.set(awayTeam);
             this.championship.set(championship);
