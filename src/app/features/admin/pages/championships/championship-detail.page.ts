@@ -19,6 +19,7 @@ import {
   FixtureMatch,
   ChampionshipLeaders,
   LeaderRow,
+  LeaderboardCategory,
 } from '../../../../core/models/championship.model';
 import {
   ChampionshipPhasesComponent,
@@ -208,10 +209,13 @@ import {
               } @else {
                 <div class="leaders-grid">
                   @for (card of leaderCards(); track card.key) {
-                    <div class="leader-card">
+                    <a class="leader-card"
+                       [routerLink]="['/championship', id(), 'ranking', card.category]"
+                       [attr.aria-label]="'Ver ranking de ' + card.title">
                       <div class="leader-card__header">
                         <mat-icon class="leader-card__icon">{{ card.icon }}</mat-icon>
                         <h4 class="leader-card__title">{{ card.title }}</h4>
+                        <mat-icon class="leader-card__chevron">chevron_right</mat-icon>
                       </div>
                       @if (card.leader) {
                         <div class="leader-card__body">
@@ -227,7 +231,7 @@ import {
                       } @else {
                         <div class="leader-card__empty">Sin datos</div>
                       }
-                    </div>
+                    </a>
                   }
                 </div>
               }
@@ -457,6 +461,20 @@ import {
       border: 1px solid var(--mat-sys-outline-variant);
       border-radius: 12px;
       min-height: 140px;
+      color: inherit;
+      text-decoration: none;
+      cursor: pointer;
+      transition: border-color 0.15s ease, transform 0.1s ease;
+    }
+
+    .leader-card:hover {
+      border-color: var(--mat-sys-primary);
+      transform: translateY(-1px);
+    }
+
+    .leader-card:focus-visible {
+      outline: 2px solid var(--mat-sys-primary);
+      outline-offset: 2px;
     }
 
     .leader-card__header {
@@ -467,6 +485,12 @@ import {
 
     .leader-card__icon {
       color: var(--mat-sys-primary);
+    }
+
+    .leader-card__chevron {
+      margin-left: auto;
+      color: var(--mat-sys-on-surface-variant);
+      opacity: 0.6;
     }
 
     .leader-card__title {
@@ -556,17 +580,24 @@ export default class ChampionshipDetailPage implements OnInit, OnDestroy {
    * Convierte `leaders` en la lista ordenada de cards para el template.
    * Labels/iconos alineados con las categorías del backend.
    */
-  leaderCards = computed(() => {
+  leaderCards = computed<Array<{
+    key: string;
+    category: LeaderboardCategory;
+    title: string;
+    icon: string;
+    unit: string;
+    leader: LeaderRow | null;
+  }>>(() => {
     const data = this.leaders()?.leaders ?? null;
     const leader = (row: LeaderRow | null | undefined): LeaderRow | null => row ?? null;
 
     return [
-      { key: 'topScorer',        title: 'Goleador',           icon: 'sports_soccer',   unit: 'goles',         leader: leader(data?.topScorer) },
-      { key: 'topAssist',        title: 'Máximo asistente',   icon: 'handshake',       unit: 'asistencias',   leader: leader(data?.topAssist) },
-      { key: 'topMvp',           title: 'Más MVPs',           icon: 'emoji_events',    unit: 'mvps',          leader: leader(data?.topMvp) },
-      { key: 'topPenaltyScorer', title: 'Goles de penal',     icon: 'adjust',          unit: 'penales',       leader: leader(data?.topPenaltyScorer) },
-      { key: 'topYellowCards',   title: 'Tarjetas amarillas', icon: 'warning',         unit: 'amarillas',     leader: leader(data?.topYellowCards) },
-      { key: 'topRedCards',      title: 'Tarjetas rojas',     icon: 'block',           unit: 'rojas',         leader: leader(data?.topRedCards) },
+      { key: 'topScorer',        category: 'scorers',        title: 'Goleador',           icon: 'sports_soccer', unit: 'goles',        leader: leader(data?.topScorer) },
+      { key: 'topAssist',        category: 'assisters',      title: 'Máximo asistente',   icon: 'handshake',     unit: 'asistencias',  leader: leader(data?.topAssist) },
+      { key: 'topMvp',           category: 'mvps',           title: 'Más MVPs',           icon: 'emoji_events',  unit: 'mvps',         leader: leader(data?.topMvp) },
+      { key: 'topPenaltyScorer', category: 'penaltyScorers', title: 'Goles de penal',     icon: 'adjust',        unit: 'penales',      leader: leader(data?.topPenaltyScorer) },
+      { key: 'topYellowCards',   category: 'yellowCards',    title: 'Tarjetas amarillas', icon: 'warning',       unit: 'amarillas',    leader: leader(data?.topYellowCards) },
+      { key: 'topRedCards',      category: 'redCards',       title: 'Tarjetas rojas',     icon: 'block',         unit: 'rojas',        leader: leader(data?.topRedCards) },
     ];
   });
 

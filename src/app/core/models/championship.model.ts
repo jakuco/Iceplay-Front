@@ -619,6 +619,15 @@ export interface LeaderRow {
   value: number;
 }
 
+/** Claves del `leaderboard` que devuelve `GET /championships/:id/leaders`. */
+export type LeaderboardCategory =
+  | 'scorers'
+  | 'assisters'
+  | 'mvps'
+  | 'penaltyScorers'
+  | 'yellowCards'
+  | 'redCards';
+
 export interface ChampionshipLeaders {
   championshipId: DbId;
   championshipName: string;
@@ -636,4 +645,6 @@ export interface ChampionshipLeaders {
     /** Tarjeta Roja. */
     topRedCards: LeaderRow | null;
   };
+  /** Listas completas ordenadas (value desc, playerId asc) por categoría. */
+  leaderboard: Record<LeaderboardCategory, LeaderRow[]>;
 }

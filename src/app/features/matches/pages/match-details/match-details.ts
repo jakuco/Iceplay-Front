@@ -324,7 +324,8 @@ export default class MatchDetails implements OnDestroy {
   isLoading = signal(true);
 
   // Exact labels that increment the scoreboard. No partial matches.
-  private readonly SCORE_LABELS = new Set(['Gol', 'Gol por penal']);
+  // Match backend labels exactly (championship.service.ts → PEN_SCORE = "Gol por Penal").
+  private readonly SCORE_LABELS = new Set(['Gol', 'Gol por Penal']);
 
   match = computed<DisplayMatch | null>(() => {
     const m = this.matchData();
