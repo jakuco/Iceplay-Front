@@ -20,6 +20,7 @@ import {
   ChampionshipLeaders,
   LeaderRow,
   LeaderboardCategory,
+  ChampionshipStanding,
 } from '../../../../core/models/championship.model';
 import {
   ChampionshipPhasesComponent,
@@ -242,11 +243,63 @@ import {
             </div>
           </mat-tab>
 
-          <mat-tab label="Tabla">
-            <div class="tab-content">
-              <p class="text-secondary">Próximamente: tabla de posiciones.</p>
-            </div>
-          </mat-tab>
+                    <mat-tab label="Tabla">
+                      <div class="tab-content">
+                        @if (standingsLoading()) {
+                          <div class="leaders-loading">
+                            <mat-spinner diameter="32" />
+                          </div>
+                        } @else if (standingsError()) {
+                          <p class="text-secondary">No se pudo cargar la tabla de posiciones.</p>
+                        } @else if (standingsByPhase().length === 0) {
+                          <p class="text-secondary">No hay partidos finalizados para calcular la tabla.</p>
+                        } @else {
+                          @for (phase of standingsByPhase(); track phase.phaseId) {
+                            <div class="fixture-phase">
+                              <h3 class="fixture-phase-title">
+                                {{ phase.phaseName }}
+                                <span class="fixture-phase-meta">· {{ phase.rows.length }} equipos</span>
+                              </h3>
+
+                              <div class="standings-table-wrapper">
+                                <table class="standings-table">
+                                  <thead>
+                                    <tr>
+                                      <th>#</th>
+                                      <th>Equipo</th>
+                                      <th>PJ</th>
+                                      <th>PG</th>
+                                      <th>PE</th>
+                                      <th>PP</th>
+                                      <th>GF</th>
+                                      <th>GC</th>
+                                      <th>DG</th>
+                                      <th>PTS</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    @for (row of phase.rows; track row.team_id; let i = $index) {
+                                      <tr>
+                                        <td>{{ i + 1 }}</td>
+                                        <td class="standings-team">{{ row.team_name }}</td>
+                                        <td>{{ toNumber(row.pj) }}</td>
+                                        <td>{{ toNumber(row.pg) }}</td>
+                                        <td>{{ toNumber(row.pe) }}</td>
+                                        <td>{{ toNumber(row.pp) }}</td>
+                                        <td>{{ toNumber(row.gf) }}</td>
+                                        <td>{{ toNumber(row.gc) }}</td>
+                                        <td>{{ toNumber(row.dg) }}</td>
+                                        <td class="standings-points">{{ toNumber(row.pts) }}</td>
+                                      </tr>
+                                    }
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                          }
+                        }
+                      </div>
+                    </mat-tab>
 
         </mat-tab-group>
       }
@@ -444,6 +497,51 @@ import {
     .fixture-action-btn--cancel:hover { background: var(--mat-sys-error-container); }
     .fixture-action-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
+
+        .standings-table-wrapper {
+      overflow-x: auto;
+      border: 1px solid var(--mat-sys-outline-variant);
+      border-radius: 10px;
+      background: var(--mat-sys-surface);
+    }
+
+    .standings-table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 720px;
+    }
+
+    .standings-table th,
+    .standings-table td {
+      padding: 0.75rem 0.9rem;
+      border-bottom: 1px solid var(--mat-sys-outline-variant);
+      text-align: center;
+      font-size: 0.85rem;
+    }
+
+    .standings-table th {
+      background: var(--mat-sys-surface-container-high);
+      font-weight: 700;
+      color: var(--mat-sys-on-surface);
+      white-space: nowrap;
+    }
+
+    .standings-table tbody tr:hover {
+      background: var(--mat-sys-surface-container-low);
+    }
+
+    .standings-team {
+      text-align: left !important;
+      font-weight: 600;
+      min-width: 220px;
+    }
+
+    .standings-points {
+      font-weight: 800;
+      color: var(--mat-sys-primary);
+    }
+
+
     .leaders-loading {
       display: flex;
       justify-content: center;
@@ -580,6 +678,10 @@ export default class ChampionshipDetailPage implements OnInit, OnDestroy {
   leadersLoading = signal(false);
   leadersError = signal(false);
 
+  standings = signal<ChampionshipStanding[]>([]);
+  standingsLoading = signal(false);
+  standingsError = signal(false);
+
   /**
    * Convierte `leaders` en la lista ordenada de cards para el template.
    * Labels/iconos alineados con las categorías del backend.
@@ -638,6 +740,28 @@ export default class ChampionshipDetailPage implements OnInit, OnDestroy {
     }
   ];
 });
+  standingsByPhase = computed(() => {
+    const standings = this.standings();
+    const phases = this.phases();
+
+    const grouped = new Map<number, ChampionshipStanding[]>();
+
+    for (const row of standings) {
+      const phaseId = Number(row.phase_id);
+      if (!grouped.has(phaseId)) grouped.set(phaseId, []);
+      grouped.get(phaseId)!.push(row);
+    }
+
+    return [...grouped.entries()].map(([phaseId, rows]) => {
+      const phase = phases.find(p => Number(p.backendId ?? p.id) === phaseId);
+
+      return {
+        phaseId,
+        phaseName: phase?.name ?? `Fase ${phaseId}`,
+        rows,
+      };
+    });
+  });
 
   fixturePhases = computed(() =>
     Object.entries(this.fixtureData()).map(([phaseName, data]: [string, FixturePhaseData]) => ({
@@ -766,6 +890,7 @@ export default class ChampionshipDetailPage implements OnInit, OnDestroy {
 
         this.reloadFixture(false);
         this.reloadLeaders();
+        this.reloadStandings();
 
         this.championshipSvc.getTeams(id).subscribe({
           next: profiles => {
@@ -860,6 +985,25 @@ export default class ChampionshipDetailPage implements OnInit, OnDestroy {
       },
     });
   }
+    reloadStandings(): void {
+      const id = this.id();
+      this.standingsLoading.set(true);
+      this.standingsError.set(false);
+
+      this.championshipSvc.getStandings(id).subscribe({
+        next: (data: ChampionshipStanding[]) => {
+          this.standings.set(data);
+          this.standingsLoading.set(false);
+          this.cdr.markForCheck();
+        },
+        error: () => {
+          this.standings.set([]);
+          this.standingsLoading.set(false);
+          this.standingsError.set(true);
+          this.cdr.markForCheck();
+        },
+      });
+    }
 
   ngOnDestroy(): void {
     this.fixtureSubscription?.unsubscribe();
@@ -925,6 +1069,9 @@ export default class ChampionshipDetailPage implements OnInit, OnDestroy {
     const pad = (n: number) => String(n).padStart(2, '0');
 
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+    toNumber(value: number | string | null | undefined): number {
+    return Number(value ?? 0);
   }
 
   private inferFormat(phases: PhaseCardData[]): ChampionshipFormat | null {

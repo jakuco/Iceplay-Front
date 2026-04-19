@@ -648,3 +648,18 @@ export interface ChampionshipLeaders {
   /** Listas completas ordenadas (value desc, playerId asc) por categoría. */
   leaderboard: Record<LeaderboardCategory, LeaderRow[]>;
 }
+
+export interface ChampionshipStanding {
+  phase_id: number;
+  championship_id: string;
+  team_id: string;
+  team_name: string;
+  pj: number | string;
+  pg: number | string;
+  pe: number | string;
+  pp: number | string;
+  gf: number | string;
+  gc: number | string;
+  dg: number | string;
+  pts: number | string;
+}

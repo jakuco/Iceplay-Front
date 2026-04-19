@@ -26,7 +26,12 @@ import {
   mapEventToViewModel,
 } from '@core/models/event.model';
 import { TeamProfile } from '@core/models/team.model';
-import { Championship } from '@core/models/championship.model';
+import {
+  Championship,
+  ChampionshipLeaders,
+  LeaderRow,
+  LeaderboardCategory,
+} from '@core/models/championship.model';
 
 interface DisplayMatch {
   id: string;
@@ -63,7 +68,6 @@ interface DisplayEvent {
       </div>
     } @else if (match(); as m) {
       <div class="flex min-h-full flex-col gap-6 p-4 md:p-6">
-        <!-- Breadcrumbs -->
         <nav class="flex flex-wrap items-center gap-2 text-sm">
           <a
             routerLink="/matches"
@@ -79,9 +83,7 @@ interface DisplayEvent {
         </nav>
 
         <div>
-          <!-- Match Header -->
           <div class="flex flex-col gap-4 md:flex-row md:flex-wrap">
-            <!-- Home Team -->
             <div
               class="card flex min-w-[140px] flex-1 flex-col items-center gap-3 rounded-xl p-4 sm:flex-row md:p-6 cursor-pointer hover:ring-2 hover:ring-(--mat-sys-primary)/40 transition-shadow"
               [routerLink]="['/team', m.homeTeam.id]"
@@ -100,7 +102,6 @@ interface DisplayEvent {
               </div>
             </div>
 
-            <!-- Match Info -->
             <div
               class="status-card flex min-w-[140px] flex-1 flex-col items-center justify-center gap-2 rounded-xl p-4 md:p-6"
             >
@@ -132,7 +133,6 @@ interface DisplayEvent {
               <p class="text-secondary text-xs">{{ m.league }}</p>
             </div>
 
-            <!-- Away Team -->
             <div
               class="card flex min-w-[140px] flex-1 flex-col-reverse items-center justify-end gap-3 rounded-xl p-4 sm:flex-row md:p-6 cursor-pointer hover:ring-2 hover:ring-(--mat-sys-primary)/40 transition-shadow"
               [routerLink]="['/team', m.awayTeam.id]"
@@ -153,7 +153,6 @@ interface DisplayEvent {
           </div>
         </div>
 
-       <!-- Tabs -->
         <mat-tab-group>
           <mat-tab [label]="'match.tabs.summary' | translate">
             <div class="py-4">
@@ -222,20 +221,20 @@ interface DisplayEvent {
                     [routerLink]="['/championship', championshipId(), 'ranking', card.category]"
                   >
                     <div class="leader-card__header">
-                      <mat-icon>{{ card.icon }}</mat-icon>
-                      <h4>{{ card.title }}</h4>
+                      <mat-icon class="leader-card__icon">{{ card.icon }}</mat-icon>
+                      <h4 class="leader-card__title">{{ card.title }}</h4>
                     </div>
 
                     @if (card.leader) {
-                      <div>
-                        <div>{{ card.leader.playerName }}</div>
-                        <div>{{ card.leader.teamName }}</div>
-                        <div>
+                      <div class="leader-card__body">
+                        <div class="leader-card__name">{{ card.leader.playerName }}</div>
+                        <div class="leader-card__team">{{ card.leader.teamName || '-' }}</div>
+                        <div class="leader-card__value">
                           {{ card.leader.value }} {{ card.unit }}
                         </div>
                       </div>
                     } @else {
-                      <div>Sin datos</div>
+                      <div class="leader-card__empty">Sin datos</div>
                     }
                   </a>
                 }
@@ -263,6 +262,11 @@ interface DisplayEvent {
 
     .status-card {
       background-color: color-mix(in srgb, var(--mat-sys-primary) 10%, transparent);
+    }
+
+    .table-header {
+      background-color: var(--mat-sys-surface-container-high);
+      color: var(--mat-sys-on-surface-variant);
     }
 
     .leaders-grid {
@@ -295,9 +299,41 @@ interface DisplayEvent {
       gap: 0.5rem;
     }
 
-    .table-header {
-      background-color: var(--mat-sys-surface-container-high);
+    .leader-card__icon {
+      color: var(--mat-sys-primary);
+    }
+
+    .leader-card__title {
+      margin: 0;
+      font-size: 0.95rem;
+      font-weight: 700;
+    }
+
+    .leader-card__body {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+
+    .leader-card__name {
+      font-size: 1rem;
+      font-weight: 700;
+    }
+
+    .leader-card__team {
+      font-size: 0.85rem;
       color: var(--mat-sys-on-surface-variant);
+    }
+
+    .leader-card__value {
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--mat-sys-primary);
+    }
+
+    .leader-card__empty {
+      color: var(--mat-sys-on-surface-variant);
+      font-style: italic;
     }
 
     .score-header {
@@ -326,11 +362,20 @@ export default class MatchDetails implements OnDestroy {
   private championship = signal<Championship | null>(null);
   private events = signal<MatchEventViewModel[]>([]);
   private eventSubscription?: Subscription;
-  private leaders = signal<any>(null);
+  private leaders = signal<ChampionshipLeaders | null>(null);
+
   championshipId = computed(() => this.championship()?.id ?? null);
-  leaderCards = computed(() => {
-    const data = this.leaders()?.leaders;
-    if (!data) return [];
+
+  leaderCards = computed<Array<{
+    key: string;
+    category: LeaderboardCategory;
+    title: string;
+    icon: string;
+    unit: string;
+    leader: LeaderRow | null;
+  }>>(() => {
+    const data = this.leaders()?.leaders ?? null;
+    const leader = (row: LeaderRow | null | undefined): LeaderRow | null => row ?? null;
 
     return [
       {
@@ -339,7 +384,7 @@ export default class MatchDetails implements OnDestroy {
         title: 'Goleador',
         icon: 'sports_soccer',
         unit: 'goles',
-        leader: data.topScorer ?? null,
+        leader: leader(data?.topScorer),
       },
       {
         key: 'topAssist',
@@ -347,7 +392,23 @@ export default class MatchDetails implements OnDestroy {
         title: 'Asistencias',
         icon: 'handshake',
         unit: 'asistencias',
-        leader: data.topAssist ?? null,
+        leader: leader(data?.topAssist),
+      },
+      {
+        key: 'topMvp',
+        category: 'mvps',
+        title: 'MVPs',
+        icon: 'emoji_events',
+        unit: 'mvps',
+        leader: leader(data?.topMvp),
+      },
+      {
+        key: 'topPenaltyScorer',
+        category: 'penaltyScorers',
+        title: 'Goles de penal',
+        icon: 'adjust',
+        unit: 'penales',
+        leader: leader(data?.topPenaltyScorer),
       },
       {
         key: 'topYellow',
@@ -355,7 +416,7 @@ export default class MatchDetails implements OnDestroy {
         title: 'Tarjetas Amarillas',
         icon: 'warning',
         unit: 'amarillas',
-        leader: data.topYellowCards ?? null,
+        leader: leader(data?.topYellowCards),
       },
       {
         key: 'topRed',
@@ -363,14 +424,13 @@ export default class MatchDetails implements OnDestroy {
         title: 'Tarjetas Rojas',
         icon: 'block',
         unit: 'rojas',
-        leader: data.topRedCards ?? null,
+        leader: leader(data?.topRedCards),
       },
     ];
   });
+
   isLoading = signal(true);
 
-  // Exact labels that increment the scoreboard. No partial matches.
-  // Match backend labels exactly (championship.service.ts → PEN_SCORE = "Gol por Penal").
   private readonly SCORE_LABELS = new Set(['gol', 'gol por penal']);
 
   match = computed<DisplayMatch | null>(() => {
@@ -389,10 +449,8 @@ export default class MatchDetails implements OnDestroy {
       (m as { actualStartTime?: string | Date | null }).actualStartTime
     );
 
-    // Score derived from loaded events (works for live bootstrap + finished + refresh).
-    // The DB homeScore/awayScore is only reliably updated when status → "finished";
-    // during live play it stays at 0. We always prefer events when available.
     const normalize = (s: string) => s.toLowerCase().trim();
+
     const homeScoreFromEvents = evts.filter(
       (e) => this.SCORE_LABELS.has(normalize(this.safeTypeLabel(e.typeLabel))) && e.isHomeTeam
     ).length;
@@ -404,7 +462,6 @@ export default class MatchDetails implements OnDestroy {
     const backendHomeScore = Number((m as { homeScore?: number | null }).homeScore ?? 0);
     const backendAwayScore = Number((m as { awayScore?: number | null }).awayScore ?? 0);
 
-    // Use event-derived score when goals exist; fall back to backend score for 0-0 / scheduled.
     const hasScoringEvents = homeScoreFromEvents > 0 || awayScoreFromEvents > 0;
     const homeScore = hasScoringEvents ? homeScoreFromEvents : backendHomeScore;
     const awayScore = hasScoringEvents ? awayScoreFromEvents : backendAwayScore;
@@ -473,17 +530,20 @@ export default class MatchDetails implements OnDestroy {
           championship: this.resolveChampionship(match),
         }).subscribe({
           next: ({ homeTeam, awayTeam, championship }) => {
-            if (championship?.id) {
-              this.championshipService.getLeaders(String(championship.id)).subscribe({
-                next: (data) => this.leaders.set(data),
-                error: (err) => console.error('Error loading leaders', err)
-              });
-            }
             this.homeTeam.set(homeTeam);
             this.awayTeam.set(awayTeam);
             this.championship.set(championship);
-            this.isLoading.set(false);
 
+            if (championship?.id) {
+              this.championshipService.getLeaders(String(championship.id)).subscribe({
+                next: (data) => this.leaders.set(data),
+                error: (err) => console.error('Error loading leaders', err),
+              });
+            } else {
+              this.leaders.set(null);
+            }
+
+            this.isLoading.set(false);
             this.loadEvents(id, isLive);
           },
           error: (error) => {
@@ -537,9 +597,6 @@ export default class MatchDetails implements OnDestroy {
     };
 
     if (isLive) {
-      // Bootstrap historical events via REST first, then connect SSE for new events.
-      // SSE catch-up only triggers on reconnect (Last-Event-ID header); first-connect
-      // has no catch-up, so new clients entering a live match need the REST load.
       this.matchEventService
         .getMatchEvents(matchId)
         .pipe(
@@ -560,7 +617,6 @@ export default class MatchDetails implements OnDestroy {
           },
         });
     } else {
-      // Finished/scheduled: fetch historical events via REST only
       this.matchEventService
         .getMatchEvents(matchId)
         .pipe(
@@ -581,45 +637,40 @@ export default class MatchDetails implements OnDestroy {
     }
   }
 
-  /**
-   * Builds a display name from MatchEventViewModel.playerInfo when available.
-   * Falls back to the loaded team roster.
-   * Falls back to playerId if no name is available.
-   */
   private resolvePlayerName(event: MatchEventViewModel): string {
-  const info = (event as {
-    playerInfo?: { firstName?: string; lastName?: string; nickName?: string; number?: number };
-  }).playerInfo;
+    const info = (event as {
+      playerInfo?: { firstName?: string; lastName?: string; nickName?: string; number?: number };
+    }).playerInfo;
 
-  if (info) {
-    const fullName = [info.firstName, info.lastName].filter(Boolean).join(' ').trim();
+    if (info) {
+      const fullName = [info.firstName, info.lastName].filter(Boolean).join(' ').trim();
 
-    if (fullName) {
-      return info.number !== undefined && info.number !== null
-        ? `#${info.number} ${fullName}`.trim()
-        : fullName;
+      if (fullName) {
+        return info.number !== undefined && info.number !== null
+          ? `#${info.number} ${fullName}`.trim()
+          : fullName;
+      }
+
+      if (info.nickName) {
+        return info.number !== undefined && info.number !== null
+          ? `#${info.number} ${info.nickName}`.trim()
+          : info.nickName;
+      }
     }
 
-    if (info.nickName) {
-      return info.number !== undefined && info.number !== null
-        ? `#${info.number} ${info.nickName}`.trim()
-        : info.nickName;
+    const team = event.isHomeTeam ? this.homeTeam() : this.awayTeam();
+    const p = team?.players?.find((pl) => String(pl.id) === String(event.playerId));
+
+    if (p) {
+      const fullName = [p.firstName, p.lastName].filter(Boolean).join(' ').trim();
+      if (p.number !== undefined && p.number !== null) {
+        return `#${p.number} ${fullName}`.trim();
+      }
+      return fullName || '—';
     }
+
+    return event.playerId ? `#${String(event.playerId)}` : '—';
   }
-
-  const team = event.isHomeTeam ? this.homeTeam() : this.awayTeam();
-  const p = team?.players?.find((pl) => String(pl.id) === String(event.playerId));
-
-  if (p) {
-    const fullName = [p.firstName, p.lastName].filter(Boolean).join(' ').trim();
-    if (p.number !== undefined && p.number !== null) {
-      return `#${p.number} ${fullName}`.trim();
-    }
-    return fullName || '—';
-  }
-
-  return event.playerId ? `#${String(event.playerId)}` : '—';
-}
 
   private transformEvents(
     events: MatchEventViewModel[],
@@ -681,7 +732,6 @@ export default class MatchDetails implements OnDestroy {
     });
   }
 
-  // Keys are the Spanish labels that come from the backend typeMatchEvent.label.
   getEventIcon(type: string): string {
     const icons: Record<string, string> = {
       Gol: 'sports_soccer',

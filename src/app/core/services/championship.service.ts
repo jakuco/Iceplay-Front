@@ -34,7 +34,9 @@ import {
   UpdateChampionshipStatusDto,
   ChampionshipFixture,
   ChampionshipLeaders,
+  ChampionshipStanding,
 } from '../models/championship.model';
+
 import type { Position } from '../models/sport-config.model';
 import { TeamProfile, TeamUpsertDto } from '../models/team.model';
 import type { Player, PlayerUpsertDto } from '../models/player.model';
@@ -331,6 +333,20 @@ export class ChampionshipService {
       catchError((error) => this.handleError('Error fetching leaders', error)),
     );
   }
+
+    /**
+     * GET /championships/:id/standings
+     *
+     * Devuelve la tabla de posiciones del campeonato.
+     * Se espera un arreglo de filas, una por equipo/fase.
+     */
+    getStandings(championshipId: string): Observable<ChampionshipStanding[]> {
+      return this.api.get<ChampionshipStanding[]>(
+        `championships/${championshipId}/standings`,
+      ).pipe(
+        catchError((error) => this.handleError('Error fetching standings', error)),
+      );
+    }
 
   /**
    * POST /phases/:phaseId/fixture
