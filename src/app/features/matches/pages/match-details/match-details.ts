@@ -12,6 +12,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
 import { MatTabsModule } from '@angular/material/tabs';
 import { RouterLink } from '@angular/router';
+import { Location } from '@angular/common';
 import { Subscription, forkJoin, of, map, type Observable } from 'rxjs';
 import { I18nService } from '@core/services/i18n.service';
 import { TranslatePipe } from '@core/pipes/translate.pipe';
@@ -70,7 +71,7 @@ interface DisplayEvent {
       <div class="flex min-h-full flex-col gap-6 p-4 md:p-6">
         <nav class="flex flex-wrap items-center gap-2 text-sm">
           <a
-            routerLink="/matches"
+            (click)="goBack()"
             class="text-secondary hover:text-primary flex cursor-pointer items-center gap-1"
           >
             <mat-icon class="text-base!">arrow_back</mat-icon>
@@ -248,7 +249,7 @@ interface DisplayEvent {
         <mat-icon class="text-6xl! opacity-50">error_outline</mat-icon>
         <h2 class="text-xl font-bold">{{ 'match.notFound.title' | translate }}</h2>
         <p class="text-secondary">{{ 'match.notFound.message' | translate }}</p>
-        <a routerLink="/matches" class="text-primary flex items-center gap-1 hover:underline">
+        <a (click)="goBack()" class="text-primary flex cursor-pointer items-center gap-1 hover:underline">
           <mat-icon class="text-base!">arrow_back</mat-icon>
           {{ 'match.notFound.backToMatches' | translate }}
         </a>
@@ -353,6 +354,16 @@ export default class MatchDetails implements OnDestroy {
   private readonly matchEventService = inject(MatchEventService);
   private readonly teamService = inject(TeamService);
   private readonly championshipService = inject(ChampionshipService);
+  private readonly location = inject(Location);
+
+  goBack(): void {
+    const state = history.state as { navigationId?: number } | null;
+    if (state && typeof state.navigationId === 'number' && state.navigationId > 1) {
+      this.location.back();
+    } else {
+      this.location.historyGo(-1);
+    }
+  }
 
   matchId = input.required<string>();
 
@@ -769,3 +780,5 @@ export default class MatchDetails implements OnDestroy {
     return this.resolvePlayerName(event);
   }
 }
+
+  
