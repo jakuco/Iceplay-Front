@@ -110,28 +110,7 @@ import { AuthService } from '@core/services/auth.service';
           }
         </form>
 
-        <!-- Demo Credentials -->
-        <div class="demo-section">
-          <p class="demo-title">Credenciales de demostración:</p>
-          <div class="demo-credentials">
-            <button
-              type="button"
-              class="demo-btn"
-              (click)="fillDemoCredentials('super@fropen.com', 'admin123')"
-            >
-              <span class="demo-role">Super Admin</span>
-              <span class="demo-email">super&#64;fropen.com</span>
-            </button>
-            <button
-              type="button"
-              class="demo-btn"
-              (click)="fillDemoCredentials('admin@ligaquito.com', 'admin123')"
-            >
-              <span class="demo-role">Admin</span>
-              <span class="demo-email">admin&#64;ligaquito.com</span>
-            </button>
-          </div>
-        </div>
+    
 
         <!-- Footer -->
         <p class="footer-text">
@@ -278,54 +257,6 @@ import { AuthService } from '@core/services/auth.service';
       }
     }
 
-    .demo-section {
-      margin-top: 2rem;
-      padding-top: 1.5rem;
-      border-top: 1px solid var(--mat-sys-outline-variant);
-    }
-
-    .demo-title {
-      font-size: 0.75rem;
-      color: var(--mat-sys-on-surface-variant);
-      text-align: center;
-      margin: 0 0 0.75rem;
-    }
-
-    .demo-credentials {
-      display: flex;
-      flex-direction: column;
-      gap: 0.5rem;
-    }
-
-    .demo-btn {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 0.75rem 1rem;
-      background: var(--mat-sys-surface-container-high);
-      border: 1px solid var(--mat-sys-outline-variant);
-      border-radius: 8px;
-      cursor: pointer;
-      transition: all 0.2s;
-
-      &:hover {
-        background: var(--mat-sys-surface-container-highest);
-        border-color: var(--mat-sys-primary);
-      }
-
-      .demo-role {
-        font-weight: 600;
-        font-size: 0.8125rem;
-        color: var(--mat-sys-primary);
-      }
-
-      .demo-email {
-        font-size: 0.75rem;
-        color: var(--mat-sys-on-surface-variant);
-        font-family: monospace;
-      }
-    }
-
     .footer-text {
       margin: 1.5rem 0 0;
       text-align: center;
@@ -352,10 +283,5 @@ export default class LoginPage {
 
     const { email, password } = this.loginForm.getRawValue();
     await this.authService.login({ email, password });
-  }
-
-  fillDemoCredentials(email: string, password: string): void {
-    this.loginForm.patchValue({ email, password });
-    this.authService.clearError();
   }
 }

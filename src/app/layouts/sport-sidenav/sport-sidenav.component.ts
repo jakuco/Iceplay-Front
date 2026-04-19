@@ -1,4 +1,4 @@
-/*import {
+import {
   ChangeDetectionStrategy,
   Component,
   inject,
@@ -98,7 +98,7 @@ interface SportNavItem {
     }
 
     /* Override Material rounded corners */
-    /*::ng-deep .mat-drawer-inner-container {
+    ::ng-deep .mat-drawer-inner-container {
       border-radius: 0 !important;
     }
 
@@ -132,9 +132,9 @@ interface SportNavItem {
       }
     }
 
-    /* Reset Material default state layers 
+    /* Reset Material default state layers */
     ::ng-deep .nav-list .mat-mdc-list-item {
-       Remove Material's default state layers 
+      /* Remove Material's default state layers */
       &::before,
       .mat-mdc-focus-indicator::before,
       .mdc-list-item__ripple::before {
@@ -142,7 +142,7 @@ interface SportNavItem {
       }
     }
 
-    /* Non-active items with hover effect 
+    /* Non-active items with hover effect */
     ::ng-deep .nav-list .mat-mdc-list-item:not(.active) {
       background: transparent;
       transition: background-color 0.2s ease;
@@ -157,7 +157,7 @@ interface SportNavItem {
       }
     }
 
-    /* Active item style 
+    /* Active item style */
     ::ng-deep .nav-list .mat-mdc-list-item.active {
       background: color-mix(in srgb, var(--mat-sys-primary) 20%, transparent) !important;
 
@@ -209,11 +209,11 @@ export class SportSidenavComponent {
   private readonly i18nService = inject(I18nService);
   private readonly cdr = inject(ChangeDetectorRef);
 
-  /** Navigation items for available sports 
+  /** Navigation items for available sports */
   protected readonly sportNavItems: SportNavItem[] = [
     { sport: 'football',   icon: 'sports_soccer',    route: '/matches' },
-    { sport: 'basketball', icon: 'sports_basketball', route: '/matches2' },
-    { sport: 'volleyball', icon: 'sports_volleyball', route: '/matches3' },
+    //{ sport: 'basketball', icon: 'sports_basketball', route: '/matches2' },
+    //{ sport: 'volleyball', icon: 'sports_volleyball', route: '/matches3' },
   ];
 
   constructor() {
@@ -229,7 +229,7 @@ export class SportSidenavComponent {
      ** which doesn't automatically detect async signal updates from the i18n service.
      ** The effect subscribes to translation signals and triggers change detection
      ** when they update, ensuring the template re-renders with translated content.
-     
+     */
     effect(() => {
       this.i18nService.translations();
       this.i18nService.language();
@@ -251,4 +251,3 @@ export class SportSidenavComponent {
     }
   }
 }
-*/
