@@ -215,27 +215,30 @@ interface DisplayEvent {
             <div class="py-4">
               <h2 class="mb-4 text-lg font-bold">Estadísticas individuales</h2>
 
-              <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div class="card p-4">
-                  <p class="text-sm text-secondary">Goleador</p>
-                  <p class="font-bold text-lg">{{ topScorer()?.playerName || '-' }}</p>
-                  <p class="text-secondary text-sm">{{ topScorer()?.teamName || '-' }}</p>
-                  <p class="text-primary text-xl">{{ topScorer()?.value || 0 }} goles</p>
-                </div>
+              <div class="leaders-grid">
+                @for (card of leaderCards(); track card.key) {
+                  <a
+                    class="leader-card"
+                    [routerLink]="['/championship', championshipId(), 'ranking', card.category]"
+                  >
+                    <div class="leader-card__header">
+                      <mat-icon>{{ card.icon }}</mat-icon>
+                      <h4>{{ card.title }}</h4>
+                    </div>
 
-                <div class="card p-4">
-                  <p class="text-sm text-secondary">Asistencias</p>
-                  <p class="font-bold text-lg">{{ topAssist()?.playerName || '-' }}</p>
-                  <p class="text-secondary text-sm">{{ topAssist()?.teamName || '-' }}</p>
-                  <p class="text-primary text-xl">{{ topAssist()?.value || 0 }}</p>
-                </div>
-
-                <div class="card p-4">
-                  <p class="text-sm text-secondary">Tarjetas Amarillas</p>
-                  <p class="font-bold text-lg">{{ topYellow()?.playerName || '-' }}</p>
-                  <p class="text-secondary text-sm">{{ topYellow()?.teamName || '-' }}</p>
-                  <p class="text-primary text-xl">{{ topYellow()?.value || 0 }}</p>
-                </div>
+                    @if (card.leader) {
+                      <div>
+                        <div>{{ card.leader.playerName }}</div>
+                        <div>{{ card.leader.teamName }}</div>
+                        <div>
+                          {{ card.leader.value }} {{ card.unit }}
+                        </div>
+                      </div>
+                    } @else {
+                      <div>Sin datos</div>
+                    }
+                  </a>
+                }
               </div>
             </div>
           </mat-tab>
@@ -260,6 +263,36 @@ interface DisplayEvent {
 
     .status-card {
       background-color: color-mix(in srgb, var(--mat-sys-primary) 10%, transparent);
+    }
+
+    .leaders-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 0.75rem;
+    }
+
+    .leader-card {
+      display: flex;
+      flex-direction: column;
+      gap: 0.6rem;
+      padding: 1rem;
+      background: var(--mat-sys-surface-container);
+      border: 1px solid var(--mat-sys-outline-variant);
+      border-radius: 12px;
+      color: inherit;
+      text-decoration: none;
+      transition: border-color 0.15s ease, transform 0.1s ease;
+    }
+
+    .leader-card:hover {
+      border-color: var(--mat-sys-primary);
+      transform: translateY(-1px);
+    }
+
+    .leader-card__header {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
     }
 
     .table-header {
@@ -294,9 +327,46 @@ export default class MatchDetails implements OnDestroy {
   private events = signal<MatchEventViewModel[]>([]);
   private eventSubscription?: Subscription;
   private leaders = signal<any>(null);
-  topScorer = computed(() => this.leaders()?.leaders?.topScorer);
-  topAssist = computed(() => this.leaders()?.leaders?.topAssist);
-  topYellow = computed(() => this.leaders()?.leaders?.topYellowCards);
+  championshipId = computed(() => this.championship()?.id ?? null);
+  leaderCards = computed(() => {
+    const data = this.leaders()?.leaders;
+    if (!data) return [];
+
+    return [
+      {
+        key: 'topScorer',
+        category: 'scorers',
+        title: 'Goleador',
+        icon: 'sports_soccer',
+        unit: 'goles',
+        leader: data.topScorer ?? null,
+      },
+      {
+        key: 'topAssist',
+        category: 'assisters',
+        title: 'Asistencias',
+        icon: 'handshake',
+        unit: 'asistencias',
+        leader: data.topAssist ?? null,
+      },
+      {
+        key: 'topYellow',
+        category: 'yellowCards',
+        title: 'Tarjetas Amarillas',
+        icon: 'warning',
+        unit: 'amarillas',
+        leader: data.topYellowCards ?? null,
+      },
+      {
+        key: 'topRed',
+        category: 'redCards',
+        title: 'Tarjetas Rojas',
+        icon: 'block',
+        unit: 'rojas',
+        leader: data.topRedCards ?? null,
+      },
+    ];
+  });
   isLoading = signal(true);
 
   // Exact labels that increment the scoreboard. No partial matches.

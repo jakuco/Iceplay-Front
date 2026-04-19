@@ -168,9 +168,7 @@ interface LightweightTeam {
             >
               <div class="flex items-center gap-3">
                 <div class="league-logo">
-                  <span class="league-initial">
-                    {{ league.name.charAt(0) }}
-                  </span>
+                  <div class="triangle"></div>
                 </div>
 
                 <a
@@ -274,6 +272,14 @@ interface LightweightTeam {
       color: var(--mat-sys-primary);
       text-decoration: underline;
     }
+      .triangle {
+        width: 0;
+        height: 0;
+        border-left: 7px solid transparent;
+        border-right: 7px solid transparent;
+        border-bottom: 12px solid #fbbf24;
+        transform: translateY(-1px);
+      }
 
     .league-logo {
       width: 32px;
