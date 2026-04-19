@@ -602,6 +602,16 @@ export class ChampionshipService {
     );
   }
 
+  uploadFile(file: File): Observable<{ key: string; bucket: string; size: number; contentType: string }> {
+    console.log('📤 uploadFile called with:', { file, fileName: file?.name, fileSize: file?.size, fileType: file?.type });
+    const formData = new FormData();
+    formData.append('file', file);
+    console.log('📤 FormData entries:', Array.from(formData.entries()));
+    return this.api.post<{ key: string; bucket: string; size: number; contentType: string }>('files/upload', formData).pipe(
+      catchError((error) => this.handleError('Error uploading file', error)),
+    );
+  }
+
   /**
    * Solicita URLs firmadas para subida directa desde frontend a R2.
    *

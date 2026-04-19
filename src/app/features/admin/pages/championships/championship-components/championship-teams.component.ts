@@ -36,7 +36,8 @@ import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { finalize } from 'rxjs/operators';
+import { finalize, switchMap, map } from 'rxjs/operators';
+import { forkJoin, of, Observable } from 'rxjs';
 
 import {
   PlayerModalComponent,
@@ -1748,6 +1749,7 @@ export class ChampionshipTeamsComponent {
       secondaryColor: team.secondaryColor ?? '#e74694',
       logoUrl: team.logoUrl,
       documentUrl: team.documentUrl,
+      // NO setear logoFile ni documentFile - usar solo si usuario selecciona nuevo
     });
     this.teamModalError.set('');
   }
@@ -1780,39 +1782,12 @@ export class ChampionshipTeamsComponent {
     if (!f) return;
     if (!f.name.trim()) { this.teamModalError.set('El nombre del equipo es requerido.'); return; }
 
-    const uploadFormData = this.buildUploadFormData(f);
-    this.logUploadFormData(uploadFormData);
-
-    const filePayload = {
-      teamName: f.name,
-      logoFile: f.logoFile
-        ? { name: f.logoFile.name, type: f.logoFile.type, size: f.logoFile.size }
-        : null,
-      documentFile: f.documentFile
-        ? { name: f.documentFile.name, type: f.documentFile.type, size: f.documentFile.size }
-        : null,
-    };
-    console.log('Team files payload (mock upload):', filePayload);
-
     const championshipId = this.championshipId();
-    const dto = {
-      championshipId: championshipId ?? String(this.teams()[0]?.championshipId ?? ''),
-      name: f.name,
-      shortname: f.shortname,
-      slug: this.toSlug(f.name),
-      coachName: f.coachName,
-      coachPhone: f.coachPhone,
-      location: f.location,
-      foundedYear: f.foundedYear,
-      homeVenue: f.homeVenue,
-      primaryColor: f.primaryColor,
-      secondaryColor: f.secondaryColor,
-      logoUrl: f.logoUrl,
-      documentUrl: f.documentUrl,
-      isActive: true,
-    };
-
-    if (!dto.championshipId) {
+    
+    if (!championshipId) {
+      // Local mode - no backend involved
+      const logoUrl = f.logoUrl;
+      const documentUrl = f.documentUrl;
       if (f.id) {
         this.teams.update(list => list.map(t => t.id !== f.id ? t : {
           ...t,
@@ -1825,13 +1800,13 @@ export class ChampionshipTeamsComponent {
           homeVenue: f.homeVenue,
           primaryColor: f.primaryColor,
           secondaryColor: f.secondaryColor,
-          logoUrl: f.logoUrl,
-          documentUrl: f.documentUrl,
+          logoUrl,
+          documentUrl,
         }));
       } else {
         const newTeam: TeamItem = {
           id: _nextTeamId++, championshipId: 1, name: f.name, shortname: f.shortname,
-          slug: dto.slug, logoUrl: f.logoUrl, documentUrl: f.documentUrl,
+          slug: this.toSlug(f.name), logoUrl, documentUrl,
           primaryColor: f.primaryColor, secondaryColor: f.secondaryColor, location: f.location,
           foundedYear: f.foundedYear, homeVenue: f.homeVenue,
           coachName: f.coachName, coachPhone: f.coachPhone, isActive: true, players: [],
@@ -1846,51 +1821,106 @@ export class ChampionshipTeamsComponent {
     }
 
     this.isSavingTeam.set(true);
-    if (f.id) {
-      const current = this.teams().find((team) => team.id === f.id);
-      const teamId = typeof current?.id === 'string' ? current.id : null;
-      if (!teamId) {
-        this.isSavingTeam.set(false);
-        this.snackBar.open('No se pudo identificar el equipo en backend', 'Cerrar', { duration: 3000 });
-        return;
-      }
 
-      this.championshipSvc.updateTeam(teamId, dto)
-        .pipe(finalize(() => this.isSavingTeam.set(false)))
-        .subscribe({
-          next: (updated) => {
-            this.teams.update((list) => list.map((team) =>
-              team.id === f.id
-                ? { ...team, ...this.mapProfileToTeamItem(updated, team.id), players: team.players }
-                : team,
-            ));
-            this.snackBar.open('Equipo actualizado', 'Cerrar', { duration: 2000 });
-            this.teamModal.set(null);
-            this.dirty.emit();
-            this.emitTeamsChange();
-          },
-          error: () => {
-            this.snackBar.open('Error al actualizar el equipo', 'Cerrar', { duration: 3000 });
-          },
-        });
-      return;
+    // 1. Preparar uploads SOLO si existen archivos NUEVOS (no los existentes)
+    const uploadTasks: Observable<{ type: 'logo' | 'document'; key: string }>[] = [];
+    console.log('📝 Form data:', { logoFile: f.logoFile, documentFile: f.documentFile, logoUrl: f.logoUrl, documentUrl: f.documentUrl });
+    
+    // Solo subir si hay un archivo NUEVO seleccionado
+    if (f.logoFile) {
+      console.log('📤 Uploading logo file:', { name: f.logoFile.name, size: f.logoFile.size, type: f.logoFile.type });
+      uploadTasks.push(
+        this.championshipSvc.uploadFile(f.logoFile).pipe(
+          map(response => ({ type: 'logo' as const, key: response.key }))
+        )
+      );
+    }
+    if (f.documentFile) {
+      console.log('📤 Uploading document file:', { name: f.documentFile.name, size: f.documentFile.size, type: f.documentFile.type });
+      uploadTasks.push(
+        this.championshipSvc.uploadFile(f.documentFile).pipe(
+          map(response => ({ type: 'document' as const, key: response.key }))
+        )
+      );
     }
 
-    this.championshipSvc.createTeam(dto)
-      .pipe(finalize(() => this.isSavingTeam.set(false)))
-      .subscribe({
-        next: (created) => {
-          const mapped = this.mapProfileToTeamItem(created);
+    // 2. Ejecutar uploads o proceder directamente si no hay archivos
+    const uploadObservable: Observable<{ type: 'logo' | 'document'; key: string }[]> = 
+      uploadTasks.length > 0 ? forkJoin(uploadTasks) : of([]);
+
+    uploadObservable.pipe(
+      switchMap((uploadResults) => {
+        // 3. Procesar resultados de uploads
+        let logoUrl = f.logoUrl;
+        let documentUrl = f.documentUrl;
+
+        uploadResults.forEach((result) => {
+          if (result.type === 'logo') logoUrl = result.key;
+          if (result.type === 'document') documentUrl = result.key;
+        });
+
+        // 4. Construir DTO con las URLs reales (keys o URLs originales)
+        const dto = {
+          championshipId: championshipId ?? String(this.teams()[0]?.championshipId ?? ''),
+          name: f.name,
+          shortname: f.shortname,
+          slug: this.toSlug(f.name),
+          coachName: f.coachName,
+          coachPhone: f.coachPhone,
+          location: f.location,
+          foundedYear: f.foundedYear,
+          homeVenue: f.homeVenue,
+          primaryColor: f.primaryColor,
+          secondaryColor: f.secondaryColor,
+          logoUrl,
+          documentUrl,
+          isActive: true,
+        };
+
+        console.log('📤 Enviando equipo con URLs:', { logoUrl, documentUrl });
+
+        // 5. Hacer POST/PUT del equipo
+        if (f.id) {
+          // Edit mode
+          const current = this.teams().find((team) => team.id === f.id);
+          const teamId = typeof current?.id === 'string' ? current.id : null;
+          if (!teamId) {
+            this.snackBar.open('No se pudo identificar el equipo en backend', 'Cerrar', { duration: 3000 });
+            throw new Error('Team ID not found');
+          }
+          return this.championshipSvc.updateTeam(teamId, dto);
+        } else {
+          // Create mode
+          return this.championshipSvc.createTeam(dto);
+        }
+      }),
+      finalize(() => this.isSavingTeam.set(false))
+    ).subscribe({
+      next: (response: any) => {
+        if (f.id) {
+          // Update mode
+          this.teams.update((list) => list.map((team) =>
+            team.id === f.id
+              ? { ...team, ...this.mapProfileToTeamItem(response, team.id), players: team.players }
+              : team,
+          ));
+          this.snackBar.open('Equipo actualizado', 'Cerrar', { duration: 2000 });
+        } else {
+          // Create mode
+          const mapped = this.mapProfileToTeamItem(response);
           this.teams.update((list) => [...list, mapped]);
           this.snackBar.open(`Equipo "${f.name}" inscrito`, 'Cerrar', { duration: 2000 });
-          this.teamModal.set(null);
-          this.dirty.emit();
-          this.emitTeamsChange();
-        },
-        error: () => {
-          this.snackBar.open('Error al crear el equipo', 'Cerrar', { duration: 3000 });
-        },
-      });
+        }
+        this.teamModal.set(null);
+        this.dirty.emit();
+        this.emitTeamsChange();
+      },
+      error: (err: any) => {
+        console.error('❌ Error:', err);
+        const errorMsg = err?.error?.message || err?.message || 'Error desconocido';
+        this.snackBar.open(`Error al procesar el equipo: ${errorMsg}`, 'Cerrar', { duration: 5000 });
+      },
+    });
   }
 
   onDocumentFileChanged(file: File | null): void {
