@@ -262,6 +262,18 @@ interface LightweightTeam {
     </div>
   `,
   styles: `
+
+    .league-link {
+      color: inherit;
+      text-decoration: none;
+      cursor: pointer;
+    }
+
+    .league-link:hover {
+      color: var(--mat-sys-primary);
+      text-decoration: underline;
+    }
+      
     .card {
       background-color: var(--mat-sys-surface-container);
     }
